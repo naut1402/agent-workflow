@@ -40,8 +40,8 @@ Quy ước: [`docs/agent-rules/testing.md`](../docs/agent-rules/testing.md) §3�
 | `tests/src/features/logs/composables` | vitest | `features/logs/composables`, `shared/log`, `backend/log` | 3 | `npx vitest run tests/src/features/logs/composables` |
 | `tests/src/features/logs/scripts` | vitest | `features/logs/scripts` | 1 | `npx vitest run tests/src/features/logs/scripts` |
 | `tests/src/features/mcp` | vitest | `features/mcp/locales` | 1 | `npx vitest run tests/src/features/mcp/*.test.ts` |
-| `tests/src/features/mcp/business` | bun | `features/mcp/business`, `features/agent-editor/business` | 6 | `bun test tests/src/features/mcp/business` |
-| `tests/src/features/mcp/components` | vitest | `features/mcp/locales`, `features/mcp/components`, `features/mcp/business` | 2 | `npx vitest run tests/src/features/mcp/components` |
+| `tests/src/features/mcp/business` | bun | `features/mcp/business`, `features/mcp/schemas`, `features/agent-editor/business` | 6 | `bun test tests/src/features/mcp/business` |
+| `tests/src/features/mcp/components` | vitest | `features/mcp/locales`, `features/mcp/business`, `features/mcp/components` | 2 | `npx vitest run tests/src/features/mcp/components` |
 | `tests/src/features/monitor` | vitest | `features/monitor/locales`, `features/monitor/composables` | 3 | `npx vitest run tests/src/features/monitor/*.test.ts` |
 | `tests/src/features/monitor/business` | bun | `features/monitor/business`, `backend/lib`, `features/runner/business` | 6 | `bun test tests/src/features/monitor/business` |
 | `tests/src/features/monitor/components` | vitest | `features/monitor/components`, `features/monitor/locales`, `features/monitor/scripts` | 12 | `npx vitest run tests/src/features/monitor/components` |
