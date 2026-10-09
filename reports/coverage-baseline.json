@@ -1,10 +1,10 @@
 {
-  "updated_at": "2026-10-09T14:26:22.780Z",
+  "updated_at": "2026-10-09T14:26:59.909Z",
   "frontend": {
-    "lines": 65.42,
-    "statements": 63.5,
+    "lines": 65.45,
+    "statements": 63.53,
     "functions": 64.61,
-    "branches": 58.81
+    "branches": 58.84
   },
   "backend": {
     "lines": 87.8
@@ -12,5 +12,5 @@
   "source_ref": "dev/1.2.0/main",
   "test_ref": "test/1.2.0/main",
   "source_sha": "cf0798e8d232dda0df89a0193bb0266edc457f2a",
-  "test_sha": "188bec7d76892f5879959ccf50ed4dd593822e73"
+  "test_sha": "6e3e442817f48bfd31510277bdbcdebb00a53617"
 }
