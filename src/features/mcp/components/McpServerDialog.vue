@@ -11,7 +11,6 @@ import { saveMcpServer, testMcpServer, type McpProbeResponse } from '../scripts/
 import { fetchCredentials } from '../../runner/scripts/ConnectionDialogApi'
 import {
   MCP_DEFAULT_AUTH_HEADER,
-  MCP_MASK,
   MCP_DEFAULT_AUTH_SCHEME,
   MCP_DEFAULT_HTTP_PATH,
   MCP_DEFAULT_SSE_PATH,
@@ -19,13 +18,10 @@ import {
   MCP_MAX_TIMEOUT_MS,
   MCP_MIN_TIMEOUT_MS,
   MCP_TRANSPORTS,
-  MCP_WARN_ARGS_SECRET_DROPPED,
-  MCP_WARN_ARGS_SECRET_LITERAL,
-  collectSecretArgs,
-  looksLikeSecretLiteral,
   type McpServerConfig,
   type McpTransport,
-} from '../business/types'
+} from '../schemas/mcpServer'
+import { SecretMasker } from '../business/SecretMasker'
 import { slugify } from '../../../shared/lib/stringUtils'
 import { useApiAction } from '../../../frontend/composables/useApiAction'
 import CDialog from '../../../frontend/ui/CDialog.vue'
@@ -59,14 +55,14 @@ const emit = defineEmits<{
 
 const { t } = useI18nHelpers()
 
-// Sao chép KHÔNG phải sửa: `upsertMcpServer` ghi đè theo id, nên coi bản sao là
+// Sao chép KHÔNG phải sửa: `McpRegistry.upsert` ghi đè theo id, nên coi bản sao là
 // server mới (id derive lại) thay vì kế thừa id nguồn và ghi đè bản gốc.
 const isEdit = computed(() => Boolean(props.server?.id) && !props.isCopy)
 
 /**
  * Id là khoá `mcpServers` trong file config và đi thẳng vào tên tool model nhìn
- * thấy (`mcp__<id>__<tool>`), nên phải đọc được. `upsertMcpServer` chỉ nhận id ĐÃ
- * canonical (`sanitiseMcpServerId` giữ `[a-zA-Z0-9_-]`, cắt 64) — sai một ký tự là
+ * thấy (`mcp__<id>__<tool>`), nên phải đọc được. `McpRegistry.upsert` chỉ nhận id ĐÃ
+ * canonical (`McpServer.sanitiseId` giữ `[a-zA-Z0-9_-]`, cắt 64) — sai một ký tự là
  * 400, nên id phải sinh ra đã đúng dạng chứ không trông cậy backend cắt hộ.
  * `slugify` chỉ sinh `[a-z0-9-]` nên luôn qua.
  */
@@ -143,8 +139,8 @@ const effectiveId = computed(() => (isEdit.value ? props.server!.id : derivedId.
  * báo, không phải lỗi (design D4) — cấu hình đã lưu vẫn phải lưu lại được.
  */
 const ARGS_WARNING_I18N: Record<string, string> = {
-  [MCP_WARN_ARGS_SECRET_LITERAL]: 'mcp.warnings.argsSecretLiteral',
-  [MCP_WARN_ARGS_SECRET_DROPPED]: 'mcp.warnings.argsSecretDropped',
+  [SecretMasker.WARN_ARGS_SECRET_LITERAL]: 'mcp.warnings.argsSecretLiteral',
+  [SecretMasker.WARN_ARGS_SECRET_DROPPED]: 'mcp.warnings.argsSecretDropped',
 }
 
 /** Một nguồn duy nhất cho `args` đã tách dòng — `buildDraft` đọc đúng mảng này. */
@@ -162,13 +158,13 @@ const parsedArgs = computed(() =>
  * `emit('close')` huỷ component ngay trong cùng tick nên cảnh báo gán ở đó
  * 🚫 không bao giờ kịp vẽ. Tức là 🚫 không còn đường nào tới người dùng.
  *
- * 📌 Dùng CHÍNH `collectSecretArgs` mà backend dùng (`collectMcpServerWarnings`)
+ * 📌 Dùng CHÍNH `SecretMasker.secretArgs` mà backend dùng (`StdioMcpServer.warnings`)
  * để hai tầng 🚫 không lệch ngưỡng. 🚫 KHÔNG thay bằng `looksLikeSecretLiteral`
- * quét từng phần tử rời: `collectSecretArgs` là hàm CÓ VỊ TRÍ — dạng
- * `--token <value>` chỉ bắt được nhờ nhìn phần tử `i-1`, và nó loại `MCP_MASK`
+ * quét từng phần tử rời: `secretArgs` là hàm CÓ VỊ TRÍ — dạng
+ * `--token <value>` chỉ bắt được nhờ nhìn phần tử `i-1`, và nó loại `SecretMasker.MASK`
  * để vòng round-trip 🚫 báo động giả.
  *
- * `isStdio` giữ đúng tiền đề của backend: `collectMcpServerWarnings` trả `[]`
+ * `isStdio` giữ đúng tiền đề của backend: `McpServer.warnings` trả `[]`
  * cho mọi transport 🚫 phải `stdio`.
  */
 const localArgsWarnings = computed(() => {
@@ -176,15 +172,17 @@ const localArgsWarnings = computed(() => {
   // Hai bằng chứng khác nhau của CÙNG một trạng thái "có secret dạng chữ thường
   // nằm trong `args`" — phải nhận cả hai, vì chúng phủ hai thời điểm khác nhau:
   //
-  //  1. `collectSecretArgs` — người dùng đang GÕ/DÁN literal ngay lúc này.
-  //  2. Sentinel `***` — secret ĐÃ LƯU từ trước. Bản prefill đi qua `publicView`
-  //     nên literal về tới dialog dưới dạng `***`, và `collectSecretArgs` cố ý
+  //  1. `secretArgs` — người dùng đang GÕ/DÁN literal ngay lúc này.
+  //  2. Sentinel `***` — secret ĐÃ LƯU từ trước. Bản prefill đi qua `masked()`
+  //     nên literal về tới dialog dưới dạng `***`, và `secretArgs` cố ý
   //     bỏ qua sentinel (để vòng round-trip không báo động giả) ⇒ CHỈ dựa vào
   //     nó thì mở dialog một server đã lưu sẽ 🚫 không cảnh báo gì, đúng ca cần
   //     cảnh báo nhất.
-  const typingLiteral = collectSecretArgs(parsedArgs.value).length > 0
-  const storedLiteral = parsedArgs.value.some((a) => a === MCP_MASK || a.endsWith(`=${MCP_MASK}`))
-  return typingLiteral || storedLiteral ? [MCP_WARN_ARGS_SECRET_LITERAL] : []
+  const typingLiteral = SecretMasker.secretArgs(parsedArgs.value).length > 0
+  const storedLiteral = parsedArgs.value.some(
+    (a) => a === SecretMasker.MASK || a.endsWith(`=${SecretMasker.MASK}`),
+  )
+  return typingLiteral || storedLiteral ? [SecretMasker.WARN_ARGS_SECRET_LITERAL] : []
 })
 
 const apiWarnings = ref<string[]>([])
@@ -198,7 +196,7 @@ const argsWarnings = computed(() =>
 
 const secretLikeRows = computed(() => {
   const rows = isStdio.value ? envRows.value : headerRows.value
-  return new Set(rows.filter((r) => looksLikeSecretLiteral(r.key, r.value)).map((r) => r.key))
+  return new Set(rows.filter((r) => SecretMasker.looksLikeSecretLiteral(r.key, r.value)).map((r) => r.key))
 })
 
 function toRows(record: Record<string, string> | undefined): KeyValueRow[] {
@@ -359,7 +357,7 @@ async function save() {
       //
       // Lưu ĐÃ thành công (`saved` đã emit, danh sách đã refresh); chỉ hoãn việc
       // đóng lại cho người dùng tự bấm.
-      if (apiWarnings.value.includes(MCP_WARN_ARGS_SECRET_DROPPED)) {
+      if (apiWarnings.value.includes(SecretMasker.WARN_ARGS_SECRET_DROPPED)) {
         savedWithWarnings.value = true
         return
       }
