@@ -138,6 +138,7 @@ Dialog modal mới — và dialog cũ khi sửa tới — dùng `CDialog` (`src/
 | A11y | `role="dialog"`, `aria-modal`, `aria-labelledby` trỏ vào tiêu đề |
 | Đóng | Nút ✕, click backdrop, `Escape` — cả ba emit `close` |
 | Loading | `.c-loading-host` + `CLoadingOverlay` phủ vùng body khi `loading` |
+| Focus | Mở → đưa focus vào `.modal` (trừ khi nội dung đã tự focus một field bên trong); đóng → trả focus về phần tử đang focus lúc mở |
 
 Feature chỉ viết phần thân: nội dung vào slot mặc định (nằm trong `.modal-body` — vùng cuộn duy nhất, sẵn là flex column), hàng nút vào slot `footer`.
 
@@ -175,6 +176,7 @@ Feature chỉ viết phần thân: nội dung vào slot mặc định (nằm tro
 ### 3.3 Quy tắc
 
 - **Kích thước qua prop, không qua class.** `.modal` nằm trong template của `CDialog` nên không mang scope id của feature: `<style scoped>` khai `.runner-dialog { width: … }` không bao giờ khớp. Class truyền vào `CDialog` (rơi xuống `.modal`) vẫn dùng được làm **tổ tiên** cho selector con (`.runner-dialog .cfg-hint`) và làm móc cho test.
+- **Hàng nút luôn ở slot `footer`, chặn bằng `:disabled`.** Đặt `.modal-actions` trong slot mặc định thì nó cuộn theo nội dung dài và bị `CLoadingOverlay` phủ. Ở `footer`, overlay không phủ tới nên mọi nút không được bấm trong lúc `loading` (lưu, huỷ, xoá, chạy thử…) phải tự khai `:disabled`.
 - **Layout phần thân thì bọc một lớp.** `.modal-body` cũng thuộc `CDialog`, nên `.modal-body { gap: … }` trong style của feature không khớp. Cần `gap` riêng thì đặt một `div` (vd `.knowledge-tag-body`) làm con của slot mặc định, và **không** khai `overflow` cho nó — vùng cuộn vẫn chỉ là `.modal-body` (§2.1 mục 4).
 - **Dialog lồng nhau không cần cờ chặn `Escape`.** `CDialog` giữ một stack theo thứ tự mount (`useDialogStack`), chỉ dialog trên cùng nhận `Escape`. Phím `Escape` đã bị control con `preventDefault` (vd `CSelect` đóng menu) thì dialog bỏ qua.
 - **Thứ tự chồng theo DOM.** Mọi `CDialog` teleport ra cuối `body` lúc mount nên dialog mở sau tự nằm trên; không thêm `z-index` riêng (`.nested-backdrop`).
