@@ -1,18 +1,3 @@
-/**
- * OAuth 2.0 (Authorization Code + PKCE) config per provider — **not
- * hardcoded**. Whether `openai-api`/`gemini-api`/`xai-api`/`anthropic-api`
- * actually expose an OAuth flow that grants a token usable for their paid
- * API (as opposed to a first-party app login, e.g. `claude-code-cli`'s own
- * account session) has to be verified against each provider's current docs
- * by whoever operates this dashboard — that cannot be confirmed from here.
- *
- * So instead of guessing endpoints, the operator supplies them per
- * provider via env vars; "Connect via browser" only appears in the UI for a
- * provider whose full config is present (`isOAuthCapable`). Providers with
- * no config simply fall back to pasting a secret value directly
- * (`credentials.ts`'s `stored:` secretRef) — see design.md "Phụ lục 2".
- */
-
 function envPrefixFor(providerId: string): string {
   return `RUNNER_OAUTH_${providerId.toUpperCase().replace(/[^A-Z0-9]/g, '_')}`
 }

@@ -2,17 +2,6 @@ import crypto from 'node:crypto'
 import { joinPath, mkdirSync, readTextFileSync, writeTextFileAtomicSync } from '../../../backend/lib/fileHelper.js'
 import { registryHome } from '../../../backend/registry.js'
 
-/**
- * Encrypted-at-rest store for real secret material (pasted API keys, OAuth
- * access/refresh tokens) — separate from `credentials.json`, which only ever
- * holds a `secretRef` pointer (never the secret itself), matching the
- * existing `env:`/`file:`/`cli-session` design (credentials.ts).
- *
- * Key comes from `DASHBOARD_SECRET_KEY`, set once by whoever deploys the
- * dashboard (infra-level secret, distinct from per-credential `env:VAR_NAME`
- * refs that an end user could never set themselves through the web UI).
- */
-
 const ALGO = 'aes-256-gcm'
 
 interface VaultEntry {
@@ -31,7 +20,6 @@ function vaultFile(): string {
   return joinPath(registryHome(), 'secret-vault.json')
 }
 
-/** Accepts a 64-hex-char key as-is, or hashes any other string into 32 bytes — lets an operator set a plain passphrase instead of generating hex by hand. */
 function masterKey(): Buffer {
   const raw = process.env.DASHBOARD_SECRET_KEY
   if (!raw) throw new Error('DASHBOARD_SECRET_KEY is not set — required to store or read vault secrets')

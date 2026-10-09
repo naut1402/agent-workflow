@@ -1,5 +1,3 @@
-// UI strings for the `runner` feature (Runner Config panel + runner/connection
-// dialogs). Vietnamese is the source of truth for the message schema.
 export default {
   jobStatus: {
     queued: 'Đang chờ',
@@ -94,7 +92,6 @@ export default {
   hints: {
     generatedId: 'Id sẽ tạo: {id}',
   },
-  // Khớp đúng tập `DefaultRunnerReason` của backend.
   defaultIssue: {
     'no-runners': 'Chưa có runner nào — job không pin runner sẽ lỗi.',
     unset: 'Chưa đặt runner mặc định — job không pin runner sẽ lỗi.',

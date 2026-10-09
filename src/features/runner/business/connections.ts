@@ -150,9 +150,7 @@ export function upsertConnection(input: any): MutationResult<{ connection: Conne
 
   const store = loadConnections()
   const idx = store.connections.findIndex((c) => c.id === id)
-  // Cùng lý do với `upsertRunner`: `create` là cờ opt-in của dialog tạo mới.
-  // Ghi đè ở đây nguy hiểm hơn vì connection giữ cả providerId/model/credential —
-  // một connection trùng slug sẽ đổi hẳn thứ mà runner mặc định thật sự chạy.
+  // xem docs/architecture/code/runner.md §27
   if (idx >= 0 && input?.create === true) {
     return { ok: false, status: 409, error: `connection id "${id}" đã tồn tại` }
   }
@@ -207,7 +205,6 @@ export function ensureLegacyConnection(legacy: {
     credentialId: kind === 'ai-provider' ? legacy.credentialId || null : null,
   })
   if ('error' in result) {
-    // Fall back to default seed id if upsert somehow fails.
     return DEFAULT_CONNECTION_ID
   }
   return result.connection.id

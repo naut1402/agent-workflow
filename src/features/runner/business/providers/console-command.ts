@@ -198,7 +198,6 @@ export function createConsoleCommandProvider(): RunnerProvider {
     },
 
     validateCredential() {
-      // local-console jobs use an implicit cli-session credential — nothing to validate.
       return { ok: true, errors: [] }
     },
 
@@ -214,7 +213,6 @@ export function createConsoleCommandProvider(): RunnerProvider {
       const started = Date.now()
       const cliPath = String(runnerConfig.cliPath || 'sh')
       const flags = Array.isArray(runnerConfig.flags) ? runnerConfig.flags.map(String) : []
-      // Ignore resolvedAgent.systemPrompt — console commands are not AI agents.
       const { args } = buildConsoleInvocation({ flags, userPrompt: req.userPrompt || '' })
 
       const logPath = req.metadata?.logPath as string | undefined

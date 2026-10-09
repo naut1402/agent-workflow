@@ -7,17 +7,6 @@ import {
 } from '../../../../backend/lib/fileHelper.js'
 import { registryHome } from '../../../../backend/registry.js'
 
-/**
- * Transcript store for the API-based agentic providers (`AgenticApiProvider`
- * subclasses) — the equivalent of the on-disk JSONL a CLI (Claude/Cursor)
- * writes itself, so `taskChat.ts`/`apiAgentTranscript.ts` (monitor feature)
- * can surface the same `role: 'tool'` activity turns for these providers.
- *
- * Two files per session, both under `registryHome()`:
- *   - `agent-sdk-transcripts/<providerId>/<sessionId>.jsonl` — turns for chat UI.
- *   - `agent-sdk-sessions/<sessionId>.json` — opaque message history for resume.
- */
-
 export interface AgentTranscriptTurn {
   role: 'user' | 'assistant' | 'tool'
   text: string
@@ -49,7 +38,7 @@ export function appendTranscriptTurn(providerId: string, sessionId: string, turn
     const line = JSON.stringify({ ...turn, at: turn.at ?? new Date().toISOString() })
     appendTextFileSync(transcriptFile(providerId, sessionId), `${line}\n`)
   } catch {
-    /* best-effort — transcript bookkeeping must not fail the job */
+    /* ignore */
   }
 }
 
@@ -79,7 +68,7 @@ export function readTranscriptTurns(providerId: string, sessionId: string): Agen
         })
       }
     } catch {
-      continue // a half-written trailing line while the job is still running
+      continue
     }
   }
   return turns

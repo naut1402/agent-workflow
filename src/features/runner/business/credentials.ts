@@ -83,11 +83,7 @@ export function getCredential(id: unknown): CredentialProfile | null {
   return loadCredentials().profiles.find((p) => p.id === clean) || null
 }
 
-/**
- * `profile.id` is optional — the "+ Credential" form no longer asks the user
- * to type one (it's an internal key, not something they need to see/manage),
- * so a fresh id is minted when omitted.
- */
+/** Upsert a credential profile; a fresh id is minted when `profile.id` is omitted. */
 export function upsertCredential(profile: any): MutationResult<{ profile: CredentialProfile }> {
   const id = profile?.id ? sanitiseCredentialId(profile.id) : crypto.randomUUID()
   if (!id) return { ok: false, error: 'invalid credential id' }
@@ -95,8 +91,6 @@ export function upsertCredential(profile: any): MutationResult<{ profile: Creden
     return { ok: false, error: 'provider is required' }
   }
   const store = loadCredentials()
-  // `secretValue` is the real secret pasted through the UI (never persisted as-is) —
-  // store it encrypted and point secretRef at the vault entry instead of at the raw value.
   let secretRef = String(profile.secretRef || 'cli-session').slice(0, 256)
   if (typeof profile.secretValue === 'string' && profile.secretValue.trim()) {
     storeSecret(id, { value: profile.secretValue })

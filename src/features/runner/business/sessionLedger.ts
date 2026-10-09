@@ -33,12 +33,7 @@ export interface UsageCursor {
 export interface TaskSessionLedger {
   version: 1
   taskId: string
-  /**
-   * @deprecated Không còn nhánh logic nào đọc field này. Cách ly phiên theo
-   * `stepId` (mỗi node một entry `open`) đã là mặc định, nên `'per-step'` không
-   * còn ý nghĩa, và `'per-runner'` chưa bao giờ có nhánh xử lý. Giữ lại để đọc
-   * và ghi lại nguyên vẹn các file ledger cũ.
-   */
+  /** @deprecated Không còn được đọc; giữ để đọc và ghi lại nguyên vẹn file ledger cũ. */
   sessionPolicy: SessionPolicy
   sessions: SessionEntry[]
 }
@@ -79,15 +74,7 @@ function emptyLedger(taskId: string): TaskSessionLedger {
 /** Lý do stale cho entry lẫn phiên điều phối với phiên của một step. */
 export const MIXED_SESSION_REASON = 'mixed-session'
 
-/**
- * Migration nhẹ lúc đọc: entry vừa mang `__orchestrator__` vừa mang step id
- * khác là tàn dư của bug "một ô session cho cả task" — phiên CLI đó đã lẫn
- * context của hai node, resume vào nó là tiếp tục làm bẩn phiên điều phối.
- *
- * Chỉ sửa TRONG BỘ NHỚ: `loadTaskSessionLedger` là hàm đọc thuần dùng ở rất
- * nhiều nơi (kể cả `getUsageCursor`), ghi đĩa từ đây là tác dụng phụ ngoài hợp
- * đồng. Trạng thái đã làm sạch được bền hoá ở lần `recordSessionUsage` kế tiếp.
- */
+// xem docs/architecture/code/runner.md §23
 function sanitizeLedger(ledger: TaskSessionLedger): TaskSessionLedger {
   for (const s of ledger.sessions) {
     if (!s || s.status !== 'open') continue
@@ -122,11 +109,7 @@ export function saveTaskSessionLedger(projectId: string, ledger: TaskSessionLedg
   writeTextFileAtomicSync(ledgerFile(projectId, ledger.taskId), JSON.stringify(ledger, null, 2))
 }
 
-/**
- * Đường ĐỌC — permissive. Có `stepId` thì chỉ nhận entry của đúng node đó;
- * không có thì giữ nguyên hành vi cũ (entry `open` mới nhất), vì chat cấp task,
- * nl-chat và job ad-hoc vẫn phải nối được phiên vừa chạy.
- */
+// xem docs/architecture/code/runner.md §23
 function findOpenEntry(ledger: TaskSessionLedger, stepId?: string): SessionEntry | null {
   for (let i = ledger.sessions.length - 1; i >= 0; i--) {
     const s = ledger.sessions[i]
@@ -137,11 +120,7 @@ function findOpenEntry(ledger: TaskSessionLedger, stepId?: string): SessionEntry
   return null
 }
 
-/**
- * Đường GHI — strict. Chỉ trả entry mà caller thật sự SỞ HỮU, vì đây là entry
- * sắp bị ghi đè `sessionId`. Mượn entry `open` của node khác ở đây chính là
- * chỗ sinh ra entry lai (phiên điều phối bị phiên của step chiếm chỗ).
- */
+// xem docs/architecture/code/runner.md §23
 function findOwnedOpenEntry(
   ledger: TaskSessionLedger,
   stepId?: string,
@@ -154,8 +133,6 @@ function findOwnedOpenEntry(
       if (s.stepIds?.includes(stepId)) return s
       continue
     }
-    // Không có stepId: chỉ nhận entry chưa thuộc node nào, hoặc entry đang mang
-    // đúng session id này (ghi lại chính nó, không phải chiếm chỗ của ai).
     if (!s.stepIds?.length || (sessionId && s.sessionId === sessionId)) return s
   }
   return null
@@ -195,11 +172,8 @@ export function isSessionEntryValid(
 
 /**
  * Decide session flags for a job from explicit sessionMode + ledger. Invalid
- * resume conditions force a fresh session.
- *
- * Mỗi node (nút điều phối + từng step) giữ một entry `open` riêng: `stepId` có
- * nghĩa là "chỉ phiên của node này", còn không có `stepId` thì giữ nguyên hành
- * vi cũ — nối tiếp entry `open` mới nhất. Đây là đường ĐỌC, cố ý permissive.
+ * resume conditions force a fresh session; `stepId` limits the lookup to that
+ * node's own open entry.
  */
 export function resolveSessionPlan(ctx: ResolveSessionContext): ResolvedSessionPlan {
   const mode = ctx.sessionMode ?? 'none'
@@ -225,8 +199,6 @@ export function resolveSessionPlan(ctx: ResolveSessionContext): ResolvedSessionP
     return { sessionMode: 'resume', resumeSessionId: candidateId }
   }
 
-  // Node đã hỏi xin phiên của CHÍNH NÓ và không có — nói rõ trong `staleReason`
-  // để log của lượt chạy phân biệt được với "task này chưa có phiên nào".
   return ctx.stepId
     ? { sessionMode: 'new', staleReason: 'no open session for this node' }
     : { sessionMode: 'new' }
@@ -256,15 +228,10 @@ export function recordSessionUsage(input: RecordSessionInput): void {
   const now = new Date().toISOString()
   const host = input.host || os.hostname()
 
-  // Mở phiên mới chỉ thay phiên CỦA CHÍNH NODE NÀY. Trước đây vòng này quét
-  // sạch mọi entry `open`, nên một step respawn là đóng luôn phiên điều phối.
+  // xem docs/architecture/code/runner.md §23
   if (input.forceNew || input.staleReason) {
     for (const s of ledger.sessions) {
       if (s.status !== 'open') continue
-      // Đối xứng với `findOwnedOpenEntry`: có `stepId` thì chỉ chạm entry CÙNG
-      // node; KHÔNG có `stepId` thì chỉ được chạm entry "vô chủ". Bỏ nhánh
-      // `else` là mở lại đúng đường quét chéo đã sinh ra bug gốc — một job
-      // không mang `stepId` sẽ đóng luôn phiên của nút điều phối.
       if (input.stepId) {
         if (!s.stepIds?.includes(input.stepId)) continue
       } else if (s.stepIds?.length) continue
@@ -274,9 +241,6 @@ export function recordSessionUsage(input: RecordSessionInput): void {
     }
   }
 
-  // Đường GHI: không tìm thấy entry của mình thì TẠO MỚI, tuyệt đối không mượn
-  // entry đang mở của node khác — đó là chỗ `sessionId` của nút điều phối bị
-  // một job step ghi đè, và từ lượt sau cha resume thẳng vào phiên của con.
   let own = findOwnedOpenEntry(ledger, input.stepId, input.sessionId)
   if (!own || input.forceNew) {
     own = {
@@ -296,11 +260,6 @@ export function recordSessionUsage(input: RecordSessionInput): void {
   } else {
     own.sessionId = input.sessionId ?? own.sessionId
     own.lastUsedAt = now
-    // Ledger cũ (trước khi có `stepIds`) thiếu field — vẫn phải vá.
-    // Không `push` thêm node vào đây: `findOwnedOpenEntry` chỉ trả entry ĐÃ
-    // chứa `stepId` (hoặc entry vô chủ khi không có `stepId`), nên entry lai
-    // không còn đường hình thành. Giữ lại một nhánh chết ở đúng chỗ vừa sửa
-    // bug chỉ làm người đọc sau tưởng nó vẫn chạy được.
     if (!Array.isArray(own.stepIds)) own.stepIds = []
   }
 
@@ -360,8 +319,6 @@ export function setUsageCursor(
   }
   if (changed) saveTaskSessionLedger(projectId, ledger)
 }
-
-// ── CLI session capture helpers ────────────────────────────────────────────
 
 export type SessionCaptureMode = 'preset-uuid' | 'parse-json' | 'none'
 
@@ -423,7 +380,6 @@ export function parseCursorJsonOutput(stdout: string): CursorJsonOutput {
   try {
     return cursorFieldsFrom(JSON.parse(trimmed) as Record<string, unknown>)
   } catch {
-    // Defensive: tolerate a leading stderr line (or similar) before the JSON object.
     const start = trimmed.indexOf('{')
     const end = trimmed.lastIndexOf('}')
     if (start < 0 || end <= start) return {}
@@ -439,10 +395,7 @@ export interface CursorJsonInvocationInput {
   flags: string[]
   prompt: string
   resumeSessionId?: string
-  /**
-   * Job này có MCP server nào không. Mặc định `false` ⇒ argv 🚫 không đổi một
-   * byte so với trước, kể cả thứ tự cờ — xem `buildCursorJsonInvocation`.
-   */
+  /** Job này có MCP server nào không; mặc định `false` ⇒ argv không đổi. */
   mcpEnabled?: boolean
 }
 
@@ -452,17 +405,9 @@ export interface CursorJsonInvocation {
 }
 
 /**
- * Build cursor headless invocation with JSON output for session capture.
- *
- * The prompt is delivered on STDIN, never as an argv element — same Windows
- * `shell: true` argv-splitting bug that forced Claude onto stdin. Cursor CLI
- * accepts a piped prompt with `-p` / `--print` (print mode is inferred when
- * stdin is not a TTY).
- *
- * Headless defaults also disable Cursor's nested sandbox and force-approve
- * tools: inside Docker / CI the sandbox backend often cannot start, so Shell
- * fails ("Sandbox mode is enabled but not available on this system").
- * Isolation is the container (or host policy), not Cursor's Landlock helper.
+ * Build cursor headless invocation with JSON output for session capture. The
+ * prompt goes on stdin, never in argv.
+ * xem docs/architecture/code/runner.md §24
  */
 export function buildCursorJsonInvocation(input: CursorJsonInvocationInput): CursorJsonInvocation {
   const base = Array.isArray(input.flags) ? [...input.flags] : []
@@ -478,12 +423,7 @@ export function buildCursorJsonInvocation(input: CursorJsonInvocationInput): Cur
     base.includes('--yolo') || base.includes('-f') || base.includes('--force')
   if (!hasForce) base.push('--force')
   if (!base.includes('--trust')) base.push('--trust')
-  // Headless: cursor mặc định CHỜ người dùng phê duyệt từng MCP server, tức job
-  // treo cho tới khi timeout. Theo đúng mẫu "có rồi thì không thêm" của
-  // `--force`/`--trust`/`--sandbox` ở trên.
-  //
-  // 🚫 Không thêm vô điều kiện: job không bật MCP server nào thì argv phải giữ
-  // nguyên từng byte (bất biến argv).
+  // xem docs/architecture/code/runner.md §24
   if (input.mcpEnabled && !base.includes('--approve-mcps')) base.push('--approve-mcps')
   if (input.resumeSessionId) base.push('--resume', input.resumeSessionId)
   return { args: base, stdinInput: input.prompt }
@@ -539,6 +479,5 @@ export function prepareSessionInvocation(input: SessionPrepareInput): SessionPre
     return { sessionId: preset, presetSessionId: preset }
   }
 
-  // parse-json: session id arrives after CLI exits — no preset.
   return {}
 }

@@ -1,8 +1,3 @@
-// UI-only hints for the 4 API-based agentic providers (openai/gemini/xai/anthropic)
-// on ConnectionDialog.vue — placeholders shown next to the model/baseURL/secretRef
-// fields when creating a credential for one of them. Pure data (no Vue import)
-// so it is trivially unit-testable.
-
 /** Placeholder base URL shown on the field — the real default lives in registry.ts. */
 export const DEFAULT_BASE_URLS: Record<string, string> = {
   'openai-api': 'https://api.openai.com/v1',

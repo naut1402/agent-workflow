@@ -3,21 +3,7 @@ import { getOAuthConfig, buildAuthorizeUrl, exchangeCode, refreshAccessToken } f
 import { storeSecret, readSecret } from './secretVault.js'
 import { upsertCredential } from './credentials.js'
 
-/**
- * Orchestrates the browser OAuth connect flow started from `ConnectionDialog.vue`
- * ("Connect via browser"): `start` opens the provider's consent screen, then
- * either the provider redirects the user's browser straight back to
- * `completeFromCallback` (when that redirect is reachable from the user's
- * browser), or — if it isn't (dashboard not reachable at that address, e.g.
- * behind a firewall) — the user pastes the URL/code the provider showed them
- * into the dialog, which goes through `completeFromPaste` instead. Both paths
- * exchange the same PKCE `code_verifier` for a token and land in the same
- * encrypted vault entry, so the rest of the app never needs to know which one
- * ran.
- */
-
 const PENDING_TTL_MS = 10 * 60_000
-/** Refresh this far ahead of `expiresAt` — avoids a request racing an expiry mid-flight. */
 const REFRESH_MARGIN_MS = 5 * 60_000
 
 interface PendingOAuth {
@@ -123,7 +109,7 @@ export function completeFromPaste(state: string, pasted: string) {
     const url = new URL(trimmed)
     code = url.searchParams.get('code') || trimmed
   } catch {
-    /* not a URL — treat the whole input as the code */
+    /* ignore */
   }
   return complete(state, code)
 }
@@ -136,9 +122,7 @@ export function getOAuthStatus(state: string): { status: PendingOAuth['status'];
 
 /**
  * Returns a still-valid access token for an `oauth:<vaultKey>` credential,
- * refreshing it first if it's within `REFRESH_MARGIN_MS` of expiring (or
- * already expired). Called from `AgenticApiProvider.execute()` right before
- * a request goes out — never cached beyond that single call.
+ * refreshing it first if it's within `REFRESH_MARGIN_MS` of expiring.
  */
 export async function ensureFreshOAuthToken(
   vaultKey: string,

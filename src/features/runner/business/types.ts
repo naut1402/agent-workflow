@@ -1,5 +1,3 @@
-// Shared types for the runner execution plane (U0005).
-
 import type { UsageSnapshot } from '../../../shared/log/schema.js'
 
 export interface CredentialProfile {
@@ -38,18 +36,10 @@ export interface Connection {
   credentialId?: string | null
   /**
    * Free-form settings merged into `runnerConfig` at execute time
-   * (`models`/`model`/`baseURL`, …). For `ai-provider` (`ai-api`),
-   * `extraTools?: string[]` opts this Connection into shell/git/search/web
-   * tools beyond the base 4 file-ops (see `AgenticApiProvider.resolveExtraTools`)
-   * — optional and absent on connections created before this key existed,
-   * which then get only the base tools (unchanged behavior). For
-   * `local-console` with `providerId: 'claude-code-cli'`, `model` is read
-   * as the `--model` argv value (see `claude-code-cli.ts`).
-   *
-   * `mcpServers?: string[]` lists the MCP server ids this Connection opts into
-   * (`features/mcp` store). Absent/empty — the default for every connection
-   * created before the key existed — means no MCP config file is written and
-   * the CLI argv is unchanged.
+   * (`models`/`model`/`baseURL`, …). `extraTools?: string[]` opts an
+   * `ai-provider` Connection into shell/git/search/web tools; `mcpServers?:
+   * string[]` lists the MCP server ids it opts into (absent/empty ⇒ no MCP).
+   * For `claude-code-cli`, `model` becomes the `--model` argv value.
    */
   config?: Record<string, unknown>
 }
@@ -111,13 +101,9 @@ export interface ExecuteRequest {
   produces?: string[]
   timeoutMs?: number
   metadata?: Record<string, unknown>
-  // Approval-flow session continuity (see jobQueue.ts submitApprovalJob /
-  // sendJobFeedback): exactly one of these is set for an approval job.
-  // `sessionId` picks a fresh conversation id for the CLI to persist
-  // (`--session-id`); `resumeSessionId` continues that exact conversation on a
-  // follow-up feedback round (`--resume`) so the agent remembers what it
-  // already proposed instead of starting over.
+  /** Fresh session id for the CLI to persist (`--session-id`); exclusive with `resumeSessionId`. */
   sessionId?: string
+  /** Existing session to continue (`--resume`). */
   resumeSessionId?: string
   /**
    * Aborted when `cancelJob` is called for this job. Providers with no OS
@@ -136,30 +122,19 @@ export interface ExecuteResult {
   artifactsFound?: string[]
   error?: string
   /**
-   * The runner's raw stdout. Quick-action approval jobs use this as the
-   * proposed content (the agent is told to "respond with the improved text"),
-   * so a prompt that prints its result instead of writing a file still produces
-   * a reviewable change. See jobQueue.ts runJob.
+   * The runner's raw stdout. Quick-action approval jobs use it as the proposed
+   * content.
    */
   stdout?: string
   /**
-   * Bản `stdout` đã mask secret MCP — DÀNH RIÊNG cho biên persist/API
-   * (`JobRecord.stdout`, `metadata.stepSummary`, `GET /api/jobs`).
-   *
-   * 🚫 Không dùng cho đường chức năng: `foldProposalIntoScratch` và
-   * `parseOrchestratorDecision` đọc `stdout` THÔ — mask là split/join mù, nó cắt
-   * giữa artifact và giữa dòng `ORCHESTRATOR_DECISION`.
-   *
-   * Không set khi job không bật MCP server nào ⇒ caller rơi về `stdout`, hành vi
-   * cũ không đổi một byte.
+   * `stdout` with MCP secrets masked, for the persist/API boundary only
+   * (`JobRecord.stdout`, `GET /api/jobs`); unset when the job has no MCP secret.
+   * xem docs/architecture/code/runner.md §4
    */
   maskedStdout?: string
   /** Captured CLI session id (preset-uuid or parse-json providers). */
   sessionId?: string | null
-  /** True when runProcess() killed the child after timeoutMs elapsed (SIGTERM).
-   * Lets classifyJobFailure() recognize a timeout deterministically instead of
-   * matching the CLI's own stdout/stderr text (e.g. Claude Code's interrupt
-   * markers "Execution error" / "[Request interrupted by user]"). */
+  /** True when runProcess() killed the child after timeoutMs elapsed (SIGTERM). */
   timedOut?: boolean
   /** Optional token usage (Agent CLI); see providers/agentCli.ts. */
   tokenUsage?: {
@@ -173,11 +148,7 @@ export interface ExecuteResult {
   }
 }
 
-// `awaiting_approval`: an approval-flow job (see jobQueue.ts) finished
-// successfully against a scratch workspace copy — nothing has been written to
-// the real files yet. Resolved by approveJob (apply + succeeded),
-// discardJob (cancelled), or sendJobFeedback (spawns a new `awaiting_approval`
-// job continuing the same CLI session).
+/** `awaiting_approval`: an approval job finished against a scratch copy; resolved by `approveJob`, `discardJob` or `sendJobFeedback`. */
 export type JobStatus =
   | 'queued'
   | 'running'
@@ -208,16 +179,12 @@ export interface JobRecord {
   error?: string
   artifactsFound?: string[]
   /**
-   * The CLI's raw stdout (or parsed agent `result`), persisted for NL chat and
-   * Agent CLI pipeline jobs so task chat can show the reply when the on-disk
-   * session transcript is missing. Capped; never treat the full job log as this.
+   * Agent reply (stdout, MCP secrets masked), persisted for chat surfaces.
+   * Capped; never the full job log.
    */
   stdout?: string
   metadata?: Record<string, unknown>
-  // `sessionId`/`parentJobId` are shared by two independent feedback flows:
-  // approval (`sendJobFeedback`, keyed by `jobId`) and task-chat-resume
-  // (`sendTaskFeedback`, keyed by `taskId`, see jobQueue.ts). Only
-  // `applyTarget`/`approvalArtifact` below are approval-flow only.
+  /** CLI session id, shared by approval feedback (`sendJobFeedback`) and task chat resume (`sendTaskFeedback`). */
   sessionId?: string
   /** Real (non-scratch) directory this job's proposed changes would apply to (approval flow only). */
   applyTarget?: string
@@ -225,12 +192,9 @@ export interface JobRecord {
   approvalArtifact?: string
   /** The job this one continued via `--resume` (approval feedback round, or a task-chat-feedback round). */
   parentJobId?: string
-  // Selection-splice approval only (see jobQueue.ts runJob): when set, the
-  // agent's output (stdout) is spliced back into a copy of the real artifact at
-  // this 1-indexed inclusive line range, so every line outside the range stays
-  // byte-identical and the review diff is localized to the selection.
+  /** Selection-splice approval only: 1-indexed inclusive line range the agent's output is spliced into. */
   spliceRange?: { start: number; end: number }
-  /** Aggregated LLM token usage for this job (Claude transcript capture, P0). */
+  /** Aggregated LLM token usage for this job. */
   usage?: UsageSnapshot
   /** Retry counter for process_crash recovery (defaults to 0 when absent). */
   attemptCount?: number
@@ -255,7 +219,7 @@ export type DefaultRunnerReason =
   | 'not-ai'
 
 /**
- * Kết quả giải runner mặc định. `runnerId` giữ id **đã ghi nhận** kể cả khi runner
+ * Kết quả giải runner mặc định. `runnerId` giữ id đã ghi nhận kể cả khi runner
  * đó không dùng được, để log và UI nêu đúng runner nào đang hỏng.
  */
 export interface DefaultRunnerResolution {
@@ -274,8 +238,7 @@ export interface ConnectionsStore {
   connections: Connection[]
 }
 
-// A reusable provider "template": interface + optional baseURL. Credential
-// selection lives on the Connection itself, not here.
+/** Reusable provider template: interface + optional baseURL; credentials live on the Connection. */
 export interface ProviderConfig {
   id: string
   label: string
@@ -293,11 +256,10 @@ export interface CommandsStore {
   commands: CustomCommand[]
 }
 
-// A provider plugs a concrete execution backend (e.g. the Claude Code CLI) into
-// the runner plane behind a uniform contract.
+/** Uniform contract that plugs an execution backend into the runner plane. */
 export interface RunnerProvider {
   providerId: string
-  /** Defaults inferred from providerId when omitted (legacy providers). */
+  /** Inferred from providerId when omitted. */
   family?: ProviderFamily
   validateRunnerConfig(config: Record<string, unknown> | undefined): { ok: boolean; errors: string[] }
   validateCredential(profile: CredentialProfile | undefined): { ok: boolean; errors: string[] }
@@ -311,8 +273,7 @@ export interface RunnerProvider {
   ): Promise<ExecuteResult>
 }
 
-// Mutation result shape shared by registry/credentials/job CRUD. `ok:false`
-// carries an error (and optional HTTP-ish status); `ok:true` carries the payload.
+/** Result of registry/credentials/job CRUD; `ok: false` carries an error and optional HTTP status. */
 export type MutationOk<T> = { ok: true } & T
 export type MutationErr = { ok: false; status?: number; error: string }
 export type MutationResult<T = {}> = MutationOk<T> | MutationErr

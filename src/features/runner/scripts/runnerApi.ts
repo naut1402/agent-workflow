@@ -13,7 +13,7 @@ export async function fetchJob(id: string) {
   return apiGet(`/api/jobs/${encodeURIComponent(id)}`)
 }
 
-/** Giữ `any[]` như suy luận cũ từ `apiGet` (T=any) — `unknown[]` làm `.find` trả `unknown` và vỡ PipelineView/Logs. */
+/** `jobs` để `any[]`: `unknown[]` làm `.find` trả `unknown` và vỡ type ở PipelineView/Logs. */
 export async function fetchJobs(limit?: number): Promise<{ jobs: any[] }>
 export async function fetchJobs(opts: { limit?: number; status?: string }): Promise<{ jobs: any[] }>
 export async function fetchJobs(arg?: number | { limit?: number; status?: string }): Promise<{ jobs: any[] }> {

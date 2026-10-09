@@ -12,7 +12,6 @@ import {
 } from './agenticApiProvider.js'
 import type { McpToolBridge } from './mcpToolBridge.js'
 
-/** Chặn vòng lặp vô hạn khi model liên tục gọi tool. */
 const MAX_AGENT_LOOP_TURNS = 8
 
 const TEXT_EDITOR_TOOL: Anthropic.Messages.ToolTextEditor20250728 = {
@@ -29,13 +28,6 @@ const LIST_DIRECTORY_TOOL: Anthropic.Messages.Tool = {
   },
 }
 
-/**
- * Base 2 tools (text editor + list_directory) always registered; `extraTools`
- * (from `Connection.config.extraTools`, default `[]`) opts a Connection into
- * shell/git/search/web on top — see agenticApiProvider.ts. `webSearchConfigured`
- * additionally gates `web_search` alone so an unconfigured `BRAVE_SEARCH_API_KEY`
- * hides the tool instead of registering one that always errors.
- */
 function buildTools(extraTools: ExtraTool[], webSearchConfigured: boolean): Anthropic.Messages.ToolUnion[] {
   const tools: Anthropic.Messages.ToolUnion[] = [TEXT_EDITOR_TOOL, LIST_DIRECTORY_TOOL]
   if (extraTools.includes('shell')) {
@@ -126,12 +118,9 @@ function textOf(content: Anthropic.Messages.ContentBlock[]): string {
 }
 
 /**
- * `anthropic-api` — no official API-thuần Agent SDK exists for Anthropic (the
- * Claude Agent SDK spawns the `claude` CLI subprocess, which duplicates
- * `claude-code-cli`, see design.md §2), so this wrapper drives the Messages
- * API directly with a small hand-rolled tool-use loop, mapping each
- * `text_editor`/`list_directory` tool_use block onto the 4 sandboxed file-ops
- * shared with `OpenAiCompatibleProvider` via the `AgenticApiProvider` base.
+ * `anthropic-api` — drives the Messages API directly with a hand-rolled
+ * tool-use loop, mapping `text_editor`/`list_directory` tool_use blocks onto
+ * the sandboxed file-ops of `AgenticApiProvider`.
  */
 export class AnthropicCompatibleProvider extends AgenticApiProvider {
   readonly providerId: string
@@ -163,8 +152,6 @@ export class AnthropicCompatibleProvider extends AgenticApiProvider {
 
     const extraTools = this.resolveExtraTools(ctx.runnerConfig)
     const baseTools = buildTools(extraTools, this.isWebSearchConfigured())
-    // `mcpBridge === null` ⇒ `bridgeTools` rỗng ⇒ `tools` và preamble
-    // byte-identical với bản trước khi có bridge.
     const bridgeTools = ctx.mcpBridge?.tools ?? []
     const tools: Anthropic.Messages.ToolUnion[] = [
       ...baseTools,
@@ -210,10 +197,6 @@ export class AnthropicCompatibleProvider extends AgenticApiProvider {
         (b): b is Anthropic.Messages.ToolUseBlock => b.type === 'tool_use',
       )
 
-      // Surface this turn's text as soon as it arrives — whether or not tool
-      // calls follow — instead of only the final no-tool-use turn (level-1
-      // streaming; see AgenticStreamHandlers). Not a real per-token delta
-      // (this SDK call isn't streamed), so one call covers the whole turn.
       const turnText = textOf(response.content)
       if (turnText) ctx.handlers.onAssistantChunk(turnText, { done: true })
 
@@ -231,15 +214,7 @@ export class AnthropicCompatibleProvider extends AgenticApiProvider {
           }
         }
 
-        // Empty content + no tool use — the model may not understand this
-        // provider's toolset. Give it exactly one nudge before treating this
-        // as a real failure instead of silently reporting job success (see
-        // agenticApiProvider.ts's EMPTY_REPLY_NUDGE_TEXT for rationale).
-        // Deliberately does NOT push an empty assistant message — Anthropic's
-        // API rejects any non-final message with empty content ("all messages
-        // must have non-empty content except for the optional final assistant
-        // message"), which would break this request before the model ever
-        // sees the nudge.
+        // xem docs/architecture/code/runner.md §29
         if (!hasNudgedEmptyReply) {
           hasNudgedEmptyReply = true
           messages.push({ role: 'user', content: EMPTY_REPLY_NUDGE_TEXT })
@@ -273,15 +248,12 @@ export class AnthropicCompatibleProvider extends AgenticApiProvider {
     throw new AgenticRunError(`exceeded ${MAX_AGENT_LOOP_TURNS} agent loop turns`, messages)
   }
 
-  /** Map one `tool_use` block to a base-class sandbox op (text_editor command, list_directory, or an opt-in extra tool). */
   private async executeAnthropicTool(
     block: Anthropic.Messages.ToolUseBlock,
     workspace: string,
     bridge?: McpToolBridge | null,
   ) {
     const input = (block.input ?? {}) as Record<string, unknown>
-    // TRƯỚC `switch`: tên tool MCP có prefix `mcp__` nên không thể trùng case nào
-    // dưới đây, nhưng chặn ở đây giữ `switch` chỉ nói về tool sandbox.
     if (bridge?.has(block.name)) return bridge.call(block.name, input)
     switch (block.name) {
       case 'list_directory':
@@ -318,10 +290,6 @@ export class AnthropicCompatibleProvider extends AgenticApiProvider {
               typeof input.new_str === 'string' ? input.new_str : '',
             )
           case 'insert':
-            // `insert_line`/`insert_text` place text after a given line; the shared
-            // sandbox only exposes whole-file read/write/edit, so insert is
-            // implemented here in terms of those primitives rather than adding a
-            // 5th shared op for a single caller.
             return this.insertIntoFile(
               workspace,
               path,
@@ -339,8 +307,6 @@ export class AnthropicCompatibleProvider extends AgenticApiProvider {
 
   private insertIntoFile(workspace: string, path: string, insertLine: number, text: string) {
     const current = this.readWorkspaceFile(workspace, path)
-    // Narrow via `'error' in v` rather than `!v.ok` — see coding-convention.md §2
-    // (boolean-discriminant narrowing is fragile under this repo's vue-tsc).
     if ('error' in current) return current
     const lines = current.content.split('\n')
     const at = Math.max(0, Math.min(insertLine, lines.length))

@@ -36,13 +36,9 @@ export interface ConnectionOption {
   credentialId?: string | null
   /**
    * ai-provider: extra settings merged into runnerConfig at execute time.
-   * `models` is the user-picked list (nullable — rotation across them is a
-   * later feature); `model` mirrors its first entry for the provider
-   * wrappers, which only read a single model today. `extraTools` opts this
-   * connection into shell/git/search/web tools beyond the base file-ops —
-   * absent/empty means unchanged (only the base tools). `mcpServers` lists the
-   * MCP server ids this connection opts into — absent/empty means the CLI argv
-   * stays exactly as it was.
+   * `models` is the user-picked list; `model` mirrors its first entry for the
+   * provider wrappers. `extraTools` opts into shell/git/search/web tools and
+   * `mcpServers` into MCP servers (absent/empty ⇒ none).
    */
   config?: Record<string, unknown> & {
     models?: string[]

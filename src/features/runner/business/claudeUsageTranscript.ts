@@ -7,11 +7,6 @@ import {
   safeReadDir,
 } from '../../../backend/lib/fileHelper.js'
 
-/**
- * Claude Code CLI transcript reader — parse `~/.claude/projects/…` JSONL for
- * token usage. Defensive I/O: missing/corrupt files → null / skip, never throw.
- */
-
 const SESSION_ID_RE = /^[0-9a-fA-F-]+$/
 
 export type ClaudeTokenUsage = {
@@ -92,8 +87,6 @@ export async function readNewUsage(
   }
 
   const lines = raw.split('\n')
-  // Trailing newline → last empty segment; keep totalLines as physical line count
-  // excluding a final empty segment only when file ends with `\n`.
   const totalLines = raw.endsWith('\n') ? Math.max(0, lines.length - 1) : lines.length
   const start = Math.max(0, Math.floor(fromLine))
   const seen = new Map<string, ClaudeTokenUsage>()
@@ -145,7 +138,7 @@ export async function listNewSubagentFiles(
     const name = ent.name
     if (!name.startsWith('agent-') || !name.endsWith('.jsonl')) continue
     if (known.has(name)) continue
-    // Also accept full path in alreadyProcessed for older cursors.
+    // xem docs/architecture/code/runner.md §31
     if (known.has(joinPath(dir, name))) continue
     out.push(name)
   }

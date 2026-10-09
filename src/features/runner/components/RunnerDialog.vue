@@ -16,11 +16,7 @@ const props = defineProps<{
   connections: ConnectionOption[]
   providers: ProviderEntry[]
   providerConfigs: ProviderConfigOption[]
-  /**
-   * `copy` mang sẵn một id đã mint nên không suy id từ tên như `create`, nhưng vẫn
-   * là một bản ghi mới ⇒ vẫn gửi cờ `create`. Không có `mode` thì suy từ `runner.id`
-   * (giữ tương thích với call site cũ).
-   */
+  /** `copy` mang id đã mint nhưng vẫn là bản ghi mới (gửi cờ `create`); không có thì suy từ `runner.id`. */
   mode?: 'create' | 'edit' | 'copy'
 }>()
 
@@ -89,7 +85,6 @@ const timeoutModel = computed({
 
 const selectedProviderId = computed(() => selectedConnection.value?.providerId || '')
 
-/** Claude Code CLI is the only local provider that understands --allowedTools. */
 const showsAllowedTools = computed(() => selectedProviderId.value === 'claude-code-cli')
 
 const isConsoleCommand = computed(() => selectedProviderId.value === 'console-command')
@@ -108,7 +103,6 @@ watch(
   { immediate: true },
 )
 
-/** Id sẽ gửi lên BE — hiện ngay dưới ô Tên để người dùng thấy trước khi va chạm. */
 const payloadId = computed(() =>
   isEdit.value || props.mode === 'copy'
     ? draft.value.id
@@ -119,7 +113,6 @@ function buildSavePayload(): RunnerDraft {
   const config: RunnerDraft['config'] = {
     timeoutMs: draft.value.config?.timeoutMs ?? 600000,
   }
-  // Only persist allowedTools for Claude Code CLI — other providers ignore / reject it.
   if (showsAllowedTools.value && draft.value.config?.allowedTools) {
     config.allowedTools = draft.value.config.allowedTools
   }
@@ -128,8 +121,6 @@ function buildSavePayload(): RunnerDraft {
     id: payloadId.value,
     name: draft.value.name.trim(),
     config,
-    // Opt-in: chỉ dialog tạo mới / copy gửi cờ này, để BE chặn ghi đè bản ghi
-    // trùng id thay vì thay chỗ nó trong im lặng.
     ...(isEdit.value ? {} : { create: true }),
   }
 }
@@ -152,8 +143,6 @@ async function save() {
       emit('saved', payload.id)
       emit('close')
     } catch (e: any) {
-      // Nhận diện bằng status, 🚫 không so chuỗi message của BE: message đó là
-      // chuỗi cho log/dev, i18n-hoá nó không được làm chết nhánh này.
       error.value =
         e?.status === 409
           ? t('runner.errors.idTaken', { id: payloadId.value })
@@ -163,8 +152,6 @@ async function save() {
 }
 
 async function smokeTest() {
-  // Mode `copy` mang sẵn một id đã mint nhưng BE chưa có bản ghi đó — chạy thử
-  // sẽ submit job vào một runner không tồn tại. Chỉ cho test khi đang sửa.
   if (!isEdit.value || !draft.value.id) {
     error.value = t('runner.errors.saveBeforeTest')
     return
@@ -173,7 +160,6 @@ async function smokeTest() {
   error.value = ''
   message.value = ''
   try {
-    // Console command: no agent ref / system prompt — just run the registered CLI.
     const { job } = await submitJob(
       isConsoleCommand.value
         ? {

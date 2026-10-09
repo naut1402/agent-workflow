@@ -76,16 +76,13 @@ export function loadRunners(): RunnersStore {
   try {
     raw = readTextFileSync(file)
   } catch {
-    // Chưa có file → danh sách trống (user tự tạo runner).
     return emptyRunners()
   }
   try {
-    // Strip UTF-8 BOM (e.g. PowerShell Set-Content -Encoding utf8) so parse
-    // does not fail and silently return an empty runner list.
+    // xem docs/architecture/code/runner.md §27
     const data = JSON.parse(raw.replace(/^\uFEFF/, ''))
     if (!data || !Array.isArray(data.runners)) return emptyRunners()
     const runners = data.runners.map(normalizeRunner).filter(Boolean) as RunnerConfig[]
-    // [] là trạng thái hợp lệ — không seed lại default.
     const defaultRunnerId =
       (data.defaultRunnerId && runners.some((r) => r.id === data.defaultRunnerId)
         ? data.defaultRunnerId
@@ -125,8 +122,6 @@ export function listRunners(): {
   const store = loadRunners()
   const d = resolveDefaultRunner(store)
   return {
-    // `defaultRunnerId` giữ nguyên nghĩa cũ (id người dùng đã chốt); hai trường
-    // dẫn xuất bên dưới cho UI biết runner nào job KHÔNG pin sẽ thật sự chạy.
     defaultRunnerId: store.defaultRunnerId,
     effectiveDefaultRunnerId: d.runner?.id ?? null,
     defaultRunnerIssue: d.reason === 'ok' ? null : { runnerId: d.runnerId, reason: d.reason },
@@ -140,7 +135,6 @@ export function getRunner(id: unknown): RunnerConfig | null {
   return loadRunners().runners.find((r) => r.id === clean) || null
 }
 
-/** Vì sao một runner KHÔNG đủ điều kiện làm default AI; `null` = đủ điều kiện. */
 function defaultRunnerIssueOf(r: RunnerConfig): 'disabled' | 'no-connection' | 'not-ai' | null {
   if (r.enabled === false) return 'disabled'
   const conn = getConnection(r.connectionId)
@@ -150,13 +144,8 @@ function defaultRunnerIssueOf(r: RunnerConfig): 'disabled' | 'no-connection' | '
 }
 
 /**
- * Nguồn sự thật duy nhất cho "runner nào chạy khi job không pin".
- *
- * Chỉ xét **đúng** runner đã được ghi nhận làm mặc định — không rơi về "runner hợp
- * lệ đầu tiên" nữa: rơi như vậy làm step chạy bằng runner người dùng chưa bao giờ
- * chọn. Thà đứng lại với lý do đọc được còn hơn chạy sai runner.
- *
- * `store` truyền vào để call site đã load rồi không phải đọc lại file.
+ * Nguồn sự thật duy nhất cho "runner nào chạy khi job không pin": chỉ xét đúng
+ * runner đã ghi nhận làm mặc định, không rơi về runner hợp lệ khác.
  */
 export function resolveDefaultRunner(store: RunnersStore = loadRunners()): DefaultRunnerResolution {
   if (!store.runners.length) return { runner: null, runnerId: null, reason: 'no-runners' }
@@ -170,13 +159,9 @@ export function resolveDefaultRunner(store: RunnersStore = loadRunners()): Defau
     : { runner: r, runnerId: id, reason: 'ok' }
 }
 
-/** Throttle theo cặp (id, reason) — hàm này chạy ở mọi lần submit job, không được spam log. */
 let lastDefaultWarn = ''
 
-/**
- * Đưa throttle về trạng thái biết trước. Chỉ dùng cho test: biến trên sống xuyên
- * process nên hai ca đo số dòng log trong cùng file sẽ ảnh hưởng nhau.
- */
+/** Đưa throttle cảnh báo runner mặc định về trạng thái ban đầu; chỉ dùng cho test. */
 export function resetDefaultRunnerWarn(): void {
   lastDefaultWarn = ''
 }
@@ -192,7 +177,6 @@ export function getDefaultRunner(): RunnerConfig | null {
       )
     }
   } else {
-    // Về `ok` thì xoá dấu, để lần hỏng sau vẫn được log một lần.
     lastDefaultWarn = ''
   }
   return res.runner
@@ -207,20 +191,12 @@ export function upsertRunner(runner: any): MutationResult<{ runner: RunnerConfig
   const id = sanitiseRunnerId(runner?.id)
   if (!id) return { ok: false, error: 'invalid runner id' }
 
-  // `create: true` chỉ do dialog "tạo mới" của FE gửi. Caller lập trình (test,
-  // migration, automation) không gửi cờ này ⇒ giữ nguyên hành vi upsert-merge.
-  // Id suy từ slugify(tên) nên trùng tên = trùng id: không chặn thì bản ghi mới
-  // thay chỗ bản ghi cũ mà không ai thấy.
-  //
-  // Chặn TRƯỚC mọi tác dụng phụ: `ensureLegacyConnection` bên dưới ghi đĩa, nên
-  // guard đặt sau nó sẽ để lại một connection mới rồi mới trả 409. 409 phải là
-  // một no-op hoàn toàn.
+  // xem docs/architecture/code/runner.md §27
   if (runner?.create === true && loadRunners().runners.some((r) => r.id === id)) {
     return { ok: false, status: 409, error: `runner id "${id}" đã tồn tại` }
   }
 
   let connectionId = sanitiseConnectionId(runner.connectionId)
-  // Accept legacy payload during transition.
   if (!connectionId && runner.provider) {
     connectionId = ensureLegacyConnection({
       provider: runner.provider,
@@ -309,8 +285,6 @@ export function substituteConfig(
   return out
 }
 
-// ── CLI provider registry ──────────────────────────────────────────────────
-
 const providers = new Map<string, RunnerProvider>()
 
 function register(provider: RunnerProvider): void {
@@ -326,12 +300,7 @@ register(createOpenAiCompatibleProvider('gemini-api', 'https://generativelanguag
 register(createOpenAiCompatibleProvider('xai-api', 'https://api.x.ai/v1'))
 register(createAnthropicCompatibleProvider('anthropic-api', 'https://api.anthropic.com'))
 
-/**
- * Register (or replace) a provider at runtime. Built-in providers are registered
- * at module load; this is the seam tests use to inject a stub provider (e.g. an
- * approval-flow provider that writes a proposed edit into the scratch workspace
- * without spawning a real CLI).
- */
+/** Register (or replace) a provider at runtime; tests use it to inject a stub provider. */
 export function registerProvider(provider: RunnerProvider): void {
   register(provider)
 }
@@ -364,21 +333,17 @@ export function resolveStepRunnerId(step: unknown): StepRunnerResolution {
   const raw = (step as { runner_id?: unknown } | null)?.runner_id
   if (typeof raw !== 'string' || !raw.trim()) return { runnerId: undefined, reason: 'unpinned' }
 
-  // So sánh bằng chứ không dùng bản đã gọt: `getRunner` sanitise bên trong, nên
-  // một id rác kiểu `gem.ini` sẽ khớp nhầm sang runner `gemini`, và một id dài
-  // hơn 64 ký tự sẽ bị cắt rồi khớp sang một runner khác hẳn.
+  // xem docs/architecture/code/runner.md §27
   if (sanitiseRunnerId(raw) !== raw) return warnStepRunner(step, raw, 'missing')
 
   const runner = getRunner(raw)
   if (!runner) return warnStepRunner(step, raw, 'missing')
   if (runner.enabled === false) return warnStepRunner(step, raw, 'disabled')
-  // Cùng điều kiện `getDefaultRunner` dùng — runner console-command không chạy agent được.
   if (!isEligibleDefaultAiRunner(runner)) return warnStepRunner(step, raw, 'ineligible')
 
   return { runnerId: runner.id, reason: 'pinned' }
 }
 
-/** Log nằm trong helper (không ở từng call site) để mọi đường start job cùng một thông điệp. */
 function warnStepRunner(step: unknown, raw: string, reason: StepRunnerReason): StepRunnerResolution {
   const stepId = (step as { id?: unknown } | null)?.id
   console.warn(`[pipeline] step "${String(stepId)}" pinned runner "${raw}" ${reason} — dùng runner mặc định`)

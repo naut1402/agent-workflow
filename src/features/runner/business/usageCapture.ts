@@ -68,7 +68,7 @@ export async function captureTokenUsageFromExecute(
         ? job.metadata.model
         : null
 
-  // Dynamic import avoids circular init with jobQueue.
+  // xem docs/architecture/code/runner.md §31
   const { loadJob, mergeJobUsage, stepIdOf } = await import('./jobQueue.js')
   const snapshot: UsageSnapshot = {
     inputTokens,
@@ -97,7 +97,7 @@ export async function captureTokenUsageFromExecute(
 
 /**
  * Capture Claude transcript token delta for a finished job.
- * Prefs `logging.types.usage === false` skips JobRecord + JSONL (least surprise).
+ * Prefs `logging.types.usage === false` skips JobRecord + JSONL.
  * Never throws to callers — jobQueue invokes fire-and-forget.
  */
 export async function captureJobUsage(
@@ -155,7 +155,7 @@ export async function captureJobUsage(
     if (p.model) model = p.model
   }
 
-  // Dynamic import avoids circular init with jobQueue (which imports this module).
+  // xem docs/architecture/code/runner.md §31
   const { loadJob, mergeJobUsage, stepIdOf } = await import('./jobQueue.js')
 
   const finishedAt = job.finishedAt || new Date().toISOString()

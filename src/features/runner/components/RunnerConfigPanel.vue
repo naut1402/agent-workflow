@@ -1,9 +1,5 @@
 <script setup lang="ts">
-// fallow-ignore-file complexity -- cognitive 28 của <template> đến từ các nhánh
-// v-if theo tab và theo provider, không từ logic lồng sâu. test-e2e/runner.spec.ts
-// và TC-80…TC-83 bám vào cấu trúc DOM hiện tại — đặc biệt bất biến `.runner-config`
-// là gốc nội dung tab Runner — nên chẻ sub-component là đổi thiết kế kèm rủi ro
-// e2e, không phải dọn dẹp. Xem #386 và investigate.md G12.
+// fallow-ignore-file complexity -- cognitive 28 của <template> đến từ các nhánh v-if theo tab/provider; e2e bám cấu trúc DOM hiện tại
 import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { computed, ref, onMounted } from 'vue'
 import { fetchRunners } from '../scripts/runnerApi'
@@ -27,11 +23,7 @@ const tabs = computed(() => [
 ])
 
 const runners = ref<RunnerDraft[]>([])
-/**
- * Runner job KHÔNG pin sẽ thật sự chạy — rỗng khi default đã ghi nhận đang hỏng.
- * Dùng cho cả ngôi sao lẫn `:disabled` của nút đặt-default: default hỏng thì sao
- * phải trống, và người dùng phải bấm lại được chính runner đó sau khi sửa xong.
- */
+// xem docs/architecture/code/runner.md §30
 const effectiveDefaultRunnerId = ref('')
 const defaultRunnerIssue = ref<{ runnerId: string | null; reason: string } | null>(null)
 const connections = ref<ConnectionOption[]>([])
@@ -53,7 +45,6 @@ function connectionOf(r: RunnerDraft): ConnectionOption | undefined {
   return connections.value.find((c) => c.id === r.connectionId)
 }
 
-/** Only Agent CLI / AI API runners may be the default AI runner. */
 function canBeDefaultAi(r: RunnerDraft): boolean {
   const conn = connectionOf(r)
   const family = familyOfProviderId(conn?.providerId, providers.value)
@@ -69,10 +60,7 @@ async function load() {
       fetchProviderConfigs(),
     ])
     runners.value = rData.runners || []
-    // Phân biệt *vắng mặt* với *null*, 🚫 không gộp bằng `??`:
-    // `undefined` = payload cũ chưa có trường dẫn xuất ⇒ rơi về id đã ghi nhận.
-    // `null`      = BE nói "không runner nào chạy được" ⇒ phải để trống, nếu
-    //               không thì sao vẫn sáng trên runner mà job sẽ fail.
+    // xem docs/architecture/code/runner.md §30
     effectiveDefaultRunnerId.value =
       rData.effectiveDefaultRunnerId !== undefined
         ? (rData.effectiveDefaultRunnerId ?? '')
@@ -106,10 +94,7 @@ function openEdit(r: RunnerDraft) {
   message.value = ''
 }
 
-/**
- * `<id>-copy`, `<id>-copy-2`… Cắt base TRƯỚC khi nối hậu tố để `sanitiseRunnerId`
- * (cắt 64 ký tự) không cắt mất chính phần làm nên khác biệt rồi trùng id trở lại.
- */
+// xem docs/architecture/code/runner.md §30
 function uniqueRunnerId(baseId: string): string {
   const ids = new Set(runners.value.map((r) => r.id))
   const base = baseId.slice(0, 48)
@@ -195,7 +180,7 @@ async function remove(r: RunnerDraft, e: Event) {
     @update:active-tab-key="activeTab = $event as RunnerTabKey"
   >
   <template #main>
-  <!-- v-if, không v-show: chưa mở tab MCP thì không gọi /api/mcp-servers. -->
+  <!-- xem docs/architecture/code/runner.md §30 -->
   <div v-if="activeTab === 'runner'" class="runner-config">
     <header class="runner-head">
       <h2>{{ t('runner.panel.title') }}</h2>
@@ -204,7 +189,6 @@ async function remove(r: RunnerDraft, e: Event) {
 
     <div v-if="error" class="err-banner">{{ error }}</div>
     <div v-if="message" class="ok-banner">{{ message }}</div>
-    <!-- Default hỏng = job không pin runner sẽ fail. Nói ra lý do để sửa được trong một bước. -->
     <div v-if="defaultIssueText" class="warn-banner">{{ defaultIssueText }}</div>
 
     <div class="runner-toolbar">
@@ -232,7 +216,6 @@ async function remove(r: RunnerDraft, e: Event) {
             :aria-label="isEnabled(r) ? t('runner.toggle.disable') : t('runner.toggle.enable')"
             @click="toggleEnabled(r, $event)"
           >
-            <!-- power -->
             <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
               <path
                 fill="none"
@@ -259,7 +242,6 @@ async function remove(r: RunnerDraft, e: Event) {
             :aria-label="canBeDefaultAi(r) ? t('runner.panel.makeDefault') : t('runner.messages.consoleNotDefault')"
             @click="makeDefault(r, $event)"
           >
-            <!-- star -->
             <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
               <path
                 :fill="r.id === effectiveDefaultRunnerId ? 'currentColor' : 'none'"

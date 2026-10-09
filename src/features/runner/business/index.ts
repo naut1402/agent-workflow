@@ -7,8 +7,6 @@ export {
   assertStartAllowedSync,
   resolveOrchestration,
 } from '../../monitor/business/tasks/startAuthority.js'
-// Type `Orchestration`/`StartOrigin` cố ý không re-export: `decisionLoop.ts` lấy
-// thẳng từ `startAuthority.js`, nên qua barrel này là dead weight.
 /** Peer: layered pipeline config (owned by pipeline-editor). */
 export { loadPipelineConfig } from '../../pipeline-editor/business/pipeline/index.js'
 

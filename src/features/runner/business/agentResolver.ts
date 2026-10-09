@@ -113,7 +113,6 @@ async function resolveAgentFilePath(
     if (await safeAccess(builtin)) return builtin
     const cached = await findInPluginCache(pluginName, fileName)
     if (cached) return cached
-    // Image / DEV_TEAM_BUNDLED_PLUGINS fallback (docs/template/agents)
     const bundledRoots = [
       process.env.DEV_TEAM_BUNDLED_PLUGINS?.trim(),
       '/opt/bundled-plugins',
@@ -174,13 +173,6 @@ export async function describeAgentSearchPaths(
 }
 
 function buildSystemPrompt(draft: any): string {
-  // `ensureSectionOrder` (agent-editor/business/agentMarkdown) already appends 'unclassified'
-  // to the order whenever it has content — it's how the Agent Editor form shows
-  // a trailing "Chưa phân loại" box for headings it couldn't classify. Rendering
-  // it again here after the loop used to duplicate the whole catch-all block
-  // (agentRef `dev-agent-teams:doc-reviewer` reliably triggers this: the
-  // agent's intro paragraph + its "Đầu vào" heading aren't canonical sections,
-  // so they land in `unclassified` and were sent to the runner twice).
   const parts: string[] = []
   for (const key of ensureSectionOrder(draft)) {
     const content = draft.sections?.[key]
@@ -192,10 +184,7 @@ function buildSystemPrompt(draft: any): string {
 }
 
 /** Resolve agentRef to a provider-agnostic ResolvedAgent. A blank ref is a
- * deliberate "no agent" job (e.g. a quick action whose prompt_template is
- * already a complete, free-form instruction) — it runs with no system prompt
- * merged in, just the job's own userPrompt (see buildPrompt in
- * providers/claude-code-cli.ts). */
+ * deliberate "no agent" job that runs with no system prompt merged in. */
 export async function resolveAgent(
   agentRef: string,
   ctx: { projectRoot: string; devTeamRoot: string },

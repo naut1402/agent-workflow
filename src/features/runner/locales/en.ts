@@ -1,6 +1,3 @@
-
-// English translations for the `runner` namespace. Typed against the vi schema
-// so any missing/extra key is a compile error.
 export default {
   jobStatus: {
     queued: 'Queued',
@@ -95,7 +92,6 @@ export default {
   hints: {
     generatedId: 'Will be saved as: {id}',
   },
-  // Mirrors the backend `DefaultRunnerReason` set exactly.
   defaultIssue: {
     'no-runners': 'No runners yet — jobs without a pinned runner will fail.',
     unset: 'No default runner set — jobs without a pinned runner will fail.',

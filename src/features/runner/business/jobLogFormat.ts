@@ -1,7 +1,3 @@
-/**
- * Shared job-log framing (header/footer) so LogsPanel shows clear job context.
- */
-
 export interface JobLogHeaderInput {
   jobId: string
   providerId?: string

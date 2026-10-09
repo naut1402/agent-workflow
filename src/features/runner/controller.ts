@@ -6,7 +6,6 @@ import { sseResponse } from '../../backend/http/sseHelper.js'
 import * as runnerStore from './business/index.js'
 import type { JobStatus } from './business/types.js'
 
-/** Event type nào kích hoạt đẩy lại snapshot running-jobs qua SSE. */
 const JOB_STREAM_EVENTS = new Set([
   'job.queued',
   'job.started',
@@ -31,8 +30,6 @@ export class RunnerController extends AbstractController {
     const b = await this.requireJsonBody()
     if ('error' in b) return b.error
     const result = runnerStore.upsertRunner(b.value.runner || b.value)
-    // 409 khi tạo mới trùng id phải tới được client — ép hết về 400 thì FE không
-    // phân biệt được "payload sai" với "id đã có người dùng".
     if ('error' in result) return this.json(result.status || 400, { error: result.error })
     emitAudit({ op: 'update', entity: 'runner', identifier: result.runner?.id ?? null, projectId: null })
     emitEntity('updated', 'runner', { id: result.runner?.id ?? null, projectId: null })
@@ -213,8 +210,6 @@ export class RunnerController extends AbstractController {
       .listProviderCatalog()
       .filter((p) => p.family === 'ai-api' && runnerStore.isOAuthCapable(p.id))
       .map((p) => p.id)
-    // Lets ConnectionDialog.vue warn proactively instead of the user hitting
-    // a raw "DASHBOARD_SECRET_KEY is not set" error after filling the form.
     return this.ok({ providers, vaultConfigured: runnerStore.hasVaultKey() })
   }
 
@@ -311,11 +306,8 @@ export class RunnerController extends AbstractController {
     if (typeof parsed.agentRef !== 'string' || !parsed.workspace) {
       return this.badRequest('agentRef and workspace are required')
     }
-    // `POST /api/jobs` spread nguyên metadata của caller, nên nó là một đường
-    // start step đầy đủ — phải qua cùng cửa quyền như run-step/chain/automation.
+    // xem docs/architecture/code/runner.md §32
     const taskId = parsed.metadata?.taskId
-    // Cũng là đường start step ⇒ phải áp `steps[].runner_id` như 5 đường còn lại,
-    // nếu không cùng một pipeline chạy ra hai model khác nhau tuỳ ai bấm nút.
     let pinnedRunnerId: string | undefined
     if (parsed.metadata?.pipelineStepId && typeof taskId === 'string' && taskId) {
       const check = await runnerStore.assertStartAllowed(root, taskId, 'api')
@@ -328,7 +320,6 @@ export class RunnerController extends AbstractController {
 
     const projectRoot = path.dirname(root)
     const job = runnerStore.submitJob({
-      // Caller thắng pin — cùng mẫu với `input.runnerId ?? …` của run-step.
       runnerId: parsed.runnerId ?? pinnedRunnerId,
       agentRef: parsed.agentRef,
       workspace: path.isAbsolute(parsed.workspace)
