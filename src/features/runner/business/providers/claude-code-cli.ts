@@ -13,7 +13,7 @@ import { mcpDeliveryOf } from './agentCli.js'
 import { prepareCursorMcpWorkspace } from './cursorMcpWorkspace.js'
 import { prepareMcpConfigForJob, type McpJobConfigHandle } from './mcpJobConfig.js'
 import { buildSelfMcpEntry } from './selfMcpConfig.js'
-import { createSecretStreamMasker, maskSecretText } from '../../../mcp/business/index.js'
+import { SecretMasker } from '../../../mcp/business/index.js'
 import { formatJobLogFooter, formatJobLogHeader } from '../jobLogFormat.js'
 
 interface ProcResult {
@@ -405,7 +405,7 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): A
       // Đọc `mcpHandle` lúc gọi chứ không lúc khai: handle chỉ có sau khi serialize
       // xong, mà mọi dòng log đều phải đi qua cùng một bộ lọc.
       const maskLog = (text: string) =>
-        mcpHandle?.secrets.length ? maskSecretText(text, mcpHandle.secrets) : text
+        mcpHandle?.secrets.length ? new SecretMasker(mcpHandle.secrets).mask(text) : text
       const appendLog = (text: string) => {
         if (!logPath) return
         try {
@@ -576,7 +576,7 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): A
         // secret bị tiến trình con xuất làm hai chunk lọt qua cả hai lần gọi.
         // Đổi lại, log trễ `max(len(secret)) - 1` ký tự ⇒ `flushStream()` là bắt
         // buộc ở CẢ nhánh thành công lẫn nhánh lỗi, nếu không là nuốt đuôi log.
-        const streamMasker = createSecretStreamMasker(mcpHandle?.secrets ?? [])
+        const streamMasker = new SecretMasker(mcpHandle?.secrets ?? []).stream()
         const emitLog = (text: string) => {
           if (!text) return
           onLog?.(text)
