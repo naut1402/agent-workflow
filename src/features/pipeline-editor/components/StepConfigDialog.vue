@@ -9,7 +9,7 @@ import { buildStepConfigDraft, buildStepUpdateFromDraft } from '../lib/stepConfi
 
 const props = defineProps({
   stepId: { type: String, default: null },
-  step: { type: Object as () => any, default: null },  // current step data
+  step: { type: Object as () => any, default: null },
   catalog: { type: Object as () => any, required: true },
   projectId: { type: String, default: null },
   /** Option model dựng từ `GET /api/runners` — `value` là runner id. */
@@ -22,7 +22,6 @@ const { t } = useI18nHelpers()
 
 const showKnowledgePicker = ref(false)
 
-// Local draft — reset when step changes.
 const draft = ref(null)
 
 watch(
@@ -31,11 +30,7 @@ watch(
   { immediate: true },
 )
 
-/**
- * Ẩn control khi ≤ 1 model — "chỉ cho chỉ định khi có nhiều hơn 1 runner".
- * Ẩn **không** đồng nghĩa xoá: `draft.runner_id` vẫn đi qua `buildStepUpdateFromDraft`,
- * nên mở dialog sửa tên step trên máy chỉ còn 1 runner không làm mất pin cũ.
- */
+// xem docs/architecture/code/pipeline-editor.md §4
 const showModelSelect = computed(() => props.runnerOptions.length > 1)
 
 const modelOptions = computed<CSelectOption[]>(() => {
@@ -43,8 +38,6 @@ const modelOptions = computed<CSelectOption[]>(() => {
     { value: '', label: t('pipelineEditor.stepConfig.modelDefault') },
     ...props.runnerOptions,
   ]
-  // Pin trỏ tới runner đã bị xoá/disable: vẫn hiện một dòng để người dùng thấy
-  // và gỡ được, thay vì CSelect hiển thị trần id thô không ai hiểu.
   const pinned = draft.value?.runner_id
   if (pinned && !opts.some((o) => o.value === pinned)) {
     opts.push({ value: pinned, label: t('pipelineEditor.stepConfig.modelUnknown', { id: pinned }) })
@@ -58,7 +51,6 @@ const hitlModeOptions = computed<CSelectOption[]>(() => [
   { value: 'manual', label: t('pipelineEditor.stepConfig.hitlManual') },
 ])
 
-// Tag input (produces)
 const producesInput = ref('')
 
 function addProduces() {
@@ -73,7 +65,6 @@ function removeProduces(i) {
   draft.value.produces.splice(i, 1)
 }
 
-/** Picker ghi thẳng vào draft — `v-model` của nó là mảng id đang chọn. */
 const knowledgeInputs = computed({
   get: () => draft.value?.knowledge_inputs ?? [],
   set: (ids: string[]) => {
@@ -101,7 +92,6 @@ function apply() {
     @close="emit('close')"
   >
     <div class="step-config-dialog-body">
-      <!-- Name -->
       <label class="cfg-label">
         {{ t('pipelineEditor.stepConfig.name') }}
         <input
@@ -111,7 +101,6 @@ function apply() {
         />
       </label>
 
-      <!-- Agent -->
       <label class="cfg-label">
         {{ t('pipelineEditor.stepConfig.agent') }}
         <input
@@ -125,7 +114,6 @@ function apply() {
         </datalist>
       </label>
 
-      <!-- Model — cùng nhóm "step này chạy bằng gì" với Agent -->
       <div v-if="showModelSelect" class="cfg-label">
         {{ t('pipelineEditor.stepConfig.model') }}
         <CSelect
@@ -138,7 +126,6 @@ function apply() {
         <span class="cfg-hint">{{ t('pipelineEditor.stepConfig.modelHint') }}</span>
       </div>
 
-      <!-- Produces -->
       <label class="cfg-label">
         {{ t('pipelineEditor.stepConfig.produces') }}
         <div class="tag-row">
@@ -159,7 +146,6 @@ function apply() {
         </div>
       </label>
 
-      <!-- Knowledge inputs -->
       <label class="cfg-label">
         {{ t('pipelineEditor.stepConfig.knowledgeInputs') }}
         <div class="tag-row">
@@ -177,7 +163,6 @@ function apply() {
         </div>
       </label>
 
-      <!-- HITL mode -->
       <div class="cfg-label">
         {{ t('pipelineEditor.stepConfig.hitlGate') }}
         <CSelect
@@ -232,10 +217,9 @@ function apply() {
   gap: 10px;
 }
 
-/* Class truyền vào CSelect chỉ lo kích thước — xem docs/agent-rules/coding-guideline.md §5. */
+// xem docs/agent-rules/coding-guideline.md §5
 .step-config-dialog .cfg-select { width: 100%; }
 
-/* Dòng gợi ý dưới control — nhạt hơn label để không tranh chỗ với chính nhãn. */
 .step-config-dialog .cfg-hint { font-size: 11px; opacity: 0.75; }
 
 .cfg-label-row { flex-direction: row; align-items: center; gap: 6px; }

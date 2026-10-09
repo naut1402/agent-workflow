@@ -76,9 +76,8 @@ export interface CatalogScanPatterns {
 }
 
 /**
- * `deps.scanCustomAgents` is injected to keep this module decoupled from the
- * agents module; `deps.scanPatterns` comes from global settings and only adds
- * to the default sources.
+ * Build the skill/agent catalog. `deps.scanCustomAgents` lists the dashboard's
+ * custom agents; `deps.scanPatterns` (global settings) only adds to the default sources.
  */
 export async function buildCatalog(
   root: string,
@@ -108,7 +107,7 @@ export async function buildCatalog(
     await scanProjectClaude(projectRoot, catalogOpts),
   ]
 
-  // Must stay after the convention sources: on equal priority, dedupeCatalogItems keeps the first-seen item.
+  // xem docs/architecture/code/pipeline-editor.md §9
   const patterns = deps.scanPatterns
   if (patterns?.agents?.length || patterns?.skills?.length) {
     batches.push({
@@ -143,9 +142,8 @@ export function parseCatalogItemId(id: unknown): { source: string; name: string 
 }
 
 /**
- * `source === 'project'` can come from the fixed convention path or a
- * `scanPatterns.agents` match — both share the `project:<name>` id shape, so
- * convention must be tried first or pattern-only entries can never resolve.
+ * Resolve a catalog agent id (`<source>:<name>`) to its file path. `project`
+ * tries `.claude/agents/<name>.md` before `scanPatterns.agents`.
  */
 export async function resolveCatalogAgentPath(
   projectRoot: string,
@@ -192,8 +190,8 @@ export async function resolveCatalogAgentPath(
 }
 
 /**
- * Mirrors `resolveCatalogAgentPath` but sanitizes `name` itself — this newer
- * route must not inherit the agent route's path-traversal gap (AGENTS.md §4).
+ * Mirrors `resolveCatalogAgentPath` for skills (`SKILL.md`); returns null when
+ * `name` is not already sanitised (path-traversal guard).
  */
 export async function resolveCatalogSkillPath(
   projectRoot: string,

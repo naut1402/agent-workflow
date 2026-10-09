@@ -40,7 +40,6 @@ export function inferRuleCategory(filePath: string, fileName: string): string {
 
 const RULE_FILE_EXT = /\.(md|mdc)$/i
 
-/** Describe one rule file relative to the base it was collected under. */
 function toRuleItem(full: string, scope: string, baseDir: string): RuleItem {
   const rel = relativePath(baseDir, full).replace(/\\/g, '/')
   const fileName = basename(full)
@@ -76,13 +75,7 @@ interface RuleWalkBudget {
   files: number
 }
 
-/**
- * Same as `walkRuleFiles`, but for a directory reached through a user pattern.
- * `expandScanPatterns`'s ceilings only bound the search for the matching dir, not
- * what's inside it — `**` can yield `projectRoot` itself, and an unbounded walk
- * from there means reading every `.md` under every `node_modules`. Denylist and
- * budget are therefore enforced here, at the point of actual work.
- */
+// xem docs/architecture/code/pipeline-editor.md §10
 async function walkRuleFilesBounded(
   dir: string,
   baseDir: string,
@@ -107,17 +100,11 @@ async function walkRuleFilesBounded(
   }
 }
 
-/**
- * Rules from custom scan patterns. A matched directory is walked recursively
- * under a shared budget; a matched file becomes a single rule. Pattern rules are
- * always project-scoped.
- */
 async function scanRulesByPatterns(
   projectRoot: string,
   patterns: string[] | null | undefined,
   out: RuleItem[],
 ): Promise<void> {
-  // One budget for the whole batch — 20 patterns must not each get a fresh 200.
   const budget: RuleWalkBudget = { dirs: 0, files: 0 }
   for (const match of await expandScanPatterns(projectRoot, patterns)) {
     if (match.isDirectory) {
@@ -132,9 +119,8 @@ async function scanRulesByPatterns(
 }
 
 /**
- * Build the rules listing for a data root: project rules + global `~/.cursor/rules`.
- * Project rules live in `docs/agent-rules` (shared by every agent) or the older
- * `.claude/rules` layout (single tool) — scanning both works regardless of layout.
+ * Build the rules listing for a data root: project rules (`docs/agent-rules`,
+ * `.claude/rules`, `scanPatterns.rules`) + global `~/.cursor/rules`.
  */
 export async function buildRules(
   root: string,
@@ -146,12 +132,10 @@ export async function buildRules(
   await walkRuleFiles(joinPath(projectRoot, 'docs', 'agent-rules'), 'project', projectRoot, found)
   await walkRuleFiles(joinPath(projectRoot, '.claude', 'rules'), 'project', projectRoot, found)
   await walkRuleFiles(joinPath(homeDir(), '.cursor', 'rules'), 'global', homeDir(), found)
-  // Pattern rules only ever run against projectRoot — the global ~/.cursor/rules line is untouched.
   if (opts.scanPatterns?.rules?.length) {
     await scanRulesByPatterns(projectRoot, opts.scanPatterns.rules, found)
   }
 
-  // A pattern may point back at a default directory (e.g. `docs/**`); keep the first hit.
   const byId = new Map<string, RuleItem>()
   for (const r of found) if (!byId.has(r.id)) byId.set(r.id, r)
   const rules = [...byId.values()]
@@ -169,7 +153,6 @@ export async function buildRules(
   return { rules, categories }
 }
 
-/** True when `full` is `base` itself or a path descendant of it. */
 function isUnderBase(base: string, full: string): boolean {
   if (full === base) return true
   const rel = relativePath(base, full)
@@ -178,12 +161,10 @@ function isUnderBase(base: string, full: string): boolean {
 
 /**
  * Resolve a rule's on-disk path from its listing id (`${scope}:${relPath}`).
- * `resolvePathUnder` alone blocks `..` but not an arbitrary `.md` that merely
- * lives under the project and was never listed by `buildRules` — the id must
- * also land under one of `buildRules`' actual sources (`docs/agent-rules`,
- * `.claude/rules`, or a pre-expanded `scanPatterns.rules` match passed via
- * `extraAllowed`, since this function stays sync/pure). `global` scope is
- * unaffected — only `project` was over-broad.
+ * A `project` id resolves only under one of `buildRules`' sources
+ * (`docs/agent-rules`, `.claude/rules`, or a pre-expanded `scanPatterns.rules`
+ * match passed via `extraAllowed`); otherwise returns null.
+ * xem docs/architecture/code/pipeline-editor.md §9
  */
 export function resolveRuleContentPath(
   projectRoot: string,
@@ -211,10 +192,7 @@ export function resolveRuleContentPath(
   return null
 }
 
-/**
- * Async wrapper — expands `scanPatterns.rules` (the one allowed-base source
- * that needs I/O) before delegating to the pure `resolveRuleContentPath`.
- */
+/** Async wrapper — expands `scanPatterns.rules` before delegating to the pure `resolveRuleContentPath`. */
 export async function resolveRuleContentPathWithPatterns(
   projectRoot: string,
   id: string,

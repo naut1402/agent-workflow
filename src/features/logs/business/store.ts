@@ -11,15 +11,10 @@ type ReadLogsOpts = { type?: LogType; project?: string | null; limit?: number }
 
 const DEFAULT_LIMIT = 200
 
-/** `null` = mọi project — caller truyền `undefined` hay `null` đều nghĩa là không lọc. */
 function projectFilterOf(opts: ReadLogsOpts): string | null {
   return opts.project ?? null
 }
 
-/**
- * SQLite read path — same filters, sort and limit as the file path. `limit` applies
- * in SQL before parsing, so unparseable payloads shorten the result below `limit`.
- */
 async function readLogsFromSqlite(types: LogType[], opts: ReadLogsOpts): Promise<LogEntry[]> {
   const enabledTypes = types.filter((t) => isLogTypeEnabled(t))
   if (!enabledTypes.length) return []
@@ -46,7 +41,6 @@ async function readLogsFromSqlite(types: LogType[], opts: ReadLogsOpts): Promise
   }
 }
 
-/** JSONL read path — mỗi type một file, parse phòng thủ, sort và cắt `limit` trong bộ nhớ. */
 async function readLogsFromFile(types: LogType[], opts: ReadLogsOpts): Promise<LogEntry[]> {
   const project = projectFilterOf(opts)
   const out: LogEntry[] = []
@@ -82,5 +76,4 @@ export async function readLogs(opts: ReadLogsOpts = {}): Promise<LogEntry[]> {
     : readLogsFromFile(types, opts)
 }
 
-// Re-export write helpers so existing `logs/business` imports keep working.
 export { appendLog, appendRequestLog, emitAudit } from '../../../backend/log/store.js'

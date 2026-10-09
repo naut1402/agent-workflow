@@ -128,11 +128,9 @@ export async function scanSkillsFlatDir(
   return skills
 }
 
-/** Markdown extensions accepted for a file matched by a custom scan pattern. */
 const PATTERN_MD_EXT = /\.(md|mdc|markdown)$/i
 const SKILL_ENTRY_FILE = /^skill\.(md|mdc|markdown)$/i
 
-/** Item name derived from a file name: drop the extension, then a `.agent` / `.skill` suffix. */
 function deriveItemName(file: string): string {
   return basename(file)
     .replace(PATTERN_MD_EXT, '')
@@ -140,11 +138,7 @@ function deriveItemName(file: string): string {
     .trim()
 }
 
-/**
- * Read one agent markdown file. `opts.name` pins the name (convention scan keeps
- * using the file name so its output never shifts); `preferFrontmatterName` is only
- * for the custom-pattern branch, where the file name may be arbitrary.
- */
+// xem docs/architecture/code/pipeline-editor.md §9
 async function readAgentFile(
   file: string,
   source: string,
@@ -207,12 +201,10 @@ export async function scanAgentsByPatterns(
   return agents
 }
 
-/** Load ONE skill markdown file matched by a pattern. Returns null when unusable. */
 async function readSkillFile(file: string, includeContractSkills: boolean): Promise<any | null> {
   try {
     const fm = parseFrontmatter(await readTextFile(file))
     const fmName = typeof fm.name === 'string' ? fm.name.trim() : ''
-    // No frontmatter name: a SKILL.md is named after its folder, anything else after the file.
     const name = fmName
       || (SKILL_ENTRY_FILE.test(basename(file)) ? basename(dirname(file)) : deriveItemName(file))
     if (!name) return null

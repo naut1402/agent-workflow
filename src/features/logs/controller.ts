@@ -4,7 +4,6 @@ import { sseResponse } from '../../backend/http/sseHelper.js'
 import * as logsBusiness from './business/index.js'
 import type { LogType } from '../../shared/log/schema.js'
 
-/** Event vòng đời job nào đẩy sớm snapshot log, thay vì đợi tick interval. */
 const JOB_STREAM_EVENTS = new Set([
   'job.queued',
   'job.started',
@@ -54,11 +53,7 @@ export class LogsController extends AbstractController {
     return this.ok({ id, text: r.text, size: r.size, truncated: r.truncated })
   }
 
-  /**
-   * SSE thay REST poll. Log là file do tiến trình con ghi (không có event
-   * nguồn cho "vừa ghi thêm dòng") — route tự tail bằng interval nội bộ, event
-   * vòng đời job chỉ đẩy sớm hơn chứ không thay được cho interval.
-   */
+  /** SSE stream log của job: tail file bằng interval nội bộ; event vòng đời job chỉ đẩy snapshot sớm hơn. */
   streamJobLog() {
     const id = logsBusiness.sanitiseJobId(this.c.req.param('id'))
     if (!id) return this.badRequest('invalid job id')

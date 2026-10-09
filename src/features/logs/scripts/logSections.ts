@@ -1,10 +1,3 @@
-/**
- * Splits a job log's raw text into the sections `claude-code-cli.ts` /
- * `agenticApiProvider.ts` / `console-command.ts` already write with `=== ... ===` /
- * `--- ... ---` marker lines, so `JobLogDialog.vue` can render each part labeled instead
- * of dumping the whole file into one `<pre>`.
- */
-
 export type JobLogSectionKind = 'meta' | 'payload' | 'system-prompt' | 'output' | 'result'
 
 export interface JobLogSection {
@@ -21,13 +14,13 @@ function kindForTitle(title: string): JobLogSectionKind {
   if (title.startsWith('System prompt')) return 'system-prompt'
   if (title.startsWith('Phản hồi của runner')) return 'output'
   if (title.startsWith('Kết quả')) return 'result'
-  // Unrecognized marker (e.g. CLI providers' "--- Prompt ---", console-command's
-  // "--- Extra args (từ prompt) ---") — treat as plain metadata text rather than
-  // guessing it is markdown output.
   return 'meta'
 }
 
-/** Pure text parser — no DOM, so it is unit-testable without mounting the dialog. */
+/**
+ * Split a job log's raw text into labeled sections by its `=== … ===` /
+ * `--- … ---` marker lines; no marker at all ⇒ one section with the raw text.
+ */
 export function parseJobLogSections(text: string): JobLogSection[] {
   const lines = text.split('\n')
   const sections: JobLogSection[] = []
@@ -58,8 +51,6 @@ export function parseJobLogSections(text: string): JobLogSection[] {
   }
   flush()
 
-  // No marker matched anywhere (log predates this format, or is some other
-  // shape entirely) — fall back to showing the raw text as one section.
   if (sections.length === 0) return [{ title: '', kind: 'output', body: text }]
   return sections
 }

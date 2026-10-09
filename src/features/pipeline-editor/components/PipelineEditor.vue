@@ -57,17 +57,11 @@ const props = defineProps({
 
 const emit = defineEmits(['update:scope', 'update:task-id', 'update:subSidebarCollapsed'])
 
-/**
- * Tab là biểu diễn của `scope` do shell giữ — tab Profile ↔ `scope='global'`,
- * tab Task ↔ `scope='task'`. Không thêm state song song, nhờ vậy watcher
- * `loadConfig` / xoá `taskId` khi rời tab Task giữ nguyên ý nghĩa.
- */
 const tab = computed(() => (props.scope === 'task' ? 'task' : 'profile'))
 
 function switchTab(next: string) {
   if (previewing.value) return
   if (tab.value === next) return
-  // Đổi tab là nạp lại canvas theo đối tượng của tab kia — bản sửa chưa lưu mất.
   if (!confirmDiscardIfDirty()) return
   closeConfig()
   emit('update:scope', next === 'task' ? 'task' : 'global')
@@ -81,7 +75,6 @@ const tabs = computed(() => [
 const taskSelect = ref('')
 const taskManual = ref('')
 
-/** Per-task pipeline edits only make sense for in-flight tasks. */
 function isTaskEditable(task: any): boolean {
   return !task?.archived && task?.current_phase !== 'completed'
 }
@@ -90,7 +83,6 @@ const editableTasks = computed(() =>
   (props.tasks || []).filter((t: any) => isTaskEditable(t)),
 )
 
-/** True when the open task is archived/completed (known from props). */
 const taskWriteBlocked = computed(() => {
   if (props.scope !== 'task') return false
   const id = (props.taskId || '').trim()
@@ -99,7 +91,6 @@ const taskWriteBlocked = computed(() => {
   return !!(known && !isTaskEditable(known))
 })
 
-/** Task đang chờ gate: lưu pipeline sẽ huỷ gate đó, cảnh báo trước khi bấm. */
 const taskHitlPending = computed(() => {
   if (tab.value !== 'task') return false
   const id = (props.taskId || '').trim()
@@ -143,7 +134,6 @@ watch(
     }
     const known = (props.tasks || []).find((t: any) => t.task_id === id)
     if (known && !isTaskEditable(known)) {
-      // Do not fall through to manual entry — that would bypass the filter.
       taskSelect.value = ''
       taskManual.value = ''
       emit('update:task-id', '')
@@ -191,11 +181,6 @@ const edges = ref([])
 
 const pipelineMeta = ref<PipelineMeta>({})
 
-/**
- * Checkbox "Có node điều phối". Nguồn sự thật là `pipelineMeta.orchestrator` —
- * computed ghi thẳng vào meta để `assemblePipeline` mang key này ra YAML, và để
- * `syncDerivedGraph()` dựng lại node sau mỗi lần canvas đổi.
- */
 const orchestratorEnabled = computed({
   get: () => pipelineMeta.value.orchestrator?.enabled === true,
   set: (enabled: boolean) => {
@@ -211,8 +196,6 @@ const catalog = ref<any>({ skills: [], agents: [] })
 const rulesData = ref({ rules: [], categories: [] })
 const editorLeftCollapsed = computed(() => props.subSidebarCollapsed)
 
-// Agents / Skills / Rules là các mục cùng cấp, mở/đóng độc lập. Gán lại
-// `new Set(...)` để Vue thấy thay đổi (pattern `expanded` của TaskList).
 const openSections = ref<Set<string>>(new Set(['agents']))
 
 function toggleSection(key: string) {
@@ -224,8 +207,6 @@ function toggleSection(key: string) {
 
 function openSection(key: string) {
   openSections.value = new Set(openSections.value).add(key)
-  // Panel ghi ngược lên shell: state chung nên `aria-expanded` của mode icon
-  // không lệch pha khi panel tự mở lại từ dải icon.
   emit('update:subSidebarCollapsed', false)
 }
 
@@ -237,10 +218,6 @@ async function loadCatalog() {
   }
 }
 
-/**
- * Danh mục runner để dựng control "Model" của StepConfigDialog. Nạp lỗi ⇒ danh
- * sách rỗng ⇒ control tự ẩn (dialog ẩn khi ≤ 1 option), không chặn editor.
- */
 const runnerCatalog = ref<any>({ runners: [], connections: [], providers: [] })
 
 async function loadRunners() {
@@ -253,8 +230,6 @@ async function loadRunners() {
 
 const runnerModelOptions = computed(() => buildRunnerModelOptions(runnerCatalog.value))
 
-// Vue Flow chỉ truyền `data` xuống node, không truyền prop tuỳ ý — `provide` là
-// đường duy nhất để badge trên node đọc được nhãn model.
 provide(
   'pipelineRunnerModelLabels',
   computed(() => new Map(runnerModelOptions.value.map((o) => [o.value, o.label]))),
@@ -268,9 +243,7 @@ async function loadRules() {
   }
 }
 
-// Xem markdown của 1 rule/agent/skill thay canvas — `v-if`/`v-else` thật ở
-// slot `#main` để unmount VueFlow (không chỉ ẩn bằng CSS), tránh hook của nó
-// bắt phím/sự kiện ngầm phía sau trong lúc đang xem.
+// xem docs/architecture/code/pipeline-editor.md §5
 const viewingDoc = ref<{ kind: 'rule' | 'agent' | 'skill'; id: string; name: string } | null>(null)
 const viewingDocContent = ref('')
 const viewingDocLoading = ref(false)
@@ -307,11 +280,7 @@ function closeDocView() {
   viewingDocError.value = ''
 }
 
-/**
- * Đường nạp pipeline duy nhất — meta (`version` / `defaults` / `doc_reviewer`)
- * và field lạ của step chỉ được giữ nếu đi qua đây, nếu không profile lưu ra sẽ
- * không mở lại đúng.
- */
+// xem docs/architecture/code/pipeline-editor.md §3
 function applyLoadedPipeline(pipeline) {
   pipelineMeta.value = extractPipelineMeta(pipeline)
   stepPreserved.value = extractStepPreservedMap(pipeline?.steps || [])
@@ -355,35 +324,21 @@ function buildFlowFromPipeline(pipeline) {
     markerEnd: { type: 'arrowclosed' },
   }))
 
-  // Không đảo `setEdges` lên trước: `setEdges` loại bỏ edge có source/target
-  // chưa nằm trong store, nên node phải vào trước.
+  // xem docs/architecture/code/pipeline-editor.md §1
   setStepNodes(newNodes)
   setEdges(newEdges)
   nodeCounter = steps.length
   syncDerivedGraph()
 }
 
-/**
- * Ghi danh sách step node lên canvas mà không làm rơi node phái sinh đang có.
- *
- * VueFlow tra node cũ theo id để cập nhật tại chỗ; id vắng mặt ở lần `setNodes`
- * này sẽ được cấp object mới, nhưng component `art-*` chụp object lúc setup và
- * không remount nên tiếp tục render object cũ đã rời store — node đứng yên ngoài
- * khung `fitView`. Vì vậy mọi `setNodes` phải mang theo cả node phái sinh, kể cả
- * khi `syncDerivedGraph()` dựng lại chúng ngay sau đó.
- */
+// xem docs/architecture/code/pipeline-editor.md §1
 function setStepNodes(nextStepNodes) {
   const stepIds = new Set(nextStepNodes.map((n) => n.id))
-  // Step thật thắng khi trùng id — cùng luật với `buildEditorGraph`.
   const kept = derivedNodesOf(getNodes.value).filter((n) => !stepIds.has(n.id))
   setNodes([...nextStepNodes, ...kept])
 }
 
-/**
- * Dựng lại node/edge phái sinh (gate label + artifact/knowledge) từ step hiện tại.
- * Gọi sau mọi phép biến đổi canvas — trừ lúc đang kéo node (`setNodes` giữa drag
- * làm node giật), nên chỉ chạy ở `@node-drag-stop`.
- */
+// xem docs/architecture/code/pipeline-editor.md §1
 function syncDerivedGraph() {
   const stepNodes = stepNodesOf(getNodes.value)
   const stepIds = new Set(stepNodes.map((n) => n.id))
@@ -426,10 +381,7 @@ watch(
     closeDocView()
     clearTimeout(configDebounce)
     if (scope === 'global') {
-      // Tab Profile cũng là `scope === 'global'`: quay lại tab mà nạp pipeline
-      // global sẽ khiến canvas và select nói về hai đối tượng khác nhau, và
-      // Save sau đó ghi đè profile bằng nội dung global. Đổi project là ngoại
-      // lệ — lựa chọn cũ không còn nghĩa nên watcher bên dưới xoá nó.
+      // xem docs/architecture/code/pipeline-editor.md §3
       const keepSelection = projectId === prevProjectId
       if (keepSelection && profileSelected.value) {
         applyProfileToCanvas(profileSelected.value)
@@ -444,8 +396,6 @@ watch(
       nodeCounter = 0
       pipelineMeta.value = {}
       stepPreserved.value = {}
-      // Canvas rỗng là "sạch" — không reset thì confirm "bỏ thay đổi?" bật lên
-      // trên một canvas chưa hề sửa.
       lastLoadedSnapshot.value = snapshotCanvas()
       return
     }
@@ -472,8 +422,6 @@ function onDropOnCanvas(event) {
 
   const pos = screenToFlowCoordinate({ x: event.clientX, y: event.clientY })
 
-  // `nodeCounter` chỉ đếm từ số step của pipeline vừa nạp, nên sau vài lần
-  // nạp/xoá nó có thể sinh lại một id đã tồn tại — tăng tiếp đến khi id trống.
   const existing = new Set(stepNodesOf(getNodes.value).map((n) => n.id))
   let id = `step-${item.name}-${++nodeCounter}`
   while (existing.has(id)) {
@@ -486,9 +434,6 @@ function onDropOnCanvas(event) {
     position: { x: pos.x - 60, y: pos.y - 25 },
     data: {
       label: item.name,
-      // Mục Skills là danh sách tra cứu: item không `draggable` nên không có
-      // nguồn phát skill. `dataTransfer` vẫn là kênh mở — giữ nhánh phòng thủ
-      // cho payload lạ.
       agent: item._type === 'agent' ? item.id : '',
       produces: [],
       knowledge_inputs: [],
@@ -504,8 +449,7 @@ const selectedNodeId = ref(null)
 const selectedNodeData = ref(null)
 
 function openConfig(nodeId, data) {
-  // Dialog teleport ra <body> nên rule `.preview-active …` không với tới nó —
-  // phải chặn bằng logic, không dựa vào CSS.
+  // xem docs/architecture/code/pipeline-editor.md §5
   if (previewing.value || viewingDoc.value) return
   selectedNodeId.value = nodeId
   selectedNodeData.value = { ...data }
@@ -519,8 +463,7 @@ function closeConfig() {
 const orchestratorConfigOpen = ref(false)
 
 function openOrchestratorConfig() {
-  // Dialog teleport ra <body> nên rule `.preview-active …` không với tới nó —
-  // phải chặn bằng logic, không dựa vào CSS. Cùng khuôn với `openConfig`.
+  // xem docs/architecture/code/pipeline-editor.md §5
   if (previewing.value || viewingDoc.value) return
   orchestratorConfigOpen.value = true
 }
@@ -557,25 +500,15 @@ function applyStepUpdate(nodeId, updatedData) {
 }
 
 function deleteNode(nodeId) {
-  // Đóng panel + dựng lại graph phái sinh do hook `onCanvasRemoval` lo, dùng
-  // chung với đường xoá bằng phím của VueFlow — đừng làm lại ở đây.
   removeNodes([nodeId])
 }
 
-/**
- * Đường xoá thứ hai: nhấn `Backspace` khi node đang chọn thì VueFlow tự gọi
- * `removeNodes` / `removeEdges` bên trong thư viện, không đi qua `deleteNode`.
- * Không bắt ở đây thì node artifact của step vừa xoá ở lại canvas mồ côi cùng
- * edge `de-art-<id>-<stepKế>`.
- */
+// xem docs/architecture/code/pipeline-editor.md §2
 function onCanvasRemoval(changes) {
   if (!hasRemovalChange(changes)) return
   if (selectedNodeId.value && !getNodes.value.some((n) => n.id === selectedNodeId.value)) {
     closeConfig()
   }
-  // Node điều phối không xoá được: `syncDerivedGraph()` dựng lại nó từ meta
-  // chừng nào checkbox còn tick. Đây cũng là chỗ chặn đường xoá bằng `Backspace`,
-  // đường mà nút ✕ (vốn không có trên node này) không với tới.
   syncDerivedGraph()
 }
 
@@ -604,11 +537,7 @@ function topoSort(nodeList, edgeList) {
   return [...sorted, ...remaining.map((n) => n.id)]
 }
 
-/**
- * Step node + edge điều khiển hiện có trên canvas. Mọi phép tính sinh ra YAML
- * hoặc thứ tự chạy phải đi qua đây — node artifact/knowledge chỉ để nhìn, lọt vào
- * `buildFullPipeline` là sinh step rác `art-*` trong file lưu ra.
- */
+// xem docs/architecture/code/pipeline-editor.md §2
 function stepGraph(): { nodeList: any[]; edgeList: any[] } {
   const nodeList = stepNodesOf(getNodes.value)
   const edgeList = stepEdgesOf(getEdges.value, new Set(nodeList.map((n) => n.id)))
@@ -666,8 +595,6 @@ function buildFullPipeline() {
 function autoLayout() {
   const { nodeList, edgeList } = stepGraph()
   const order = topoSort(nodeList, edgeList)
-  // Cập nhật tại chỗ thay vì dựng lại mảng: auto-layout chỉ đổi toạ độ, không
-  // đổi tập node — xem `setStepNodes` về việc mất định danh node phái sinh.
   for (const n of nodeList) {
     const idx = order.indexOf(n.id)
     updateNode(n.id, { position: { x: 20 + Math.max(0, idx) * 220, y: 60 } })
@@ -687,14 +614,10 @@ const {
   importFromFile,
 } = usePipelineProfiles(() => props.projectId)
 
-/** Profile chọn trong select — nguồn của auto-load. */
 const profileSelected = ref('')
-/** Tên sẽ ghi khi bấm Save; gõ tên mới ở đây tạo profile mới. */
 const profileName = ref('')
-/** Profile được nạp làm bản nháp cho task — không tự ghi file. */
 const taskProfileName = ref('')
 
-/** So sánh nông để hỏi trước khi bỏ thay đổi chưa lưu. */
 const lastLoadedSnapshot = ref('')
 
 function snapshotCanvas(): string {
@@ -721,21 +644,15 @@ async function applyProfileToCanvas(name: string): Promise<void> {
   setTimeout(() => fitView(), 100)
 }
 
-/**
- * Đặt lại giá trị select mà không kích hoạt auto-load.
- * Cần thiết vì watcher tự ghi ngược vào chính ref nó đang theo dõi (khi người
- * dùng huỷ confirm, hoặc sau khi Save): không chặn thì mỗi lần huỷ lại hỏi lại.
- */
+// xem docs/architecture/code/pipeline-editor.md §3
 let suppressAutoLoad = false
 
 function setSelectionSilently(target: { value: string }, next: string) {
   suppressAutoLoad = true
   target.value = next
-  // Watcher chạy sau microtask của Vue — trả cờ lại ở đó, không phải ngay đây.
   Promise.resolve().then(() => { suppressAutoLoad = false })
 }
 
-// Không còn nút "Load profile": đổi select là nạp luôn.
 watch(profileSelected, async (name, prev) => {
   if (suppressAutoLoad || !name) return
   if (!confirmDiscardIfDirty()) {
@@ -746,7 +663,6 @@ watch(profileSelected, async (name, prev) => {
   await applyProfileToCanvas(name)
 })
 
-// Nạp bản nháp lên canvas, không ghi `tasks/<id>/pipeline.yaml`.
 watch(taskProfileName, async (name, prev) => {
   if (suppressAutoLoad || !name) return
   if (!confirmDiscardIfDirty()) {
@@ -756,18 +672,14 @@ watch(taskProfileName, async (name, prev) => {
   await applyProfileToCanvas(name)
 })
 
-// Profile của task trước không phải profile của task sau.
 watch(() => props.taskId, () => { taskProfileName.value = '' })
 
-// Danh sách profile là per-project — lựa chọn cũ không còn nghĩa.
 watch(() => props.projectId, () => {
   profileSelected.value = ''
   profileName.value = ''
   taskProfileName.value = ''
 })
 
-// Một instance dùng chung cho `handleSave` và `handleSetDefault` — giữ đúng
-// ngữ nghĩa cờ `saving` cũ (hai nút này vốn chia nhau một cờ).
 const { pending: saving, run: runSave } = useApiAction()
 const saveMsg = ref('')
 
@@ -778,7 +690,6 @@ function flashSaved(msg: string) {
   }, 2500)
 }
 
-/** "Save" và "Save to file" gộp làm một, rẽ nhánh theo tab đang mở. */
 async function handleSave() {
   await runSave(async () => {
     saveMsg.value = ''
@@ -796,8 +707,6 @@ async function handleSave() {
         }
         await refreshProfiles()
         lastLoadedSnapshot.value = snapshotCanvas()
-        // Canvas ĐANG là nội dung vừa ghi — nạp lại từ server chỉ tốn một vòng
-        // request và làm mất vị trí node người dùng vừa sắp.
         if (profileSelected.value !== name) setSelectionSilently(profileSelected, name)
       } else {
         if (taskWriteBlocked.value) {
@@ -827,7 +736,6 @@ async function handleDeleteProfile() {
     saveMsg.value = `✗ ${profileError.value}`
     return
   }
-  // Giữ nguyên canvas — người dùng vừa mất file, đừng mất luôn công việc đang mở.
   profileSelected.value = ''
   await refreshProfiles()
 }
@@ -859,7 +767,7 @@ async function handleImportProfileFile(e: Event) {
   const ok = await importFromFile(file, {
     confirmOverwrite: (name) => Promise.resolve(confirm(t('pipelineEditor.target.confirmOverwriteProfile', { name }))),
   })
-  if (ok === null) return // user huỷ ghi đè — no-op, không phải lỗi
+  if (ok === null) return
   if (!ok) {
     saveMsg.value = `✗ ${profileError.value}`
     return
@@ -868,11 +776,6 @@ async function handleImportProfileFile(e: Event) {
   flashSaved(t('pipelineEditor.target.saved'))
 }
 
-/**
- * "Mặc định" = nội dung `pipeline.yaml` global, nên set-as-default ghi chính
- * canvas đang mở xuống đó. Đây cũng là đường duy nhất còn lại để sửa trực tiếp
- * pipeline global sau khi select `Scope` biến mất.
- */
 async function handleSetDefault() {
   if (!currentSteps.value.length) return
   if (!confirm(t('pipelineEditor.target.confirmSetDefault'))) return
@@ -887,11 +790,6 @@ async function handleSetDefault() {
   })
 }
 
-/**
- * Chỉ khoá Save ở tab Task, nơi lý do (chưa chọn task / task đã đóng) đã hiển thị
- * sẵn. Ở tab Profile để nút bấm được: thiếu tên thì `handleSave` nói rõ "nhập tên
- * profile", còn nút xám không lý do thì người dùng chỉ biết bó tay.
- */
 const saveDisabled = computed(() => tab.value === 'task' && taskWriteBlocked.value)
 
 const { state: previewing, setTrue: startPreview, setFalse: stopPreview } = useLocalToggle(false)
@@ -1006,7 +904,6 @@ const hasFanOut = computed(() => {
           @import-file="handleImportProfileFile"
         />
 
-        <!-- Chỉ khoá phần nội dung khi preview; cụm action (có Stop) vẫn bấm được -->
         <div v-if="!editorLeftCollapsed" class="editor-left-sections">
           <CatalogPanel
             :catalog="catalog"
@@ -1167,8 +1064,6 @@ const hasFanOut = computed(() => {
   min-height: 0;
   height: auto;
 }
-/* Canvas mang cả 2 class, nên selector phải dính liền; viết rời (descendant)
-   thì rule không khớp và bo tròn 12px của `.vflow-container` dùng chung lại thắng. */
 .editor-canvas.vflow-container {
   height: 100%;
   border-radius: 0;
@@ -1203,9 +1098,7 @@ const hasFanOut = computed(() => {
 .preview-banner-agent { color: var(--muted); font-size: 11px; }
 .preview-banner-hitl { color: var(--waiting); font-weight: 600; }
 
-/* Hợp đồng cuộn của Task list (docs/agent-rules/ui-design-guideline.md): container ngoài KHÔNG cuộn,
-   chỉ lá (`.catalog-list` / `.rules-scroll`) mới mang `overflow-y: auto`. Để
-   `auto` ở đây là dựng scroller thứ hai và nuốt mất trách nhiệm cuộn của lá. */
+// xem docs/agent-rules/ui-design-guideline.md §2
 .editor-left-sections {
   display: flex;
   flex-direction: column;

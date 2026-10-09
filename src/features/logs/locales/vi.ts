@@ -1,6 +1,3 @@
-// Strings for the `logs` feature module (LogsPanel + TaskTimeline). Filled by
-// the logs i18n slice (issue #99, epic #94). vi is the source of truth; keep
-// keys in sync with en/logs.ts.
 export default {
   title: 'Nhật ký',
   subtitle: 'Log tập trung (global ~/.dev-team-dashboard/logs/)',

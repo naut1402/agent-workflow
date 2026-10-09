@@ -1,6 +1,5 @@
-// Last-resort default (rare: setup always scaffolds .dev-team-agent/pipeline.yaml).
-// Self-contained copy of dev-team-orchestrator/assets/pipeline.default.yaml — the
-// viewer can't read that asset at runtime. Keep the two in sync.
+// Last-resort default when `.dev-team-agent/pipeline.yaml` is missing.
+// Copy of dev-team-orchestrator/assets/pipeline.default.yaml — keep the two in sync.
 export const DEFAULT_PIPELINE: any = {
   version: 1,
   defaults: { review_retry_max: 2, auto_review: false, export_json: false },
@@ -12,7 +11,6 @@ export const DEFAULT_PIPELINE: any = {
     { id: 'pr-creator', name: 'PR', agent: 'dev-agent-teams:pr-creator', skills: ['create-pr'], rule_category: 'git-pr', rule_required: false, rule_fallback_skill: 'create-pr', produces: ['pr-desc.md'], export_key: 'pr_creator', hitl: { mode: 'none' } },
   ],
   doc_reviewer: { agent: 'dev-agent-teams:doc-reviewer', skills: ['doc-review'], rule_category: 'doc-review', rule_required: false, rule_fallback_skill: 'doc-review' },
-  // Tắt mặc định: pipeline.yaml không có key `orchestrator` phải chạy y hệt như trước.
   orchestrator: { enabled: false, agent: 'dev-agent-teams:orchestrator' },
 }
 
@@ -62,9 +60,7 @@ import { readYamlChecked } from '../../../../backend/lib/yamlLib.js'
 export async function loadPipelineConfig(root: string, id: string | null): Promise<any> {
   const cfg = JSON.parse(JSON.stringify(DEFAULT_PIPELINE))
   let source = 'builtin'
-  // Unreadable ≠ absent: falling back silently to global/builtin here would make a
-  // caller think the task's gate was removed. Flag it so callers hold their ground
-  // (see `resolveHitlPending`'s unreadable branch).
+  // xem docs/architecture/code/pipeline-editor.md §8
   let untrusted = false
 
   const globalRead = await readYamlChecked(joinPath(root, 'pipeline.yaml'))

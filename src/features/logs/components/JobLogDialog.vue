@@ -23,7 +23,6 @@ const SECTION_LABEL: Record<JobLogSectionKind, string> = {
   output: 'Phản hồi',
   result: 'Kết quả',
 }
-/** Rendered markdown for model-generated content; the rest is key:value text, not markdown. */
 const MARKDOWN_KINDS = new Set<JobLogSectionKind>(['output', 'system-prompt'])
 
 const sections = computed(() => parseJobLogSections(text.value))

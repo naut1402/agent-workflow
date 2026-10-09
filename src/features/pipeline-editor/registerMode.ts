@@ -12,7 +12,6 @@ export function registerMode(registry: ModeRegistry): void {
     descriptionKey: 'common.modeDesc.editor',
     maturity: 'stable',
     defaultEnabled: true,
-    // Không `persistKey` — panel trái của editor không nhớ trạng thái qua reload (giữ hành vi cũ).
     subSidebar: {},
     bindings: (ctx: ShellContext) => {
       const c = ctx as Record<string, unknown>

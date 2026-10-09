@@ -1,11 +1,4 @@
 <script setup lang="ts">
-/**
- * Mục đóng/mở của sub-sidebar editor — cùng pattern `<details>` + chevron với
- * nhóm archived của Task list (Monitor).
- *
- * `open` do cha giữ (một `Set` khoá section) nên trạng thái sống sót qua re-render
- * và cho phép "bấm icon ở dải thu gọn → mở đúng section".
- */
 defineProps({
   title: { type: String, required: true },
   count: { type: Number, default: null },
@@ -34,8 +27,6 @@ const emit = defineEmits(['toggle'])
   min-height: 0;
   border-bottom: 1px solid var(--border);
 }
-/* Section mở là nơi chia chiều cao còn lại — basis 0 để hai section mở cùng lúc
-   chia đều thay vì ăn theo chiều cao nội dung; section đóng chỉ cao bằng header. */
 .editor-section[open] {
   flex: 1 1 0;
   overflow: hidden;
@@ -43,10 +34,7 @@ const emit = defineEmits(['toggle'])
 .editor-section:not([open]) {
   flex: 0 0 auto;
 }
-/* Chrome ≥131 chèn hộp `::details-content` giữa <details> và nội dung của nó, nên
-   `.editor-section-body` không còn là flex item trực tiếp: không khai báo ở đây thì
-   chuỗi flex đứt tại hộp này và vùng cuộn ở lá không nhận được chiều cao xác định.
-   Trình duyệt chưa hỗ trợ pseudo này bỏ qua rule, giữ nguyên hành vi cũ. */
+// xem docs/architecture/code/pipeline-editor.md §6
 .editor-section[open]::details-content {
   display: flex;
   flex-direction: column;

@@ -32,25 +32,18 @@ const groupedRules = computed(() => {
   return groups
 })
 
-/** Nhãn nhóm theo scope — tra ở script để template không phải mang nhánh rẽ. */
 function scopeLabelText(scope: string) {
   return scope === 'project'
     ? t('pipelineEditor.rules.scopeProject')
     : t('pipelineEditor.rules.scopeGlobal')
 }
 
-/**
- * Một thông điệp rỗng duy nhất cho cả 2 trạng thái: chưa có rule nào, và có rule
- * nhưng filter không khớp — phân biệt ở đây thay vì bằng `v-if` / `v-else-if`.
- */
 const emptyMessage = computed(() => {
   if (!props.rules.length) return t('pipelineEditor.rules.empty')
   if (!filteredRules.value.length) return t('pipelineEditor.rules.emptyFiltered')
   return ''
 })
 
-// Đổi project -> tập category đổi -> lựa chọn cũ có thể không còn trong option.
-// Rơi về 'all' thay vì để select trắng và danh sách rỗng không lý do.
 watch(
   () => props.categories,
   (list) => {
@@ -69,9 +62,7 @@ watch(
       :open="openSections.has('rules')"
       @toggle="emit('toggle-section', 'rules')"
     >
-      <!-- Control lọc thuộc về thân mục nó phục vụ; không có category nào thì
-           không dựng control chết. `<select>` native vì popup của nó vẽ ở tầng
-           OS nên không bị các ancestor `overflow: hidden` cắt (docs/agent-rules/coding-guideline.md §5). -->
+      <!-- xem docs/architecture/code/pipeline-editor.md §6 -->
       <div v-if="categories.length" class="rules-toolbar">
         <select
           v-model="categoryFilter"
@@ -116,8 +107,7 @@ watch(
 </template>
 
 <style scoped lang="scss">
-/* Hợp đồng cuộn (docs/agent-rules/ui-design-guideline.md): xem `.catalog-panel` — panel chỉ giành
-   chiều cao khi section của nó đang mở. Vùng cuộn duy nhất là `.rules-scroll`. */
+// xem docs/agent-rules/ui-design-guideline.md §2
 .rules-panel {
   min-height: 0;
   display: flex;
@@ -127,8 +117,6 @@ watch(
 }
 .rules-panel--open { flex: 1 1 0; }
 
-/* Ngân sách cố định của toolbar trừ thẳng vào `.rules-scroll` — giữ nó ở một
-   hàng, padding tối thiểu (docs/agent-rules/ui-design-guideline.md). */
 .rules-toolbar {
   padding: 6px 8px;
   flex-shrink: 0;

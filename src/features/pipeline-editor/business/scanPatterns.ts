@@ -1,16 +1,5 @@
 import { joinPath, resolvePathUnder, safeReadDir } from '../../../backend/lib/fileHelper.js'
 
-/**
- * Expand user-configured scan patterns (`settings.scanPatterns`) into concrete
- * paths under a project root. Syntax is a relative path whose segments may use
- * `*`, `?` (single segment) and `**` (any number of segments).
- *
- * The walk is directed — it only descends into directories that can still match
- * the pattern prefix — so a pattern without `**` costs almost nothing. Only `**`
- * needs the hard budgets below, which stop the walk and return what was found
- * instead of throwing.
- */
-
 export const SCAN_PATTERN_MAX_DEPTH = 8
 export const SCAN_PATTERN_MAX_MATCHES = 200
 export const SCAN_PATTERN_MAX_DIRS = 4000
@@ -29,10 +18,7 @@ interface Budget {
 
 function segmentToRegExp(seg: string): RegExp {
   const body = seg
-    // Collapse runs of `*` FIRST. `[^/]*[^/]*` is semantically identical to `[^/]*`, but
-    // on a non-matching name it backtracks exponentially — a 10-star segment (well within
-    // SCAN_PATTERN_MAX_LENGTH) hangs the single Node thread for minutes inside one
-    // `RegExp.test`, where no walker budget can reach it.
+    // xem docs/architecture/code/pipeline-editor.md §10
     .replace(/\*{2,}/g, '*')
     .replace(/[.+^${}()|[\]\\]/g, '\\$&')
     .replace(/\*/g, '[^/]*')
@@ -40,7 +26,6 @@ function segmentToRegExp(seg: string): RegExp {
   return new RegExp(`^${body}$`)
 }
 
-/** Wildcards never match dot-names — reaching `.claude` requires typing it out. */
 function segmentMatches(seg: string, name: string): boolean {
   if (name.startsWith('.') && !seg.startsWith('.')) return false
   return segmentToRegExp(seg).test(name)
@@ -60,7 +45,6 @@ function push(
   budget.matches++
 }
 
-/** One walk position: everything except the entries currently being scanned. */
 interface WalkCursor {
   projectRoot: string
   segs: string[]
@@ -70,7 +54,6 @@ interface WalkCursor {
 
 type DirEntries = Awaited<ReturnType<typeof safeReadDir>>
 
-/** `**` consumes zero or more directory levels, so it recurses on both readings. */
 async function walkDoubleStar(
   cursor: WalkCursor,
   dir: string,
@@ -78,18 +61,15 @@ async function walkDoubleStar(
   i: number,
   depth: number,
 ): Promise<void> {
-  // Reading 1: `**` matched zero segments — retry the same dir against segs[i + 1].
   await walk(cursor, dir, i + 1, depth)
   for (const entry of entries) {
-    // Symlinks are skipped outright, so the walk can never loop or leave the root.
+    // xem docs/architecture/code/pipeline-editor.md §10
     if (entry.isSymbolicLink()) continue
     if (!entry.isDirectory() || DENY_DIRS.has(entry.name) || entry.name.startsWith('.')) continue
-    // Reading 2: `**` swallowed this level — descend, still on segs[i].
     await walk(cursor, joinPath(dir, entry.name), i, depth + 1)
   }
 }
 
-/** A literal/wildcard segment: match it against this directory's entries only. */
 async function walkSegment(
   cursor: WalkCursor,
   entries: DirEntries,
@@ -100,8 +80,7 @@ async function walkSegment(
   const seg = cursor.segs[i]
   const last = i === cursor.segs.length - 1
   for (const entry of entries) {
-    // A symlink can point anywhere, including outside the project root — a
-    // matching one must not be reported as a file nor descended into.
+    // xem docs/architecture/code/pipeline-editor.md §10
     if (entry.isSymbolicLink()) continue
     if (DENY_DIRS.has(entry.name) || !segmentMatches(seg, entry.name)) continue
     const full = joinPath(dir, entry.name)
@@ -114,7 +93,6 @@ async function walk(cursor: WalkCursor, dir: string, i: number, depth: number): 
   const { budget, segs } = cursor
   if (budget.matches >= SCAN_PATTERN_MAX_MATCHES || depth > SCAN_PATTERN_MAX_DEPTH) return
 
-  // Segments exhausted → `dir` itself is the match (pattern ended with `**`).
   if (i >= segs.length) {
     push(cursor.projectRoot, dir, true, cursor.seen, budget)
     return
@@ -128,7 +106,12 @@ async function walk(cursor: WalkCursor, dir: string, i: number, depth: number): 
   else await walkSegment(cursor, entries, dir, i, depth)
 }
 
-/** Expand every pattern of ONE kind, sharing a single budget across them. */
+/**
+ * Expand every pattern of one kind (`settings.scanPatterns`) into concrete paths
+ * under `projectRoot`, sharing a single budget. A pattern is a relative path whose
+ * segments may use `*`, `?` (single segment) and `**` (any number of segments).
+ * Hitting a budget stops the walk and returns what was found instead of throwing.
+ */
 export async function expandScanPatterns(
   projectRoot: string,
   patterns: string[] | null | undefined,
@@ -141,7 +124,7 @@ export async function expandScanPatterns(
       .replace(/\\/g, '/')
       .split('/')
       .filter((s) => s && s !== '.')
-    // Last traversal guard, independent of the settings schema.
+    // xem docs/architecture/code/pipeline-editor.md §10
     if (!segs.length || segs.includes('..')) continue
     await walk({ projectRoot, segs, seen, budget }, projectRoot, 0, 0)
   }

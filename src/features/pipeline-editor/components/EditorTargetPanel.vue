@@ -1,11 +1,4 @@
 <script setup lang="ts">
-/**
- * Đầu sub-sidebar của Pipeline Editor: chọn đối tượng đang sửa (profile ở tab
- * Profile, task ở tab Task) và cụm nút action.
- *
- * Thuần trình bày — không gọi API, không đụng canvas. Mọi thao tác đi ra ngoài
- * bằng emit để `PipelineEditor` giữ nguyên vai trò nơi duy nhất nạp/ghi pipeline.
- */
 import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { computed, ref } from 'vue'
 import CLoadingOverlay from '../../../frontend/ui/CLoadingOverlay.vue'
@@ -88,10 +81,6 @@ type TargetAction = {
   disabled?: boolean
 }
 
-/**
- * Một nguồn duy nhất cho cụm action — dải icon lúc thu gọn và cụm lúc mở là
- * cùng các nút, chỉ khác hướng xếp; tách ra thì sửa một nơi là đủ.
- */
 const actions = computed<TargetAction[]>(() => {
   const list: TargetAction[] = [
     {
@@ -173,7 +162,6 @@ const actions = computed<TargetAction[]>(() => {
 
 const fileInputRef = ref<HTMLInputElement | null>(null)
 
-/** `import-file` mở file picker thay vì emit thẳng — emit thật xảy ra ở `@change`. */
 function handleActionClick(action: TargetAction) {
   if (action.key === 'import-file') {
     fileInputRef.value?.click()
@@ -182,7 +170,6 @@ function handleActionClick(action: TargetAction) {
   emit(action.event)
 }
 
-/** Lối vào thẳng từng section khi sub-sidebar đang thu gọn. */
 const SECTION_ICONS: { key: string; icon: RailIconName; titleKey: string }[] = [
   { key: 'agents', icon: 'agent', titleKey: 'pipelineEditor.sections.agentsOpenTitle' },
   { key: 'skills', icon: 'skills', titleKey: 'pipelineEditor.sections.skillsOpenTitle' },
@@ -193,7 +180,6 @@ const SECTION_ICONS: { key: string; icon: RailIconName; titleKey: string }[] = [
 <template>
   <div class="editor-target-panel" :class="{ 'is-collapsed': collapsed }">
     <CLoadingOverlay :active="saving" />
-    <!-- Select đối tượng: profile ở tab Profile, task ở tab Task -->
     <template v-if="!collapsed">
       <template v-if="isProfileTab">
         <span class="target-label">{{ t('pipelineEditor.target.profileLabel') }}</span>
@@ -234,7 +220,6 @@ const SECTION_ICONS: { key: string; icon: RailIconName; titleKey: string }[] = [
           @input="emit('update:taskManual', ($event.target as HTMLInputElement).value)"
         />
 
-        <!-- Đổi profile chỉ nạp bản nháp lên canvas, phải bấm Save mới ghi -->
         <span class="target-label">{{ t('pipelineEditor.target.taskProfileLabel') }}</span>
         <CSelect
           id="editor-target-task-profile"
@@ -247,8 +232,6 @@ const SECTION_ICONS: { key: string; icon: RailIconName; titleKey: string }[] = [
       </template>
     </template>
 
-    <!-- Node điều phối: bỏ tick là cách DUY NHẤT gỡ node khỏi canvas (node không
-         có nút ✕). Ẩn khi thu gọn — dải icon chỉ dành cho action. -->
     <label v-if="!collapsed" class="target-check">
       <input
         type="checkbox"
@@ -260,8 +243,6 @@ const SECTION_ICONS: { key: string; icon: RailIconName; titleKey: string }[] = [
       </span>
     </label>
 
-    <!-- Một nút Save duy nhất, cụm action nằm hẳn trong sub-sidebar. Lúc thu gọn
-         vẫn đủ cả 5 nút (kể cả Stop khi đang preview). -->
     <div class="target-actions" :class="{ 'target-actions--rail': collapsed }">
       <button
         v-for="action in actions"
@@ -300,8 +281,6 @@ const SECTION_ICONS: { key: string; icon: RailIconName; titleKey: string }[] = [
     </div>
 
     <template v-else>
-      <!-- Không còn dòng chữ "đang lưu" ở đây: `CLoadingOverlay` phía trên đã là
-           nguồn tín hiệu bận duy nhất, ba tín hiệu chồng nhau chỉ gây ồn. -->
       <div v-if="message" class="target-msg">{{ message }}</div>
       <div v-if="warning" class="target-warning" role="status">{{ warning }}</div>
     </template>
@@ -309,7 +288,6 @@ const SECTION_ICONS: { key: string; icon: RailIconName; titleKey: string }[] = [
 </template>
 
 <style scoped lang="scss">
-/* `position: relative` là containing block cho `CLoadingOverlay`. */
 .editor-target-panel {
   position: relative;
   display: flex;
@@ -327,7 +305,6 @@ const SECTION_ICONS: { key: string; icon: RailIconName; titleKey: string }[] = [
 
 .target-label { font-size: 11px; color: var(--muted); }
 
-/* Class truyền vào CSelect chỉ lo kích thước — style control là của `.c-select`. */
 .target-select { width: 100%; }
 
 .target-input { padding: 4px 7px; font-size: 12px; min-width: 0; }
@@ -349,9 +326,6 @@ const SECTION_ICONS: { key: string; icon: RailIconName; titleKey: string }[] = [
   margin-top: 4px;
   flex-wrap: wrap;
 }
-/* Cột trái 240px ⇒ hàng action 215px. 7 nút Tab Profile ở `.icon-btn` chuẩn 32px
-   cần 236px nên xuống dòng, hàng cao gấp đôi ăn vào vùng cuộn bên dưới. 28px cho
-   7×28 + 6×2 = 208px vừa một hàng, và là số cố định nên không phụ thuộc font. */
 .target-actions .icon-btn {
   width: 28px;
   height: 28px;

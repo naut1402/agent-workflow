@@ -1,11 +1,7 @@
-/* Agent-editor — rule được ≥2 component của feature render (bậc 2, xem
-   docs/implement/feature-organization-rule.md §5). Phần riêng của từng
-   component nằm trong <style scoped> của chính SFC đó. */
+// xem docs/agent-rules/feature-architecture-guideline.md §5
 
-/* AgentTemplatePicker + AgentNlWizard */
 .picker-title { font-size: 15px; margin: 0 0 10px; }
 
-/* AgentSectionEditor + AgentNlWizard */
 .section-block {
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -13,7 +9,6 @@
   background: var(--panel);
 }
 
-/* AgentSectionEditor + WorkflowSectionEditor */
 .section-head-actions {
   display: flex;
   align-items: center;

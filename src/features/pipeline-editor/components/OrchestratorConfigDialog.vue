@@ -15,7 +15,6 @@ const { t } = useI18nHelpers()
 const showKnowledgePicker = ref(false)
 
 function onKeydown(e: KeyboardEvent) {
-  // Picker cũng nghe Escape — nó đang mở thì đóng picker, không đóng cả dialog.
   if (e.key === 'Escape' && !showKnowledgePicker.value) emit('close')
 }
 
@@ -38,7 +37,6 @@ watch(
   { immediate: true },
 )
 
-/** Picker ghi thẳng vào draft — `v-model` của nó là mảng id đang chọn. */
 const knowledgeInputs = computed({
   get: () => draft.value.knowledge_inputs,
   set: (ids: string[]) => {
@@ -129,8 +127,6 @@ function apply() {
 <style scoped lang="scss">
 .orchestrator-config-dialog { width: min(520px, 94vw); }
 
-/* `.modal-body` là vùng cuộn duy nhất (hợp đồng ở src/frontend/styles/_shell.scss); ở đây
-   chỉ xếp các nhóm control theo cột. */
 .orchestrator-config-dialog-body {
   display: flex;
   flex-direction: column;

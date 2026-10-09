@@ -1,12 +1,3 @@
-/**
- * Chuyển đổi hai chiều giữa `data` của node canvas và draft phẳng mà
- * `StepConfigDialog` bind vào input. Nằm ở `lib/` thay vì trong `.vue` để test
- * được không cần render (`docs/agent-rules/coding-guideline.md` §5).
- *
- * `hitl` bị phẳng hoá thành `hitl_*` vì `v-model` không bind được vào object
- * lồng khi mode `none` không có các subfield còn lại.
- */
-
 /** Draft phẳng do dialog chỉnh sửa — mỗi field bind trực tiếp vào một control. */
 export type StepConfigDraft = {
   name: string
@@ -28,11 +19,7 @@ export type StepConfigUpdate = {
   produces: string[]
   knowledge_inputs: string[]
   hitl: Record<string, unknown>
-  /**
-   * **Luôn** có mặt, kể cả ''. `applyStepUpdate` merge node bằng
-   * `{ ...n.data, ...updatedData }` — bỏ key khi rỗng thì gỡ pin không xoá được
-   * giá trị cũ trên node.
-   */
+  /** Luôn có mặt, kể cả '' (gỡ pin) — xem docs/architecture/code/pipeline-editor.md §4. */
   runner_id: string
 }
 

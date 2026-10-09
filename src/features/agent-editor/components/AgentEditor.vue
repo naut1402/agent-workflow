@@ -23,7 +23,6 @@ const catalog = ref({ skills: [], agents: [] })
 const error = ref('')
 const message = ref('')
 
-// Agent đang xem ở main.
 const viewing = ref<AgentMeta | null>(null)
 const viewContent = ref('')
 const viewLoading = ref(false)
@@ -66,7 +65,6 @@ async function openViewer(agent: AgentMeta) {
     const data = await fetchCustomAgent(agent.name, props.projectId ?? undefined, agent.scope)
     viewContent.value = data.content ?? ''
   } catch (e: any) {
-    // Agent có thể vừa bị xoá ngoài dashboard — trả main về empty state thay vì kẹt ở spinner.
     error.value = String(e.message || e)
     viewing.value = null
     viewContent.value = ''
@@ -88,7 +86,7 @@ function newAgent() {
 }
 
 async function removeAgent(agent: AgentMeta) {
-  if (deletingKey.value) return // chặn double-click
+  if (deletingKey.value) return
   if (!confirm(t('agentEditor.messages.confirmDelete', { name: agent.name }))) return
   deletingKey.value = keyOf(agent)
   error.value = ''
@@ -158,7 +156,6 @@ function closeDialog() {
   showDialog.value = false
 }
 
-/** `savedName` là tên SAU sanitize của backend, có thể khác `viewing` cũ — phải nạp lại theo tên (và scope). */
 async function onSaved(savedName: string) {
   await Promise.all([loadList(), loadCatalog()])
   const current = viewing.value
@@ -176,7 +173,6 @@ async function onSaved(savedName: string) {
     :hide-main="!viewing"
   >
     <template #left>
-      <!-- class `.agent-editor` giữ nguyên: đây là neo ổn định của 2 spec e2e. -->
       <div class="agent-editor">
         <template v-if="!subSidebarCollapsed">
           <AgentSideMenu
@@ -199,12 +195,10 @@ async function onSaved(savedName: string) {
 
     <template #main>
       <div class="agent-main">
-        <!-- Sub-menu thu lại thì cột trái rộng 0 (override bên dưới), nên thông báo phải chuyển sang render ở main. -->
         <template v-if="subSidebarCollapsed">
           <p v-if="error" class="err agent-editor-msg">{{ error }}</p>
           <p v-if="message" class="ok-msg agent-editor-msg">{{ message }}</p>
         </template>
-        <!-- `with-frontmatter`: agent đọc nguyên file `.md`, nên khối `---` đầu file được tách thành block metadata riêng. -->
         <CMarkdownView
           v-if="viewing && !viewLoading"
           :title="viewing.name"
@@ -218,7 +212,6 @@ async function onSaved(savedName: string) {
     </template>
   </CScreenLayout>
 
-  <!-- Dialog là modal ngang hàng, đứng ngoài CScreenLayout. -->
   <AgentFormDialog
     v-if="showDialog"
     :agent="editingAgent"
@@ -238,7 +231,6 @@ async function onSaved(savedName: string) {
   min-height: 0;
   overflow: hidden;
 }
-// Thu về 0 chứ không 48px mặc định: dải đó không chứa nút nào, giữ lại là cột xám rỗng vô ích.
 .agent-editor-layout :deep(.c-screen-layout__body--left-collapsed) {
   grid-template-columns: 0 1fr;
 }
@@ -254,7 +246,6 @@ async function onSaved(savedName: string) {
   height: 100%;
   min-height: 0;
 }
-// Root của component con nhận luôn scope id của cha, nên không cần `:deep`.
 .agent-main > .c-md-view {
   flex: 1;
   min-height: 0;

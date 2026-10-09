@@ -32,10 +32,6 @@ const hasGate = computed(() => {
   return Boolean(mode) && mode !== 'none'
 })
 
-/**
- * Nhãn model của pin — Vue Flow không truyền prop tuỳ ý xuống node, nên map nhãn
- * đến từ `provide` của PipelineEditor. Không tra được thì hiện thẳng runner id.
- */
 const modelLabels = inject<ComputedRef<Map<string, string>>>(
   'pipelineRunnerModelLabels',
   computed(() => new Map()),
@@ -97,8 +93,6 @@ function commitLabel() {
       </div>
     </div>
 
-    <!-- c.3 — nhãn gate nằm trên edge đi ra, nhưng step cuối không có edge nào;
-         badge trên node là chỗ duy nhất thấy được gate của nó. -->
     <div v-if="hasGate" class="node-editor-gate">
       <span aria-hidden="true">⏸</span>
       <span v-if="data.hitl?.gate_id" class="node-editor-gate-id">{{ data.hitl.gate_id }}</span>
@@ -106,7 +100,6 @@ function commitLabel() {
 
     <div v-if="data.agent" class="node-editor-agent">{{ data.agent }}</div>
 
-    <!-- Model pin: chỉ nhìn canvas cũng biết step nào không chạy model mặc định. -->
     <div v-if="modelBadge" class="node-editor-model" :title="modelBadge">⚙ {{ modelBadge }}</div>
 
 
@@ -151,7 +144,6 @@ function commitLabel() {
 .preview-status--done { background: var(--done); color: #0f1419; }
 .preview-status--hitl { background: var(--waiting); color: #0f1419; }
 
-/* ── Pipeline editor node ───────────────────────────────────────────────── */
 .node-editor {
   background: var(--panel);
   border: 1px solid var(--border);
@@ -215,8 +207,6 @@ function commitLabel() {
 }
 .node-editor-agent { font-size: 10px; color: var(--accent); margin-top: 3px; }
 
-/* Màu khác nhãn agent để hai dòng không lẫn nhau. Tên model dài hơn bề ngang node
-   (max-width 200px) nên cắt bằng ellipsis, giá trị đầy đủ nằm ở `title`. */
 .node-editor-model {
   font-size: 10px;
   color: var(--muted);

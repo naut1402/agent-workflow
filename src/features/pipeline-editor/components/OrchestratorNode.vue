@@ -1,12 +1,4 @@
 <script setup lang="ts">
-/**
- * Node điều phối trên canvas editor. Cố ý không có nút xoá: node này chỉ gỡ được
- * bằng cách bỏ tick checkbox "Có node điều phối" ở panel trái — xoá được trên
- * canvas thì canvas và YAML sẽ nói hai chuyện khác nhau.
- *
- * Có handle `source`: khi orchestrator bật, `buildEditorGraph` vẽ 1 edge từ node
- * này tới từng step (hub edge) — handle là điểm neo cho các edge đó.
- */
 import { Handle, Position } from '@vue-flow/core'
 import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 
@@ -65,7 +57,7 @@ const emit = defineEmits(['edit'])
   padding: 0 3px;
   font-size: 12px;
   line-height: 1;
-  /* vue-flow gán pointer-events:none cho div cha khi node không selectable/draggable */
+  // xem docs/architecture/code/pipeline-editor.md §1
   pointer-events: auto;
 }
 .node-btn:hover { color: var(--text); }

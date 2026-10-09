@@ -14,8 +14,6 @@ const props = defineProps({
 
 const emit = defineEmits(['toggle-section', 'view-agent', 'view-skill'])
 
-// Một state cho mỗi danh sách — control lọc phải thuộc về đúng mục nó phục vụ,
-// nếu không người dùng không biết select đang lọc danh sách nào.
 const agentSource = ref('all')
 const skillSource = ref('all')
 
@@ -29,7 +27,6 @@ const SOURCE_OPTIONS = [
   { value: 'dashboard', labelKey: 'pipelineEditor.catalog.sourceDashboard' },
 ]
 
-/** Gom `source` thô về đúng một bucket lọc được: `repo:x` -> `repo`, `plugin:y` -> `plugin`. */
 function sourceBucket(source: string): string {
   const src = source || ''
   if (src.startsWith('repo:')) return 'repo'
@@ -37,7 +34,6 @@ function sourceBucket(source: string): string {
   return src
 }
 
-/** Chỉ chào những option thực có trong dữ liệu — không để chọn giá trị lọc ra rỗng vô cớ. */
 function optionsFor(items: any[]) {
   const present = new Set(items.map((i) => sourceBucket(i.source)).filter(Boolean))
   return SOURCE_OPTIONS.filter((o) => o.value === 'all' || present.has(o.value))
@@ -48,8 +44,6 @@ function bySource(items: any[], selected: string) {
   return items.filter((i) => sourceBucket(i.source) === selected)
 }
 
-// Option sinh từ danh sách THÔ, không từ danh sách đã lọc — nếu không, chọn một
-// nguồn sẽ làm tập option co lại còn đúng nguồn đó.
 const rawAgents = computed<any[]>(() => props.catalog.agents || [])
 const rawSkills = computed<any[]>(() => props.catalog.skills || [])
 
@@ -65,21 +59,15 @@ const { query: agentQuery, setQuery: setAgentQuery, filteredItems: filteredAgent
 const { query: skillQuery, setQuery: setSkillQuery, filteredItems: filteredSkills } =
   useSearch(skillItems, (s) => `${s.name} ${s.description} ${s.plugin} ${s.source}`)
 
-// Đổi project -> catalog đổi -> nguồn đang chọn có thể không còn trong option.
-// Rơi về 'all' thay vì để select trắng và danh sách rỗng không lý do.
 function resetIfGone(options: { value: string }[], selected: { value: string }) {
   if (!options.some((o) => o.value === selected.value)) selected.value = 'all'
 }
 watch(agentSourceOptions, (opts) => resetIfGone(opts, agentSource))
 watch(skillSourceOptions, (opts) => resetIfGone(opts, skillSource))
 
-// Panel này gói 2 mục còn `RulesPanel` chỉ có 1; chia cột theo số panel sẽ cho
-// catalog chỉ nửa phần của Rules. Chia theo số mục đang mở để mọi mục mở được
-// phần bằng nhau (grow đổi, basis vẫn 0, docs/agent-rules/ui-design-guideline.md).
 const openCatalogCount = computed(
   () => ['agents', 'skills'].filter((k) => props.openSections.has(k)).length,
 )
-/** Chỉ khai `flex-grow` khi có >1 mục mở — 1 mục thì để class `--open` lo. */
 const panelStyle = computed(() =>
   openCatalogCount.value > 1 ? { flexGrow: openCatalogCount.value } : undefined,
 )
@@ -91,7 +79,6 @@ function sourceBadge(source) {
   return source
 }
 
-/** Nhãn nguồn của một item; item không có `source` thì rơi về tên plugin. */
 function badgeText(item: any): string {
   return sourceBadge(item.source) || item.plugin || ''
 }
@@ -114,8 +101,7 @@ function onDragStart(event, item, type) {
       :open="openSections.has('agents')"
       @toggle="emit('toggle-section', 'agents')"
     >
-      <!-- `<select>` native vì popup của nó vẽ ở tầng OS nên không bị các ancestor
-           `overflow: hidden` của mục/cột cắt (docs/agent-rules/coding-guideline.md §5). -->
+      <!-- xem docs/architecture/code/pipeline-editor.md §6 -->
       <div class="catalog-toolbar">
         <select
           v-model="agentSource"
@@ -185,8 +171,6 @@ function onDragStart(event, item, type) {
         />
       </div>
       <div class="catalog-list">
-        <!-- Click để xem markdown; không kéo được vào canvas (thả skill chỉ
-             sinh step rác mang tên skill) nên không đặt `draggable`. -->
         <div
           v-for="skill in filteredSkills"
           :key="skill.id"
@@ -209,9 +193,7 @@ function onDragStart(event, item, type) {
 </template>
 
 <style scoped lang="scss">
-/* Hợp đồng cuộn (docs/agent-rules/ui-design-guideline.md): panel chỉ giành chiều cao khi một trong
-   các section của nó đang mở — để basis 0 cố định thì panel đóng vẫn ăn nửa
-   cột. Vùng cuộn duy nhất là `.catalog-list`. */
+// xem docs/agent-rules/ui-design-guideline.md §2
 .catalog-panel {
   display: flex;
   flex-direction: column;
@@ -221,9 +203,6 @@ function onDragStart(event, item, type) {
 }
 .catalog-panel--open { flex: 1 1 0; }
 
-/* Hàng công cụ xếp ngang, một hàng duy nhất — xếp dọc tốn ~70px/mục, đủ để
-   `.catalog-list` sụp còn vài px ở viewport thấp (docs/agent-rules/ui-design-guideline.md). Đổi lại
-   nhãn nguồn có thể bị ellipsis; `:title` trên select bù phần đọc đầy đủ. */
 .catalog-toolbar {
   display: flex;
   flex-direction: row;
@@ -233,9 +212,6 @@ function onDragStart(event, item, type) {
   flex-shrink: 0;
 }
 
-/* Margin do `.catalog-toolbar` lo — control bên trong không tự đặt margin.
-   `min-width: 0` là bắt buộc: `min-width: auto` mặc định của flex item giữ ô tìm
-   ở bề rộng nội dung, đẩy select tràn khỏi hàng. */
 .catalog-search {
   margin: 0;
   flex: 1 1 auto;

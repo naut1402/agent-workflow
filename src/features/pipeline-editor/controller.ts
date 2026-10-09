@@ -15,29 +15,12 @@ import {
 } from './business/catalog/index.js'
 import { buildRules, resolveRuleContentPathWithPatterns } from './business/rules/index.js'
 
-/**
- * Chuẩn hoá phần pipeline do người dùng nhập trước khi ghi ra đĩa.
- *
- * - `orchestrator.agent` là agent ref người dùng gõ tự do — tên của nó sẽ thành
- *   path khi `resolveAgent` đi tìm file, nên phải qua `sanitiseAgentName` (chống
- *   path-traversal, AGENTS.md §4). Ref hỏng ⇒ 400, không lưu im lặng.
- * - Step id bắt đầu bằng `__` bị từ chối: `__orchestrator__` là id dành riêng cho
- *   node điều phối, trùng vào là session ledger và chat surface lẫn hai thứ.
- * - `steps[].runner_id` (model pin cho step) là khoá tra registry runner lúc execute —
- *   cùng lý do với `orchestrator.agent`, id bị gọt phải bị từ chối chứ không lưu bản đã gọt.
- *
- * Chạy ở cả hai đường ghi (`writePipelineConfig` và `createPipelineProfile`) —
- * chỉ chặn một đường thì đường kia vẫn lưu được nội dung độc hại.
- */
+// xem docs/architecture/code/pipeline-editor.md §7
 function validatePipelinePayload(pipeline: any): string | null {
   for (const step of pipeline.steps ?? []) {
     if (typeof step?.id === 'string' && step.id.startsWith('__')) {
       return `step id must not start with "__": ${step.id}`
     }
-    // `runner_id` thành khoá tra registry lúc execute. So sánh bằng (như `orchestrator.agent`)
-    // để id bị `sanitiseRunnerId` gọt cũng bị từ chối thay vì âm thầm lưu bản đã gọt.
-    // Không kiểm runner có tồn tại: profile được chia sẻ giữa máy khác nhau, chặn ở đây
-    // làm profile hợp lệ trên máy A bị 400 trên máy B — ca đó đã có `resolveStepRunnerId` lo.
     const runnerId = step?.runner_id
     if (runnerId != null && runnerId !== '') {
       if (typeof runnerId !== 'string') return `invalid step runner_id: ${step?.id}`
@@ -49,10 +32,6 @@ function validatePipelinePayload(pipeline: any): string | null {
   const agent = pipeline.orchestrator?.agent
   if (agent != null && agent !== '') {
     if (typeof agent !== 'string') return 'invalid orchestrator.agent'
-    // Ref dạng `<source>:<name>` (source có thể nhiều đoạn, vd `repo:dev-agent-teams`).
-    // Mọi đoạn đều có thể thành một thành phần path ở `resolveAgentFilePath`, nên
-    // kiểm cả ref chứ không chỉ đoạn cuối, và so sánh bằng để một đoạn bị
-    // `sanitiseAgentName` gọt cũng bị từ chối thay vì âm thầm lưu bản đã gọt.
     const segments = agent.split(':')
     if (segments.some((seg) => pipelineEditorBusiness.sanitiseAgentName(seg) !== seg)) {
       return 'invalid orchestrator.agent'
@@ -154,7 +133,6 @@ export class PipelineEditorController extends AbstractController {
       target = path.join(root, 'pipeline.yaml')
     } else if (scope === 'task' && taskId) {
       if (/[^\w\-]/.test(taskId)) return this.badRequest('invalid taskId')
-      // Reject writes for archived/completed tasks (UI filter + manual-entry bypass).
       const stateFile = path.join(root, '.dev-state', `${taskId}.json`)
       try {
         const state = JSON.parse(await fs.readFile(stateFile, 'utf8')) as {
@@ -174,13 +152,9 @@ export class PipelineEditorController extends AbstractController {
       return this.badRequest('scope must be "global" or "task" (with taskId)')
     }
     const toWrite = scope === 'task' ? { ...pipeline, steps_replace: true } : pipeline
-    // Atomic (temp + rename): a read landing mid-write would see a truncated file,
-    // fall back to global/builtin, and reconcile could clear a legitimate gate.
+    // xem docs/architecture/code/pipeline-editor.md §8
     writeTextFileAtomicSync(target, dumpYaml(toWrite))
     if (scope === 'task' && taskId) {
-      // Import động: barrel monitor kéo theo runner (`node:child_process`), còn
-      // barrel orchestrator có side-effect khởi động vòng lặp lúc module-eval.
-      // Lỗi ở đây không được làm hỏng lượt ghi YAML — nó đã ghi xong rồi.
       try {
         const { applyOrchestratorConfigChange, reconcileGateState } = await import('../monitor/business/index.js')
         await reconcileGateState(root, taskId)
@@ -269,9 +243,7 @@ export class PipelineEditorController extends AbstractController {
     })
     if (!skillPath) {
       const parsed = parseCatalogItemId(id)
-      // `pluginName` đi thẳng vào `path.join` như `name` nên cũng phải qua whitelist
-      // ký tự (AGENTS.md §4), nếu không `id=repo:../../..:x` thoát khỏi `plugins/`.
-      // Resolve + `startsWith` bên dưới là lớp chặn thứ hai, độc lập với whitelist.
+      // xem docs/architecture/code/pipeline-editor.md §9
       if (parsed?.source?.startsWith('repo:') && pipelineEditorBusiness.sanitiseAgentName(parsed.name) === parsed.name) {
         const pluginName = parsed.source.slice('repo:'.length)
         if (pipelineEditorBusiness.sanitiseAgentName(pluginName) === pluginName) {

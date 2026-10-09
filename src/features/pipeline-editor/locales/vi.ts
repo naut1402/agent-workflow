@@ -1,5 +1,3 @@
-// UI strings cho feature module `pipeline-editor` (canvas biên tập pipeline,
-// panel catalog/rules/step, preview mô phỏng). vi là nguồn chân lý schema.
 export default {
   toolbar: {
     fanOutWarning:

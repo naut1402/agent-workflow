@@ -28,7 +28,6 @@ const fileInput = ref<HTMLInputElement | null>(null)
 
 const keyOf = (a: AgentMeta) => `${a.scope}:${a.name}`
 
-// Nhóm rỗng không render `<details>` (E5) — lọc ngay ở computed để template chỉ còn một `v-for` thuần.
 const groups = computed(() =>
   [
     {
@@ -147,8 +146,7 @@ const groups = computed(() =>
 </template>
 
 <style scoped lang="scss">
-/* Chuỗi overflow theo docs/agent-rules/ui-design-guideline.md: chỉ `.agent-side-groups` là lá mang
-   `overflow-y: auto`; mọi tầng trên nó `overflow: hidden` + `min-height: 0`. */
+// xem docs/agent-rules/ui-design-guideline.md §2
 .agent-side-menu {
   display: flex;
   flex-direction: column;
@@ -173,7 +171,6 @@ const groups = computed(() =>
   padding: 6px;
 }
 
-/* Cố ý KHÔNG khai `.agent-group::details-content`: chuỗi overflow đã dừng ở `.agent-side-groups`, không cần đi xuyên qua `<details>` (docs/agent-rules/ui-design-guideline.md). */
 .agent-group > summary {
   display: flex;
   align-items: center;

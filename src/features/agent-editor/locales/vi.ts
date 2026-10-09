@@ -1,4 +1,3 @@
-// Strings for the `agentEditor` feature module. vi is the source of truth.
 export default {
   list: {
     newButton: '+ Agent mới',
@@ -12,7 +11,6 @@ export default {
     download: 'Download agent',
     duplicate: 'Sao chép agent',
   },
-  // Empty state của `main`, KHÔNG phải của viewer — phần đó đã lên `common.markdownView.*`.
   viewer: {
     empty: 'Chọn một agent ở danh sách bên trái để xem nội dung',
     loading: 'Đang tải nội dung agent…',

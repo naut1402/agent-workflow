@@ -23,9 +23,7 @@ const pipelineSteps = ref([])
 const templates = ref([])
 const selectedPipelineStep = ref('')
 const selectedTemplate = ref('')
-// Keyed theo `String(index)`, rảnh là `null` (sentinel `-1` cũ biến mất).
-// So sánh phải là `=== String(index)`: hàng đầu danh sách có `index === 0`,
-// mọi biến thể dựa truthiness sẽ sai đúng ở hàng đó.
+// xem docs/architecture/code/agent-editor.md §3
 const { pendingKey: savingKey, run: runSaveTemplate } = useKeyedApiAction()
 
 const stepsOrder = computed({

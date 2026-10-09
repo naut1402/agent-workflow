@@ -1,10 +1,3 @@
-/**
- * AgentDraft shape + section metadata — logic thuần, không YAML, không Node.
- *
- * Tách khỏi `agentMarkdown.js` để component Vue dùng được mà không kéo theo
- * `yamlLib` (module Node-only). Giữ file này **0 import**.
- */
-
 export const DEFAULT_SECTION_ORDER = ['role', 'skills', 'workflow', 'guardrail', 'output']
 
 export const SECTION_TITLES = {

@@ -1,5 +1,3 @@
-// English translations — typed against the vi schema via `en: Messages` in the
-// en locale index, so a missing key here is a compile error.
 export default {
   toolbar: {
     fanOutWarning:

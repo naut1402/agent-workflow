@@ -11,13 +11,7 @@ import { t } from '../../../frontend/plugins/i18n'
 
 /**
  * State + thao tác CRUD cho pipeline profile của project đang chọn.
- *
- * Tách khỏi component để `EditorTargetPanel` thuần trình bày (không gọi API) và
- * để `PipelineEditor` là nơi duy nhất nạp pipeline vào canvas (qua
- * `applyLoadedPipeline`) — bất biến round-trip phụ thuộc vào điều đó.
- *
- * `load` trả `null` khi lỗi để caller không nạp `undefined` vào canvas; lỗi luôn
- * nằm ở `error` chứ không ném ra ngoài.
+ * `load` trả `null` khi lỗi; lỗi luôn nằm ở `error` chứ không ném ra ngoài.
  */
 export function usePipelineProfiles(getProjectId: () => string | null | undefined) {
   const profiles = ref<any[]>([])
@@ -89,10 +83,7 @@ export function usePipelineProfiles(getProjectId: () => string | null | undefine
     return downloadPipelineProfile(name, projectId())
   }
 
-  /**
-   * `null` = user huỷ dialog ghi đè (no-op, không phải lỗi) — caller không nên
-   * hiện banner lỗi cho trường hợp này, khác với `false` (lỗi thật).
-   */
+  /** `null` = user huỷ dialog ghi đè (không phải lỗi); `false` = lỗi thật. */
   async function importFromFile(
     file: File,
     { confirmOverwrite }: { confirmOverwrite: (name: string) => Promise<boolean> },
@@ -118,7 +109,6 @@ export function usePipelineProfiles(getProjectId: () => string | null | undefine
     return save(name, parsed)
   }
 
-  // Danh sách profile là per-project — đổi project phải nạp lại.
   watch(() => getProjectId(), () => { refresh() })
 
   return { profiles, loading, error, refresh, load, save, remove, download, importFromFile }

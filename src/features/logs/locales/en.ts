@@ -1,6 +1,3 @@
-
-// English strings for the `logs` feature module. Typed against the vi schema —
-// a missing key is a compile error.
 export default {
   title: 'Logs',
   subtitle: 'Centralized logs (global ~/.dev-team-dashboard/logs/)',

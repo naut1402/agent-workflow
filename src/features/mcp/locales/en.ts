@@ -1,4 +1,3 @@
-// English translations for the `mcp` namespace. Mirrors the vi schema.
 export default {
   panel: {
     title: 'MCP Servers',

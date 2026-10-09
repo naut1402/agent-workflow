@@ -1,4 +1,3 @@
-// UI strings cho feature `mcp` (tab MCP trong màn Runner). Tiếng Việt là bản gốc.
 export default {
   panel: {
     title: 'MCP Server',

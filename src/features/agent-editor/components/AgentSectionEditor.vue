@@ -22,9 +22,7 @@ const props = defineProps({
 const emit = defineEmits(['update:draft', 'message', 'error'])
 
 const collapsed = ref(new Set())
-// Keyed: giữ KEY của section đang lưu, không phải boolean. Rảnh là `null` —
-// `''` từng là sentinel "không ai chạy" nhưng cũng là một key hợp lệ, nên mọi
-// so sánh phải là `=== key`, không dựa truthiness.
+// xem docs/architecture/code/agent-editor.md §3
 const { pendingKey: savingTemplate, run: runSaveTemplate } = useKeyedApiAction()
 
 const order = computed({

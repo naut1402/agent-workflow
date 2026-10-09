@@ -12,9 +12,6 @@ import CScreenLayout from '../../../frontend/ui/CScreenLayout.vue'
 
 const { t } = useI18nHelpers()
 
-// This panel grew the copy-with-flash pattern first; it now lives in
-// `core/composables/useCopyText` so the chat bubbles share it instead of
-// carrying a second copy of the `execCommand` fallback.
 const { copyFlash, copyText } = useCopyText()
 
 type Tab = 'audit' | 'request' | 'events' | 'usage' | 'jobs'
@@ -51,7 +48,6 @@ function onHeaderSort(key: string, ev: MouseEvent) {
   toggleSort(key, { append: ev.shiftKey })
 }
 
-/** Pipeline / ad-hoc step tagged on the job (`stepId` or `pipelineStepId`). */
 function jobStepId(job: { metadata?: Record<string, unknown> | null }): string {
   const meta = job.metadata || {}
   if (typeof meta.stepId === 'string' && meta.stepId) return meta.stepId
@@ -148,7 +144,6 @@ function payloadPreview(entry: LogEntry): string {
   }
 }
 
-// React to tab changes (covers both programmatic and click-driven switches).
 watch(
   tab,
   (t) => {
@@ -271,7 +266,6 @@ onUnmounted(() => {
       <span class="muted logs-count">{{ displayed.length }}/{{ entries.length }}</span>
     </div>
 
-    <!-- Audit -->
     <div v-if="tab === 'audit' && enabledTypes.audit" class="logs-table-wrap">
     <table class="logs-table">
       <thead>
@@ -327,7 +321,6 @@ onUnmounted(() => {
     </table>
     </div>
 
-    <!-- Request -->
     <div v-else-if="tab === 'request' && enabledTypes.request" class="logs-table-wrap">
     <table class="logs-table logs-table-request">
       <thead>
@@ -421,7 +414,6 @@ onUnmounted(() => {
     </table>
     </div>
 
-    <!-- Events (domain bus JSONL) -->
     <div v-else-if="tab === 'events' && enabledTypes.events" class="logs-table-wrap">
     <table class="logs-table logs-table-events">
       <thead>
@@ -484,7 +476,6 @@ onUnmounted(() => {
     </table>
     </div>
 
-    <!-- Usage (LLM token snapshots) -->
     <div v-else-if="tab === 'usage' && enabledTypes.usage" class="logs-table-wrap">
     <table class="logs-table logs-table-usage">
       <thead>
@@ -560,7 +551,6 @@ onUnmounted(() => {
     </table>
     </div>
 
-    <!-- Jobs -->
     <div v-else-if="tab === 'jobs' && enabledTypes.jobs" class="logs-table-wrap">
       <table class="logs-table logs-table-jobs">
         <thead>
@@ -687,7 +677,6 @@ onUnmounted(() => {
   background: var(--panel);
   box-shadow: 0 1px 0 var(--border);
 }
-/* Time vs level: give ISO timestamp room and gap before level badge */
 .logs-table th:nth-child(1),
 .logs-table td:nth-child(1) {
   min-width: 12.5rem;

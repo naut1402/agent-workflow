@@ -1,4 +1,3 @@
-// English translations for the `agentEditor` namespace — keys mirror vi/agentEditor.ts.
 export default {
   list: {
     newButton: '+ New agent',

@@ -1,7 +1,3 @@
-/**
- * Parse / compile custom agent markdown ↔ AgentDraft JSON.
- */
-
 import { asArray } from '../../../backend/lib/arrayUtils.ts'
 import { loadYaml, dumpYaml } from '../../../shared/lib/yamlLib'
 import { slugifySectionKey } from '../../../shared/lib/stringUtils.ts'
@@ -69,7 +65,7 @@ function appendUnclassified(sections, heading, content) {
     : block.trim()
 }
 
-/** Parse agent markdown (YAML via `src/backend/lib/yamlLib`). */
+/** Parse agent markdown (YAML via `src/shared/lib/yamlLib`). */
 export function parseAgentMarkdown(raw) {
   const lines = raw.split(/\r?\n/)
   if (lines[0]?.trim() !== '---') {
