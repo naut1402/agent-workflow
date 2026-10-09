@@ -183,7 +183,7 @@ describe('TC-B06: entrypoint MCP không có trên đĩa', () => {
     }
     copy('src/features/runner/business/providers/selfMcpConfig.ts')
     copy('src/backend/lib/fileHelper.ts')
-    copy('src/features/mcp/business/types.ts')
+    copy('src/features/mcp/schemas/mcpServer.ts')
     if (withEntrypoint) copy('mcp/stdio.ts')
     return dir
   }

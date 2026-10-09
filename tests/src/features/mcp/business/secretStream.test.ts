@@ -1,11 +1,10 @@
 import { describe, expect, test } from 'bun:test'
-import { createSecretStreamMasker } from '../../../../../src/features/mcp/business/secretStream.js'
-import { MCP_MASK, maskSecretText } from '../../../../../src/features/mcp/business/types.js'
+import { SecretMasker } from '../../../../../src/features/mcp/business/SecretMasker.js'
 
 /**
  * TC-SEC-41…TC-SEC-48 — bộ lọc mask CÓ TRẠNG THÁI cho log dạng stream (#385, PR 1).
  *
- * Bề mặt: `createSecretStreamMasker(secrets)` → `{ push(chunk), flush() }`.
+ * Bề mặt: `new SecretMasker(secrets).stream()` → `{ push(chunk), flush() }`.
  *
  * Ca đỏ ở đây nghĩa là một mảnh secret đã đi ra ngoài, nên mọi ca âm bản quét
  * **toàn bộ** output nối lại chứ 🚫 không chỉ nhìn chunk cuối (`test-spec.md` §2.3).
@@ -15,11 +14,11 @@ const CANARY = 'sk-test-LEAKCANARY-0123456789'
 
 /** Nối mọi thứ bộ lọc phát ra — đây mới là thứ tới UI/log, không phải từng chunk. */
 function drain(secrets: readonly string[], chunks: readonly string[]): string {
-  const masker = createSecretStreamMasker(secrets)
+  const masker = new SecretMasker(secrets).stream()
   return chunks.map((c) => masker.push(c)).join('') + masker.flush()
 }
 
-describe('createSecretStreamMasker — secret vắt qua biên chunk', () => {
+describe('SecretMasker.stream — secret vắt qua biên chunk', () => {
   // TC-SEC-41 ⭐
   test('TC-SEC-41: secret cắt làm 2 chunk ⇒ 🚫 không mảnh nào lọt, đúng 1 sentinel', () => {
     const out = drain([CANARY], ['…head sk-test-LEAK', 'CANARY-0123456789 tail…'])
@@ -27,8 +26,8 @@ describe('createSecretStreamMasker — secret vắt qua biên chunk', () => {
     expect(out).not.toContain(CANARY)
     expect(out).not.toContain('sk-test-LEAK')
     expect(out).not.toContain('CANARY-0123')
-    expect(out.split(MCP_MASK)).toHaveLength(2) // đúng 1 sentinel
-    expect(out).toBe(`…head ${MCP_MASK} tail…`)
+    expect(out.split(SecretMasker.MASK)).toHaveLength(2) // đúng 1 sentinel
+    expect(out).toBe(`…head ${SecretMasker.MASK} tail…`)
   })
 
   // TC-SEC-42 — chunk giữa nằm TRỌN trong secret.
@@ -37,24 +36,24 @@ describe('createSecretStreamMasker — secret vắt qua biên chunk', () => {
 
     expect(out).not.toContain(CANARY)
     expect(out).not.toContain('LEAKCANARY')
-    expect(out).toBe(`a ${MCP_MASK} b`)
+    expect(out).toBe(`a ${SecretMasker.MASK} b`)
   })
 
   // TC-SEC-43 ⭐ — secret ở CUỐI luồng, chỉ `flush()` mới phát ra được.
   test('TC-SEC-43: secret ở cuối luồng ⇒ flush() phát mask, 🚫 không mất ký tự nào', () => {
-    const masker = createSecretStreamMasker([CANARY])
+    const masker = new SecretMasker([CANARY]).stream()
     const pushed = masker.push(`tail ${CANARY}`)
     const flushed = masker.flush()
 
     expect(flushed).not.toBe('')
-    expect(pushed + flushed).toBe(`tail ${MCP_MASK}`)
+    expect(pushed + flushed).toBe(`tail ${SecretMasker.MASK}`)
     expect(pushed + flushed).not.toContain(CANARY)
   })
 
   test('TC-SEC-43b: ký tự ĐỨNG SAU secret ở cuối luồng 🚫 không bị nuốt', () => {
-    const masker = createSecretStreamMasker([CANARY])
+    const masker = new SecretMasker([CANARY]).stream()
     const out = masker.push(`x ${CANARY} duoi-cung`) + masker.flush()
-    expect(out).toBe(`x ${MCP_MASK} duoi-cung`)
+    expect(out).toBe(`x ${SecretMasker.MASK} duoi-cung`)
   })
 
   /**
@@ -62,7 +61,7 @@ describe('createSecretStreamMasker — secret vắt qua biên chunk', () => {
    * `push` phải trả **đúng chunk**, cùng độ dài, NGAY LẬP TỨC (0 ký tự bị giữ lại).
    */
   test('TC-SEC-44: secrets rỗng ⇒ push trả nguyên chunk tức thì, flush trả rỗng', () => {
-    const masker = createSecretStreamMasker([])
+    const masker = new SecretMasker([]).stream()
     const chunks = ['dong 1\n', 'dong 2 sk-khong-phai-secret\n', '']
 
     for (const chunk of chunks) {
@@ -82,7 +81,7 @@ describe('createSecretStreamMasker — secret vắt qua biên chunk', () => {
     const text = `p ${secrets[0]} q ${secrets[1]} r ${secrets[2]} s`
     const chunks = text.match(/.{1,7}/gs) ?? []
 
-    const masker = createSecretStreamMasker(secrets)
+    const masker = new SecretMasker(secrets).stream()
     let consumed = ''
     let emitted = ''
     for (const chunk of chunks) {
@@ -91,14 +90,14 @@ describe('createSecretStreamMasker — secret vắt qua biên chunk', () => {
       // Đo trên bản ĐÃ MASK: tổng mask = phần đã phát + phần còn giữ lại, nên
       // hiệu hai vế chính là độ dài buffer. So trên bản thô thì phép trừ còn
       // nuốt cả phần text ngắn đi vì mask, 🚫 không đo đúng thứ cần đo.
-      const retained = maskSecretText(consumed, secrets).length - emitted.length
+      const retained = new SecretMasker(secrets).mask(consumed).length - emitted.length
       expect(retained).toBeGreaterThanOrEqual(0)
       expect(retained).toBeLessThanOrEqual(maxLen - 1)
     }
     const whole = emitted + masker.flush()
 
     for (const secret of secrets) expect(whole).not.toContain(secret)
-    expect(whole).toBe(`p ${MCP_MASK} q ${MCP_MASK} r ${MCP_MASK} s`)
+    expect(whole).toBe(`p ${SecretMasker.MASK} q ${SecretMasker.MASK} r ${SecretMasker.MASK} s`)
   })
 
   /**
@@ -113,7 +112,7 @@ describe('createSecretStreamMasker — secret vắt qua biên chunk', () => {
       `inline ghp_LEAKCANARY0123456789 va abcdefgh`,
       `duoi cung ${CANARY}`,
     ].join('\n')
-    const expected = maskSecretText(text, secrets)
+    const expected = new SecretMasker(secrets).mask(text)
 
     // Seed cố định ⇒ ca này tái lập được, 🚫 không flaky.
     let seed = 20_251_008
@@ -136,13 +135,13 @@ describe('createSecretStreamMasker — secret vắt qua biên chunk', () => {
     const out = drain([CANARY], [`mot ${CANARY} hai sk-test-`, 'LEAKCANARY-0123456789 ba'])
 
     expect(out).not.toContain(CANARY)
-    expect(out).toBe(`mot ${MCP_MASK} hai ${MCP_MASK} ba`)
-    expect(out.split(MCP_MASK)).toHaveLength(3)
+    expect(out).toBe(`mot ${SecretMasker.MASK} hai ${SecretMasker.MASK} ba`)
+    expect(out.split(SecretMasker.MASK)).toHaveLength(3)
   })
 
   // TC-SEC-48
   test('TC-SEC-48: push("") và flush() hai lần ⇒ 🚫 không ném, flush idempotent', () => {
-    const masker = createSecretStreamMasker([CANARY])
+    const masker = new SecretMasker([CANARY]).stream()
 
     expect(() => masker.push('')).not.toThrow()
     expect(masker.push('')).toBe('')
@@ -154,13 +153,13 @@ describe('createSecretStreamMasker — secret vắt qua biên chunk', () => {
     expect(first).not.toContain(CANARY)
 
     // Bộ lọc rỗng cũng phải idempotent.
-    const empty = createSecretStreamMasker([])
+    const empty = new SecretMasker([]).stream()
     expect(empty.flush()).toBe('')
     expect(empty.flush()).toBe('')
   })
 
   test('TC-SEC-48b: secret dài đúng 1 ký tự ⇒ vẫn mask (keep === 0 🚫 không gộp hai nghĩa)', () => {
     // `hasSecret` tách khỏi `keep` chính là để ca này 🚫 rơi về đường "không secret".
-    expect(drain(['X'], ['a', 'X', 'b'])).toBe(`a${MCP_MASK}b`)
+    expect(drain(['X'], ['a', 'X', 'b'])).toBe(`a${SecretMasker.MASK}b`)
   })
 })

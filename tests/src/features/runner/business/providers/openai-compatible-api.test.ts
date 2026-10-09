@@ -693,7 +693,7 @@ describe('OpenAiCompatibleProvider — job log: system prompt + tool-call outcom
 // `beforeEach` 🚫 có trong khối import đầu file — khai thêm ở ĐÂY thay vì sửa
 // dòng đó, để diff của khối này 🚫 chạm phần trên.
 import { beforeEach } from 'bun:test'
-import { upsertMcpServer } from '../../../../../../src/features/mcp/business/registry.js'
+import { mcpRegistry } from '../../../../../../src/features/mcp/business/McpRegistry.js'
 
 /**
  * TC-P6-02 · TC-P6-05 · TC-P6-06 (vế openai) · TC-P6-10 · TC-P6-20.
@@ -732,7 +732,7 @@ describe('OpenAiCompatibleProvider — tool MCP (#379)', () => {
   })
 
   function seedMcp(id: string, env: Record<string, string> = {}) {
-    upsertMcpServer({
+    mcpRegistry.upsert({
       id,
       label: id,
       enabled: true,

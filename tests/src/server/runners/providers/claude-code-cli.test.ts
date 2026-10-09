@@ -7,7 +7,7 @@ import {
   buildClaudeInvocation,
   createLocalConsoleProvider,
 } from '../../../../../src/features/runner/business/providers/claude-code-cli.js'
-import { upsertMcpServer } from '../../../../../src/features/mcp/business/registry.js'
+import { mcpRegistry } from '../../../../../src/features/mcp/business/McpRegistry.js'
 import type { CredentialProfile, ResolvedAgent } from '../../../../../src/features/runner/business/types.js'
 
 // Runs the shared local-console provider against real short-lived shell
@@ -875,7 +875,7 @@ describe('claude-code-cli — execute() với MCP', () => {
     }
   }
   function seedServer(id: string, env: Record<string, string> = {}) {
-    upsertMcpServer({
+    mcpRegistry.upsert({
       id,
       label: id,
       enabled: true,
@@ -1306,7 +1306,7 @@ describe('claude-code-cli — self-MCP cho job điều phối (Tf2f484e2)', () =
   }, 30_000)
 
   test('TC-D03 (b): job step thường, runner CÓ khai mcpServers ⇒ chỉ server người dùng, 🚫 không entry dashboard', async () => {
-    upsertMcpServer({
+    mcpRegistry.upsert({
       id: 'nguoi-dung',
       label: 'nguoi-dung',
       enabled: true,
@@ -1324,7 +1324,7 @@ describe('claude-code-cli — self-MCP cho job điều phối (Tf2f484e2)', () =
   }, 30_000)
 
   test('TC-D03 (c): job điều phối tuyến `mcp` + runner có server riêng ⇒ CẢ HAI entry cùng vào file', async () => {
-    upsertMcpServer({
+    mcpRegistry.upsert({
       id: 'nguoi-dung',
       label: 'nguoi-dung',
       enabled: true,
@@ -1341,7 +1341,7 @@ describe('claude-code-cli — self-MCP cho job điều phối (Tf2f484e2)', () =
 
   // ── TC-D04 ── trùng id với server người vận hành đã khai ──────────────────
   test('TC-D04: người dùng đã khai id `dev-team-dashboard` ⇒ đúng MỘT entry (của dashboard) + cảnh báo vào log', async () => {
-    upsertMcpServer({
+    mcpRegistry.upsert({
       id: SELF_ID,
       label: 'bản của người dùng',
       enabled: true,
@@ -1496,7 +1496,7 @@ describe('cursor-cli — MCP qua workspace config file (#378)', () => {
   }
 
   function seedServer(id: string, env: Record<string, string> = {}) {
-    upsertMcpServer({
+    mcpRegistry.upsert({
       id,
       label: id,
       enabled: true,

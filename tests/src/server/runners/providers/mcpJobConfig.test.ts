@@ -3,8 +3,8 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { prepareMcpConfigForJob } from '../../../../../src/features/runner/business/providers/mcpJobConfig.js'
-import { upsertMcpServer } from '../../../../../src/features/mcp/business/registry.js'
-import type { McpStdioServer } from '../../../../../src/features/mcp/business/types.js'
+import { mcpRegistry } from '../../../../../src/features/mcp/business/McpRegistry.js'
+import type { McpStdioServer } from '../../../../../src/features/mcp/schemas/mcpServer.js'
 
 /**
  * TC-44…TC-53 (+ TC-100) — `prepareMcpConfigForJob`.
@@ -32,7 +32,7 @@ function runtimeFiles(): string[] {
 }
 
 function seed(over: Partial<McpStdioServer> & { id: string }) {
-  upsertMcpServer({
+  mcpRegistry.upsert({
     label: over.id,
     enabled: true,
     transport: 'stdio',

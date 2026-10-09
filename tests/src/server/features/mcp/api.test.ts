@@ -8,7 +8,7 @@ import { on, _resetEventBusForTest } from '../../../../../src/backend/events/ind
 import type { DashboardEvent } from '../../../../../src/backend/events/index.js'
 import { resetLogDriver, setLogDriver } from '../../../../../src/backend/log/driver.js'
 import { AuditLogEntry, type LogEntry } from '../../../../../src/shared/log/schema.js'
-import { MCP_MAX_TIMEOUT_MS } from '../../../../../src/features/mcp/business/types.js'
+import { MCP_MAX_TIMEOUT_MS } from '../../../../../src/features/mcp/schemas/mcpServer.js'
 
 /**
  * TC-32…TC-43 — contract HTTP `/api/mcp-servers`. Đây là bề mặt quan sát chính
