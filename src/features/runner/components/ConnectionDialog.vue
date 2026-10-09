@@ -65,8 +65,11 @@ const isEdit = computed(() => Boolean(props.connection?.id))
 const kind = ref<ConnectionKind>('local-console')
 const label = ref('')
 const selectedCommandId = ref('')
+/** Nullable by design — rotation across a provider's models is a future feature (see design.md). */
 const selectedModels = ref<string[]>([])
+/** Opt-in per-Connection extra tools (shell/git/search/web) beyond the base 4 file-ops — default empty, unchanged behavior. */
 const extraTools = ref<string[]>([])
+/** Opt-in per-Connection MCP servers — default empty, which leaves the CLI argv untouched. */
 const mcpServers = ref<string[]>([])
 const mcpOptions = ref<{ id: string; label: string }[]>([])
 const scanning = ref(false)
@@ -79,6 +82,9 @@ const editingCommandId = ref<string | null>(null)
 const registerDraft = ref({ command: '', path: '', flagsText: '' })
 const registerError = ref('')
 
+// ai-provider: the provider (interface + base URL) is a reusable provider
+// config; the credential is chosen/created right here, tying it to this
+// connection specifically.
 const selectedProviderConfigId = ref('')
 const providerConfigList = ref<ProviderConfigOption[]>([...props.providerConfigs])
 const showProviderDialog = ref(false)
@@ -103,11 +109,13 @@ const providerConfigSelectOptions = computed(() =>
 const credentialId = ref('')
 const credentials = ref<CredentialProfile[]>([])
 const showNewCredential = ref(false)
+/** Set while the "+ Credential" subform is editing an existing credential instead of creating one. */
 const editingCredentialId = ref<string | null>(null)
+/** `id` intentionally not user-facing — upsertCredential mints one when omitted. */
 const newCred = ref({ label: '', secretValue: '', secretRef: '' })
 
 const selectedCredential = computed(() => credentials.value.find((c) => c.id === credentialId.value) || null)
-// xem docs/architecture/code/runner.md §26
+/** Hint only — must stay a placeholder, not a prefilled value, or "field left untouched" becomes indistinguishable from "field filled with the hint". */
 const secretRefPlaceholder = computed(
   () => DEFAULT_SECRET_ENV_HINTS[selectedProviderConfig.value?.providerId || ''] || 'env:ANTHROPIC_API_KEY',
 )
@@ -121,7 +129,13 @@ const filteredCredentials = computed(() =>
 const credentialSelectOptions = computed(() => filteredCredentials.value.map((c) => ({ value: c.id, label: c.label })))
 
 const oauthCapableProviders = ref<string[]>([])
+/**
+ * Whether the server can encrypt/store a secret at all (`DASHBOARD_SECRET_KEY`
+ * set) — `true` until we actually hear otherwise, so the warning below never
+ * flashes on for the split second before `loadOAuthCapabilities()` resolves.
+ */
 const vaultConfigured = ref(true)
+/** OAuth tokens land in the same vault as pasted secrets — no vault key, no OAuth either. */
 const canConnectOAuth = computed(
   () => vaultConfigured.value && oauthCapableProviders.value.includes(selectedProviderConfig.value?.providerId || ''),
 )
@@ -140,20 +154,24 @@ const modelPlaceholder = computed(() => DEFAULT_MODEL_HINTS[selectedProviderConf
 const modelOptions = ref<string[]>([])
 const loadingModels = ref(false)
 const modelFetchError = ref('')
+/** local-console model selector shows only for the claude-code-cli command — no equivalent for Cursor/Codex. */
 const isClaudeCliSelected = computed(
   () => kind.value === 'local-console' && selectedCommand.value?.providerId === 'claude-code-cli',
 )
+/** A key to fetch models with — an existing credential, or a not-yet-saved secret typed in "+ Credential"; claude-code-cli needs neither (static alias list). */
 const canFetchModels = computed(
   () =>
     isClaudeCliSelected.value ||
     Boolean(selectedProviderConfig.value && (credentialId.value || newCred.value.secretValue.trim())),
 )
+/** Fetched models ∪ already-selected ones — so a model saved before a fresh "Load models" fetch still shows up. */
 const modelSelectOptions = computed(() => {
   const ids = new Set(modelOptions.value)
   selectedModels.value.forEach((m) => ids.add(m))
   return Array.from(ids).map((m) => ({ value: m, label: m }))
 })
 
+/** UI only allows a single model today; `selectedModels` stays an array for the future rotate-across-models feature. */
 const selectedModel = computed<string>({
   get: () => selectedModels.value[0] || '',
   set: (v) => {
@@ -174,7 +192,7 @@ async function refreshProviderConfigs() {
     const data = await fetchProviderConfigs()
     providerConfigList.value = (data.providerConfigs || []) as ProviderConfigOption[]
   } catch {
-    /* ignore */
+    /* keep the props-provided list on failure */
   }
 }
 
@@ -214,7 +232,7 @@ async function loadOAuthCapabilities() {
     oauthCapableProviders.value = data.providers || []
     vaultConfigured.value = data.vaultConfigured !== false
   } catch {
-    /* ignore */
+    /* best-effort — the "Connect via browser" button just won't show */
   }
 }
 
@@ -240,7 +258,7 @@ function pollOAuthStatus() {
         oauthFlow.value = { ...oauthFlow.value, status: 'error', error: data.error || 'connect failed' }
       }
     } catch {
-      /* ignore */
+      /* transient network hiccup — keep polling until the flow's own TTL expires */
     }
   }, 2000)
 }
@@ -323,6 +341,8 @@ async function saveNewCredential() {
   error.value = ''
   const editingId = editingCredentialId.value
   const existing = editingId ? credentials.value.find((c) => c.id === editingId) : null
+  // Editing keeps the current secret untouched unless a new one is entered;
+  // creating still requires one of the two secret fields.
   if (!editingId && !newCred.value.secretValue.trim() && !newCred.value.secretRef.trim()) {
     error.value = t('runner.errors.credentialSecretRequired')
     return
@@ -332,6 +352,9 @@ async function saveNewCredential() {
       ...(editingId ? { id: editingId } : {}),
       label: newCred.value.label || undefined,
       provider: selectedProviderConfig.value?.providerId || '',
+      // Prefer the pasted value; the raw secretRef field is the advanced/legacy
+      // path (env:VAR_NAME on the server, or file:/path) for operators who
+      // already manage secrets that way.
       ...(newCred.value.secretValue.trim()
         ? { secretValue: newCred.value.secretValue }
         : newCred.value.secretRef.trim()
@@ -409,16 +432,29 @@ const selectedProviderEntry = computed(() =>
 )
 const mcpDeliveryOfSelected = computed(() => selectedProviderEntry.value?.mcpDelivery)
 
-// xem docs/architecture/code/runner.md §25
+/**
+ * Họ `ai-api` nạp tool MCP thẳng vào vòng tool-use của chính nó
+ * (`mcpToolBridge`), 🚫 KHÔNG qua file cấu hình — nên `mcpDeliveryOf` cố ý vẫn
+ * trả `'unsupported'` cho chúng (giả định A-4). Đó là giá trị đúng cho câu hỏi
+ * "giao cấu hình kiểu gì", nhưng là câu trả lời SAI cho câu hỏi người dùng đang
+ * hỏi ở đây — "bật cái này có tác dụng không". Có.
+ */
 const mcpViaToolBridge = computed(
   () => familyOfProviderId(effectiveProviderId.value, props.providers) === 'ai-api',
 )
 
+// 📌 So với `'unsupported'`, 🚫 không so "khác `config-file-flag`": từ khi
+// cursor nhận cấu hình qua `workspace-config-file`, cách so cũ báo sai rằng
+// provider không dùng được MCP. Trừ tiếp họ `ai-api` — xem `mcpViaToolBridge`.
 const mcpUnsupported = computed(
   () => mcpDeliveryOfSelected.value === 'unsupported' && !mcpViaToolBridge.value,
 )
 
-// xem docs/architecture/code/runner.md §25
+/**
+ * Cursor đọc `<workspace>/.cursor/mcp.json`, tức file cấu hình nằm TRONG repo
+ * của người dùng suốt vòng đời job, và `--approve-mcps` ghi vào `~/.cursor` một
+ * tác dụng phụ sống SAU job. Người dùng phải thấy cả hai TRƯỚC khi bật.
+ */
 const mcpWorkspaceFile = computed(() => mcpDeliveryOfSelected.value === 'workspace-config-file')
 
 watch(
@@ -451,6 +487,10 @@ function buildConnectionId(resolvedProvider: string): string {
   return `${base}-${suffix}`.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64)
 }
 
+/**
+ * Id sẽ gửi lên BE, hiện ngay dưới ô Nhãn. Chưa chọn được provider thì chưa đoán
+ * được hậu tố nên trả rỗng và dòng hint tự ẩn.
+ */
 const previewConnectionId = computed(() => {
   const resolvedProvider =
     kind.value === 'local-console'
@@ -474,6 +514,12 @@ function inferProviderFromPath(pathOrCmd: string): string {
   return 'console-command'
 }
 
+/**
+ * Auto-migrate a legacy connection (saved before the provider-config split, or
+ * one whose `config.providerConfigId` link is missing/stale) by creating a
+ * matching provider config from its providerId/baseURL. This runs silently on
+ * edit — the user sees the provider pre-selected and can save normally.
+ */
 async function migrateLegacyToProviderConfig(conn: ConnectionOption) {
   const id = `mig-${conn.id}`
   const baseURL = typeof conn.config?.baseURL === 'string' ? conn.config.baseURL : undefined
@@ -487,7 +533,7 @@ async function migrateLegacyToProviderConfig(conn: ConnectionOption) {
     providerConfigList.value.push(providerConfig)
     selectedProviderConfigId.value = providerConfig.id
   } catch {
-    /* ignore */
+    /* best-effort — dropdown stays empty, user can still create manually */
   }
 }
 
@@ -513,10 +559,14 @@ function applyConnectionPrefill() {
     if (link && providerConfigList.value.some((p) => p.id === link)) {
       selectedProviderConfigId.value = link
     } else {
+      // Legacy connection (or missing link): match on provider — credential no
+      // longer lives on the provider config, so it isn't part of the match.
       const match = providerConfigList.value.find((p) => p.providerId === c.providerId)
       if (match) {
         selectedProviderConfigId.value = match.id
       } else if (c.providerId) {
+        // Auto-migrate: create a provider config from the legacy connection
+        // so the user can edit/save without losing their config.
         migrateLegacyToProviderConfig(c)
       }
     }
@@ -689,6 +739,7 @@ async function save() {
         if (resolvedProvider === 'claude-code-cli' && selectedModels.value.length) {
           localConfig.model = selectedModels.value[0]
         }
+        // Chỉ ghi khi khác rỗng — connection cũ không được mọc khoá thừa.
         if (mcpServers.value.length) localConfig.mcpServers = mcpServers.value
         const config = Object.keys(localConfig).length ? localConfig : undefined
         const { connection } = await saveConnection({
@@ -716,10 +767,14 @@ async function save() {
         return
       }
 
-      // xem docs/architecture/code/runner.md §26
+      // Keep the connection self-contained (providerId + credentialId + baseURL
+      // copied from the provider config) so the execution plane stays unchanged;
+      // `providerConfigId` just remembers the link for the UI.
       const config: Record<string, unknown> = { providerConfigId: pc.id }
       if (selectedModels.value.length) {
         config.models = selectedModels.value
+        // Legacy single-model field — kept for the provider wrappers, which pick
+        // the first entry until the rotate-across-models feature lands.
         config.model = selectedModels.value[0]
       }
       if (pc.baseURL) config.baseURL = pc.baseURL
@@ -739,6 +794,7 @@ async function save() {
       emit('saved', connection.id)
       emit('close')
     } catch (e: any) {
+      // Như `RunnerDialog.save()` — status là hợp đồng, message BE thì không.
       error.value =
         e?.status === 409
           ? t('runner.errors.connIdTaken', { id: previewConnectionId.value })
@@ -747,7 +803,11 @@ async function save() {
   })
 }
 
-// xem docs/architecture/code/runner.md §25
+/**
+ * Id đã lưu trong Connection nhưng server đã tắt hoặc đã xoá vẫn phải hiện ra.
+ * Lọc chúng khỏi danh sách thì người dùng không có cách nào bỏ chọn, mà `save`
+ * vẫn ghi lại nguyên si — job sau đó chạy thiếu tool và chỉ cảnh báo trong log.
+ */
 const mcpChoices = computed(() => {
   const known = new Set(mcpOptions.value.map((m) => m.id))
   return [
@@ -763,7 +823,7 @@ async function loadMcpOptions() {
       .filter((s) => s.enabled)
       .map((s) => ({ id: s.id, label: s.label || s.id }))
   } catch {
-    /* ignore */
+    /* danh sách rỗng — không chặn phần còn lại của dialog */
   }
 }
 

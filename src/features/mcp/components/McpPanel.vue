@@ -45,10 +45,18 @@ function openEdit(s: McpServerConfig) {
   message.value = ''
 }
 
-// xem docs/mcp/client.md §13
+/**
+ * Bản sao mang id mới nên backend không có bản cũ để khôi phục giá trị sau
+ * `***` — khoá đó bị bỏ hẳn (đúng: ghi literal `***` xuống server con còn tệ
+ * hơn). Xoá value tại đây để ô hiện ra RỖNG: `***` trông như đã có giá trị,
+ * người dùng lưu rồi mới phát hiện ở lần job đầu tiên fail 401.
+ */
 function openCopy(s: McpServerConfig, e: Event) {
   e.stopPropagation()
   const copy: McpServerConfig = JSON.parse(JSON.stringify(s))
+  // 🚫 Không đặt `copy.id`: id đã suy từ Tên hiển thị, và dialog ở chế độ copy
+  // (`isEdit === false`) không đọc `props.server.id` nữa. Đổi LABEL là đủ để bản
+  // sao nhận id riêng — trùng thì dialog tự thêm hậu tố theo `takenIds`.
   copy.label = t('mcp.panel.copyLabelSuffix', { label: s.label || s.id })
   copy.enabled = false
   copy.lastCheck = null

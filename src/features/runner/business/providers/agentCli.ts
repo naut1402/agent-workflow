@@ -1,3 +1,8 @@
+/**
+ * Agent CLI family — Claude / Cursor / Codex (and future AI CLIs).
+ * Distinct from `console-command` (argv-only, never default AI runner).
+ */
+
 import type { RunnerProvider, ExecuteResult, ExecuteRequest, McpDelivery, ProviderFamily } from '../types.js'
 
 export type { ProviderFamily, McpDelivery }
@@ -25,6 +30,8 @@ export interface AgentCliCapabilities {
 /** Single source of truth for both the provider and the UI. */
 export function mcpDeliveryOf(providerId: string): McpDelivery {
   if (providerId === 'claude-code-cli') return 'config-file-flag'
+  // `cursor-agent` không có cờ kiểu `--mcp-config`: nó resolve `.cursor/mcp.json`
+  // theo cwd. Kiểu đã có sẵn trong `McpDelivery` — 🚫 không thêm kiểu mới.
   if (providerId === 'cursor-cli') return 'workspace-config-file'
   return 'unsupported'
 }

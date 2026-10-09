@@ -11,8 +11,12 @@ import {
   safeReadDir,
   writeTextFile,
 } from '../../../backend/lib/fileHelper.js'
-// xem docs/architecture/code/agent-editor.md §1
+// Peer sâu, y như barrel `agent-editor/business/index.ts` đang làm: đi qua
+// `pipeline-editor/business/index.js` sẽ thành vòng vì barrel đó re-export lại
+// chính agent-editor.
 import { sanitiseProfileName } from '../../pipeline-editor/business/pipeline/index.js'
+
+// ── paths under data root ──────────────────────────────────────────────────
 
 /**
  * Where a custom agent lives: `project` — this project's (gitignored)
@@ -30,8 +34,15 @@ export function profilesDir(root: string): string {
 /**
  * Tên các pipeline profile trong `<root>/pipeline-profiles/` — chính là giá trị
  * hợp lệ của `CreateTaskRequest.profileName` / `RunTaskAction.profileName`.
- * Thư mục chưa có → []. Chỉ trả tên mà `sanitiseProfileName` giữ nguyên văn —
- * xem docs/architecture/code/agent-editor.md §2.
+ * Thư mục chưa có → []. File ghi atomic dở dang (`<tên>.yaml.tmp`) rụng ở vế
+ * `.yaml`.
+ *
+ * Chỉ trả tên mà `sanitiseProfileName` giữ NGUYÊN VĂN. Đường tiêu thụ thật
+ * (`resolvePipelineOverride`) sanitise trước khi đọc file, nên tên có dấu
+ * tiếng Việt / ký tự lạ / dài quá 64 sẽ trỏ sang một stem khác, không thấy
+ * file, và task ÂM THẦM chạy pipeline mặc định — quảng cáo tên như vậy là tái
+ * tạo đúng cái bug đang đi sửa. Profile do dashboard tạo luôn qua sanitise nên
+ * không mất mục nào; chỉ file thêm tay vào repo mới bị loại.
  */
 // fallow-ignore-next-line unused-export -- consumer đi qua barrel `nl-chat/business/index.ts`
 export async function listPipelineProfileNames(root: string): Promise<string[]> {
@@ -66,6 +77,8 @@ export function agentTemplatesDir(root: string): string {
 export function workflowStepTemplatesDir(root: string): string {
   return joinPath(root, 'workflow-step-templates')
 }
+
+// ── name + CRUD / catalog listing ──────────────────────────────────────────
 
 /** Sanitize an agent / template name (stricter charset than profile names). */
 export function sanitiseAgentName(name: unknown): string | null {
@@ -146,6 +159,8 @@ export async function readCustomAgent(root: string | null, name: string, scope: 
   }
 }
 
+// ── seed templates ─────────────────────────────────────────────────────────
+
 /** Seed `agent-templates/default-agent.md` if it does not exist yet. */
 export async function ensureDefaultTemplate(root: string): Promise<void> {
   const dir = agentTemplatesDir(root)
@@ -168,6 +183,7 @@ export async function ensureDefaultTemplate(root: string): Promise<void> {
   }
 }
 
+/** Absolute path of the bundled `nl-chat-builder.md` source, alongside this file. */
 function bundledNlChatBuilderPath(): string {
   const here = dirname(fileURLToPath(import.meta.url))
   return joinPath(here, 'templates', 'nl-chat-builder.md')
@@ -191,10 +207,12 @@ export async function ensureNlChatBuilderAgent(root: string): Promise<void> {
   }
 }
 
+// ── safe outbound fetch (agent URL import + peer GitHub) ───────────────────
+
 export interface FetchUrlSafeOptions {
   /** Extra request headers (e.g. API Accept / Authorization). */
   headers?: Record<string, string>
-  /** HTTP method — defaults to GET. */
+  /** HTTP method — defaults to GET (existing call sites unaffected). */
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
   /** Request body — only meaningful for non-GET methods. */
   body?: string

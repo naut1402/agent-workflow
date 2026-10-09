@@ -44,10 +44,13 @@ import {
   resolveRecoveryMaxAttempts,
 } from '../../settings/schemas/recovery.js'
 
+/** Cap on stdout persisted for chat surfaces (NL chat + task chat fallback). */
 const CHAT_STDOUT_LIMIT = 64 * 1024
 
+/** Matches a standalone `ORCHESTRATOR_DECISION: {...}` line, JSON on one line. */
 const ORCHESTRATOR_DECISION_RE = /^\s*ORCHESTRATOR_DECISION:\s*(\{.*\})\s*$/gm
 
+/** Actions the chat→dispatch bridge below will act on — `stop`/`monitor` etc. are out of scope (design.md §6). */
 const SUPPORTED_ORCHESTRATOR_ACTIONS = new Set(['start', 'resume'])
 
 interface OrchestratorDecision {
@@ -56,8 +59,11 @@ interface OrchestratorDecision {
 }
 
 /**
- * Parse the last `ORCHESTRATOR_DECISION:` line out of a chat job's stdout.
- * Returns null when there is no valid, supported decision; never throws.
+ * Parse the orchestrator agent's `ORCHESTRATOR_DECISION:` line out of a chat
+ * job's stdout, if present. Only the LAST match counts — an agent reply may
+ * mention the syntax before actually deciding. Returns null for anything that
+ * isn't a real, supported decision (no line, invalid JSON, unsupported
+ * action, missing stepId) rather than throwing.
  */
 export function parseOrchestratorDecision(stdout: string): OrchestratorDecision | null {
   const matches = [...stdout.matchAll(ORCHESTRATOR_DECISION_RE)]
@@ -84,6 +90,15 @@ export function parseOrchestratorDecision(stdout: string): OrchestratorDecision 
   return { action: action as 'start' | 'resume', stepId }
 }
 
+/**
+ * Bridge "chat → dispatch step": forwards an orchestrator agent chat reply's
+ * `ORCHESTRATOR_DECISION` line to the existing `runTaskStep` dispatcher
+ * (lock/HITL/validate all reused as-is, see design.md §4.2) — a chat job by
+ * itself only resumes the chatting step's own session. Called once a
+ * chat-feedback job (`metadata.isChatFeedback`) finishes successfully. Never
+ * throws — a failure here must not swallow the `resubmitPendingFeedback` call
+ * right after it in `runJob`.
+ */
 async function tryDispatchOrchestratorDecision(job: JobRecord, stdout: string): Promise<void> {
   try {
     const decision = parseOrchestratorDecision(stdout)
@@ -94,7 +109,17 @@ async function tryDispatchOrchestratorDecision(job: JobRecord, stdout: string): 
     const projectId = typeof job.metadata?.projectId === 'string' ? job.metadata.projectId : ''
     if (!taskId || !devTeamRoot) return
 
-    // xem docs/architecture/code/runner.md §5
+    // For a `completed` task, `runTaskStep`'s forward-only chain guard always
+    // rejects the decided step, and `jumpToPipelineStep` alone can't fix that:
+    // it only moves `current_phase`, so the "heal a stuck phase" fallback in
+    // `runTaskStep` finds the step's pre-existing `succeeded` job and advances
+    // `current_phase` right back past it before any job is submitted. Use
+    // `resetPipelineStep` instead — it sets `last_reset_at` (so the heal
+    // fallback no longer treats this as stuck) and clears the step's stale
+    // artifacts. Cả hai scope đều là `'step'`: chỉ đụng đúng step được quyết
+    // định, không lùi và không xoá gì của các step sau — và chỉ với stepId có
+    // thật trong pipeline (`resetPipelineStep` 400 nếu không, nhánh
+    // `res.ok === false` bên dưới log lại).
     const stateFile = joinPath(devTeamRoot, '.dev-state', `${taskId}.json`)
     const { readState } = await import('../../monitor/business/tasks/index.js')
     const read = await readState(stateFile)
@@ -110,7 +135,8 @@ async function tryDispatchOrchestratorDecision(job: JobRecord, stdout: string): 
       }
     }
 
-    // xem docs/architecture/code/runner.md §5
+    // Dynamic import avoids a static runner→monitor cycle (monitor's business
+    // index re-exports from runner's) — same pattern as usageCapture.ts.
     const { runTaskStep } = await import('../../monitor/business/tasks/runStep.js')
     const res: RunTaskStepResult = await runTaskStep(devTeamRoot, projectId || null, taskId, {
       targetStepId: decision.stepId,
@@ -127,28 +153,57 @@ async function tryDispatchOrchestratorDecision(job: JobRecord, stdout: string): 
   }
 }
 
-/** Compile-time default; the runtime cap is `settings.recovery.maxAttempts`. */
+/** Compile-time default — actual cap is `settings.recovery.maxAttempts` (Settings › Job recovery). */
 export const FAILURE_MAX_ATTEMPTS = DEFAULT_RECOVERY_SETTINGS.maxAttempts!
 
 function backoffMsFor(attemptCount: number, schedule: number[]): number {
   return schedule[Math.min(attemptCount - 1, schedule.length - 1)] ?? schedule[schedule.length - 1]
 }
 
+/**
+ * In-flight `AbortController` per running job — the counterpart of `job.pid` for
+ * providers with no OS subprocess to SIGTERM (`AgenticApiProvider` subclasses,
+ * see providers/agenticApiProvider.ts). `cancelJob` aborts through this map;
+ * `runJob` always removes its entry once `provider.execute()` settles.
+ */
 const jobAbortControllers = new Map<string, AbortController>()
 
-// xem docs/architecture/code/runner.md §4
+/** Persist agent reply on the job record for chat UI (NL + pipeline task chat). */
+/**
+ * Giá trị `stdout` cho BIÊN PERSIST/API — `jobs/<id>.json` không 0600 và chảy
+ * thẳng ra `GET /api/jobs`, nên nó phải là bản đã mask secret MCP khi có.
+ *
+ * 🚫 Không dùng ở đường chức năng. `foldProposalIntoScratch` và
+ * `tryDispatchOrchestratorDecision` cố ý giữ `result.stdout` THÔ: mask là
+ * split/join mù, nó cắt giữa artifact đang fold và giữa dòng `ORCHESTRATOR_DECISION`.
+ */
 function persistStdout(result: ExecuteResult): string | undefined {
   return result.maskedStdout ?? result.stdout
 }
 
 function shouldPersistStdout(job: JobRecord, providerId: string | undefined): boolean {
   if (job.metadata?.isNlChat) return true
-  // xem docs/architecture/code/runner.md §4
+  // Với job quyết định của orchestrator, stdout LÀ kênh truyền lệnh (dòng
+  // `ORCHESTRATOR_DECISION:`). Không persist thì mọi connection không phải
+  // agent-CLI (`*-api`, `console-command`) sẽ khiến quyết định biến mất và
+  // pipeline đứng im — kết cục tệ hơn hẳn một lần halt tường minh.
   if (job.metadata?.orchestratorJob) return true
   return Boolean(providerId && isAgentCliProviderId(providerId))
 }
 
-// xem docs/architecture/code/runner.md §4
+/**
+ * Chốt `STEP_SUMMARY` của nút con vào `metadata`, đọc từ `result.stdout` ĐẦY ĐỦ.
+ *
+ * Đây là kênh con → cha của node điều phối, nên nó không được phụ thuộc vào
+ * `job.stdout`: `shouldPersistStdout` chỉ persist stdout cho provider agent-CLI
+ * (connection `*-api` / `console-command` không có), và khi CÓ persist thì
+ * `CHAT_STDOUT_LIMIT` cắt từ ĐẦU — đúng phần đuôi nơi `STEP_SUMMARY` nằm bị bỏ
+ * trước tiên. Cả hai ca đều biến "nút con đã trả tóm tắt" thành "nút con không
+ * trả", mà phía cha không có cách nào phân biệt. Chốt ở đây thoát cả hai.
+ *
+ * Không có tóm tắt thì KHÔNG ghi field — `fromTail` phía cha giữ nguyên nghĩa
+ * "nút con không in `STEP_SUMMARY`".
+ */
 function withStepSummary(record: JobRecord, stdout: string | undefined): JobRecord {
   const summary = stepSummaryOf(stdout)
   return summary ? { ...record, metadata: { ...record.metadata, stepSummary: summary } } : record
@@ -195,7 +250,7 @@ export interface SubmitJobInput {
   promptRef?: string
   produces?: string[]
   metadata?: Record<string, unknown>
-  /** Explicit session control for pipeline resume. */
+  /** Explicit session control for pipeline resume (additive — optional). */
   sessionMode?: SessionMode
   sessionId?: string
   /** The job this one continues/follows-up on (e.g. a task-chat-feedback round). */
@@ -209,9 +264,13 @@ function requeueJob(jobId: string): void {
 
 bindRecoverPoller({ loadJob, saveJob, requeueJob })
 
-// xem docs/architecture/code/runner.md §6
+// Reap orphaned running jobs once when the module loads (server restart).
 reapOrphanedRunningJobs()
+// Cùng lý do, cho file cấu hình MCP: `dispose()` không chạy được khi tiến trình
+// bị kill, và file bỏ lại chứa token đã giải ở dạng plaintext.
 cleanupOrphanedMcpConfigs()
+// Nhánh cursor còn tệ hơn: file bỏ lại nằm TRONG repo của người dùng, kèm bản sao
+// lưu `.cursor/mcp.json` gốc của họ. Ledger giữ đủ thông tin để hoàn tác.
 cleanupOrphanedCursorMcpWorkspaces()
 startRecoverPoller()
 
@@ -226,6 +285,14 @@ function jobFile(id: string): string {
 function ensureJobsDir(): void {
   mkdirSync(jobsDir(), { recursive: true })
 }
+
+// Approval flow (see JobRecord's sessionId/applyTarget/approvalArtifact/
+// parentJobId doc comments in types.ts).
+// A `require_approval` quick action runs against a throwaway copy of the task
+// workspace under the dashboard's own registry home — never the real project
+// tree — so nothing is written to the user's files until they explicitly
+// approve. `~/.dev-team-dashboard/proposals/<jobId>/` mirrors the `jobs/`
+// directory's placement (outside any git-tracked tree).
 
 function proposalsDir(): string {
   return joinPath(registryHome(), 'proposals')
@@ -249,6 +316,13 @@ function removeScratchWorkspace(scratchPath: string): void {
     /* ignore — best-effort cleanup */
   }
 }
+
+// Selection splice helpers (pure).
+// A selection quick action must only ever touch the lines the user picked. The
+// agent improves just the snippet (in a scratch file); the server then splices
+// that result back into a copy of the real artifact at the same line range so
+// every other line stays byte-identical. These helpers are exported for unit
+// tests.
 
 /** File's dominant line ending — CRLF if any `\r\n` is present, else LF. */
 export function detectEol(content: string): '\r\n' | '\n' {
@@ -284,6 +358,10 @@ export function spliceLines(base: string, start: number, end: number, replacemen
   return [...baseLines.slice(0, s - 1), ...replLines, ...baseLines.slice(e)].join(eol)
 }
 
+// Markdown-insensitive comparison key: drop inline markers (backticks,
+// emphasis) and collapse whitespace, so selected *rendered* text (which has had
+// its markdown stripped by the viewer, e.g. `code` → code) can still be located
+// in the raw markdown *source*.
 function normalizeForMatch(s: string): string {
   return s
     .replace(/[`*_~]/g, '')
@@ -292,9 +370,12 @@ function normalizeForMatch(s: string): string {
 }
 
 /**
- * Locate `selectedText` (captured from the rendered viewer, so markdown syntax
- * may be stripped) within the raw markdown `content`. Returns the tightest
- * 1-indexed inclusive source line range that matches, or null.
+ * Locate `selectedText` (as captured from the rendered viewer, so markdown
+ * syntax may be stripped) within the raw markdown `content`, returning the
+ * tightest 1-indexed inclusive source line range whose text matches. Returns
+ * null if no run of lines matches — the caller then falls back to the viewer's
+ * best-effort line range. This is what keeps a splice limited to the lines the
+ * user actually selected instead of the whole rendered block.
  */
 export function findSelectionRange(content: string, selectedText: string): { start: number; end: number } | null {
   const normSel = normalizeForMatch(selectedText)
@@ -303,24 +384,26 @@ export function findSelectionRange(content: string, selectedText: string): { sta
   const MAX_SPAN = 400
   let best: { start: number; end: number; span: number } | null = null
   for (let i = 0; i < normLines.length; i++) {
-    if (!normLines[i]) continue
+    if (!normLines[i]) continue // a match can't start on a blank/markup-only line
     let acc = ''
     for (let j = i; j < normLines.length && j - i <= MAX_SPAN; j++) {
       if (normLines[j]) acc = acc ? `${acc} ${normLines[j]}` : normLines[j]
       if (acc.includes(normSel)) {
         const span = j - i
         if (!best || span < best.span) best = { start: i + 1, end: j + 1, span }
-        break
+        break // smallest window starting at i
       }
-      if (acc.length > normSel.length + 400) break
+      if (acc.length > normSel.length + 400) break // grown well past the target — give up on this start
     }
   }
   return best ? { start: best.start, end: best.end } : null
 }
 
 /**
- * Strip a quick-action agent's stdout down to the proposed content: trim
- * whitespace and unwrap a single enclosing markdown code fence.
+ * Strip a quick-action agent's stdout down to just the proposed content: trim
+ * surrounding whitespace and unwrap a single enclosing markdown code fence (the
+ * common "```markdown … ```" the model sometimes adds despite being asked not
+ * to). Best-effort — the user still reviews the diff before it's applied.
  */
 export function cleanAgentOutput(stdout: string): string {
   const t = stdout.trim()
@@ -328,6 +411,16 @@ export function cleanAgentOutput(stdout: string): string {
   return (fenced ? fenced[1] : t).trim()
 }
 
+/**
+ * Fold a successful approval job's proposed content (the agent's stdout) into
+ * the scratch artifact so the review diff (real vs scratch artifact) reflects
+ * the proposal. For a selection job (`spliceRange` set) the stdout is spliced
+ * into a copy of the real artifact at that line range — every other line stays
+ * byte-identical, incl. the original EOL. For a whole-file job the stdout
+ * replaces the scratch artifact outright; if the agent produced no stdout (a
+ * "write the file with your Write tool" style prompt), the scratch artifact the
+ * agent wrote is left as-is. Throws on unreadable/unwritable paths.
+ */
 function foldProposalIntoScratch(job: JobRecord, stdout: string): void {
   const proposed = cleanAgentOutput(stdout)
   const scratchArtifact = joinPath(job.workspace, job.approvalArtifact!)
@@ -336,13 +429,14 @@ function foldProposalIntoScratch(job: JobRecord, stdout: string): void {
     try {
       base = readTextFileSync(joinPath(job.applyTarget!, job.approvalArtifact!))
     } catch {
-      base = ''
+      base = '' // real artifact may not exist yet
     }
     const spliced = spliceLines(base, job.spliceRange.start, job.spliceRange.end, proposed)
     writeTextFileSync(scratchArtifact, spliced)
   } else if (proposed) {
     writeTextFileSync(scratchArtifact, proposed)
   }
+  // else: whole-file job with no stdout — keep whatever the agent wrote.
 }
 
 export function loadJob(id: string): JobRecord | null {
@@ -368,7 +462,7 @@ export function mergeJobUsage(id: string, usage: UsageSnapshot): JobRecord | nul
 
 /**
  * Đánh dấu job orchestrator đã thi hành 1 quyết định qua `POST /api/orchestrator/decide`
- * — chặn `consumeAgentDecision` đọc lại sentinel cuối output cho cùng lượt.
+ * — chặn `consumeAgentDecision` đọc lại sentinel cuối output cho CÙNG lượt (G4).
  */
 export function markDirectDecisionApplied(id: string): void {
   const cur = loadJob(id)
@@ -401,6 +495,7 @@ export function listJobs(limit?: number, status?: JobStatus): JobRecord[] {
   return effectiveLimit !== undefined ? jobs.slice(0, effectiveLimit) : jobs
 }
 
+/** Per-task concurrency: same task stays serial; different tasks run in parallel. */
 const runningTaskKeys = new Set<string>()
 const queue: string[] = []
 let pumpScheduled = false
@@ -446,7 +541,8 @@ async function runJob(job: JobRecord): Promise<void> {
   const fallback = pinned ? null : resolveDefaultRunner()
   const runner = pinned ?? fallback?.runner ?? null
   if (!runner || runner.enabled === false) {
-    // xem docs/architecture/code/runner.md §7
+    // Giữ nguyên văn tiền tố `runner not found or disabled` (FE/log đang khớp
+    // chuỗi này), chỉ nối thêm lý do để người dùng biết phải sửa gì.
     const detail = pinned
       ? `runner "${job.runnerId}" đang bị tắt`
       : `không có runner mặc định dùng được (${fallback?.runnerId ?? 'chưa đặt'}: ${fallback?.reason ?? 'unset'})`
@@ -511,7 +607,9 @@ async function runJob(job: JobRecord): Promise<void> {
 
   saveJob({
     ...job,
-    // xem docs/architecture/code/runner.md §7
+    // Job record phải nêu runner THẬT SỰ chạy: `job.runnerId` có thể trỏ runner đã
+    // xoá và vừa rơi về default ở trên. Không ghi ngược thì Running Jobs, panel
+    // chat và vòng chat kế tiếp (kế thừa `parent.runnerId`) đều mang giá trị sai.
     runnerId: runner.id,
     status: 'running',
     startedAt: new Date().toISOString(),
@@ -547,6 +645,8 @@ async function runJob(job: JobRecord): Promise<void> {
 
   let resolvedAgent
   try {
+    // Console-command providers never merge an agent system prompt — ignore any
+    // agentRef the client may still send.
     if (connection.providerId === 'console-command') {
       resolvedAgent = await resolveAgent('', { projectRoot, devTeamRoot })
     } else {
@@ -578,6 +678,9 @@ async function runJob(job: JobRecord): Promise<void> {
   let execResumeSessionId: string | undefined
   let sessionStaleReason: string | undefined
 
+  // Reading only `metadata.stepId` left every ledger entry's `stepIds` empty
+  // for pipeline jobs (they tag `pipelineStepId`), so per-step session lookup
+  // had nothing to match on — see stepIdOf().
   const jobStepId = stepIdOf(job)
 
   if (job.applyTarget && job.approvalArtifact) {
@@ -600,7 +703,10 @@ async function runJob(job: JobRecord): Promise<void> {
     sessionStaleReason = plan.staleReason
     if (plan.sessionMode === 'resume' && plan.resumeSessionId) {
       execResumeSessionId = plan.resumeSessionId
-      // xem docs/architecture/code/runner.md §8
+      // Ghi nhận quyền sở hữu NGAY lúc start. Trước đây entry chỉ được ghi khi
+      // job xong, nên trong suốt lượt chạy node này không có entry nào mang
+      // `stepId` của nó — và lúc ghi, lookup bắt nhầm entry `open` của node khác.
+      // KHÔNG `forceNew`: đây là nối tiếp một phiên đang mở, không phải mở mới.
       recordSessionUsage({
         projectId,
         taskId,
@@ -630,7 +736,10 @@ async function runJob(job: JobRecord): Promise<void> {
     }
   }
 
-  // xem docs/architecture/code/runner.md §8
+  // Record the session id on the job BEFORE the CLI runs: the chat surface
+  // finds the runner's live transcript by session id, and the ledger is only
+  // updated after the job finishes (`recordSessionUsage` below) — too late to
+  // watch a run in progress.
   const plannedSessionId = execSessionId ?? execResumeSessionId
   if (plannedSessionId && !job.applyTarget) {
     const current = loadJob(job.id)
@@ -677,7 +786,10 @@ async function runJob(job: JobRecord): Promise<void> {
     jobAbortControllers.delete(job.id)
   }
 
-  // xem docs/architecture/code/runner.md §9
+  // `cancelJob` already set `status: 'cancelled'` and this SIGTERM/abort is why
+  // `provider.execute()` just resolved — `result.ok` will be false, and
+  // without this guard the code below would overwrite it with `'failed'`.
+  // Session + usage capture still run first: tokens were spent even on cancel.
   const capturedSessionId = result.sessionId ?? execSessionId ?? execResumeSessionId
   if (taskId && projectId && inputSessionMode && inputSessionMode !== 'none' && capturedSessionId) {
     recordSessionUsage({
@@ -702,6 +814,8 @@ async function runJob(job: JobRecord): Promise<void> {
     ).catch(() => {})
   }
 
+  // Cursor (and other parse-json CLIs) already emit usage on ExecuteResult —
+  // persist when present so Logs → Usage is not Claude-only.
   if (result.tokenUsage) {
     const current = loadJob(job.id) || job
     void captureTokenUsageFromExecute(
@@ -804,6 +918,9 @@ async function runJob(job: JobRecord): Promise<void> {
     }
   }
 
+  // Fold the agent's proposed content (stdout) into the scratch artifact so the
+  // review diff reflects the proposal — spliced into the selected line range for
+  // a selection job, or replacing the whole file otherwise.
   if (result.ok && isApprovalJob) {
     try {
       foldProposalIntoScratch(job, result.stdout ?? '')
@@ -822,13 +939,26 @@ async function runJob(job: JobRecord): Promise<void> {
     }
   }
 
-  // xem docs/architecture/code/runner.md §9
+  // Advance current_phase (and optionally chain the next step) while this job
+  // is still `running`, then mark succeeded — so the UI cannot submit another
+  // run-step against a stale phase between "job done" and "phase advanced".
+  // Chat-feedback jobs skip advance (they must not move the pipeline cursor).
+  //
+  // Ngoại lệ: lượt orchestrator resume một step cũng đi bằng đường chat-feedback,
+  // nhưng nó LÀ lượt chạy lại của step đó — không cho advance thì pipeline đứng
+  // ngay sau lần resume đầu tiên.
   const isOrchestratorResume = job.metadata?.orchestratorResume === true
+  // `respawn` chạy một phiên mới cho một step đã xong — không bao giờ được
+  // đẩy `current_phase`, kể cả khi `pipelineStepId` trùng `current_phase`
+  // hiện tại (xem design.md §4.4 của task Td2be3c3e).
   const isRespawn = job.metadata?.respawn === true
   if (result.ok && !isApprovalJob && (!isChatFeedback || isOrchestratorResume) && !isRespawn) {
     try {
       await advancePipelineStepChain(job)
     } catch (err) {
+      // Chain hỏng không được kéo theo `saveJob`/`emit` bên dưới: job NÀY đã
+      // chạy xong thật, và mất `job.finished` là mất luôn tín hiệu mà cả UI lẫn
+      // orchestrator đang chờ.
       console.error('[jobQueue] advancePipelineStepChain failed', err)
     } finally {
       saveJob({
@@ -861,6 +991,8 @@ async function runJob(job: JobRecord): Promise<void> {
     logPath: result.logPath,
     artifactsFound: result.artifactsFound,
     pid: null,
+    // Task/NL chat read the agent's reply from here: the log file also contains
+    // the payload/prompt framing, which must never be shown as the chat answer.
     ...(shouldPersistStdout(job, connection.providerId)
       ? { stdout: (persistStdout(result) ?? '').slice(0, CHAT_STDOUT_LIMIT) }
       : {}),
@@ -879,6 +1011,12 @@ async function runJob(job: JobRecord): Promise<void> {
   if (!isApprovalJob) await resubmitPendingFeedback(job)
 }
 
+/**
+ * A step's chat surface may queue feedback (`queuePendingFeedback`) while its
+ * job is still running — once that job (or a chat-feedback job resuming the
+ * same session) finishes, resubmit whatever is queued. Approval jobs are
+ * excluded: quick-action scratch runs aren't a task's pipeline step chat.
+ */
 async function resubmitPendingFeedback(job: JobRecord): Promise<void> {
   const taskId = typeof job.metadata?.taskId === 'string' ? job.metadata.taskId : undefined
   const devTeamRoot = typeof job.metadata?.devTeamRoot === 'string' ? job.metadata.devTeamRoot : undefined
@@ -886,7 +1024,9 @@ async function resubmitPendingFeedback(job: JobRecord): Promise<void> {
   if (!taskId || !devTeamRoot) return
   const pending = await takePendingFeedback(devTeamRoot, taskId)
   if (!pending) return
-  // xem docs/architecture/code/runner.md §11
+  // Phản hồi sinh ra từ một lần reject cổng HITL: khi orchestrator đang điều
+  // phối thì chính nó quyết định gửi gì cho step bị reject, nên mục còn sót lại
+  // ở đây phải bỏ — gửi tiếp là step nhận phản hồi hai lần.
   if (pending.source === 'gate') {
     const orch = await resolveOrchestration(devTeamRoot, taskId)
     if (orch.active) return
@@ -906,6 +1046,16 @@ async function resubmitPendingFeedback(job: JobRecord): Promise<void> {
   }
 }
 
+/**
+ * Dashboard "run step" jobs tag `metadata.pipelineStepId` (the step the job
+ * just ran) and, for a jump-to-target run, `metadata.chainTarget` (the step
+ * the user clicked). On success, `advanceStepOnJobSuccess` either advances
+ * `current_phase` past a gate-less step or opens the step's HITL gate.
+ * Every successful gate-less step keeps this chain going automatically —
+ * a `chainTarget`, when present, only makes it stop exactly there instead of
+ * running further. A HITL gate (or a step id / agent we don't recognise, or
+ * a missing `request.md`) always stops the chain regardless of `chainTarget`.
+ */
 async function advancePipelineStepChain(job: JobRecord): Promise<void> {
   const taskId = typeof job.metadata?.taskId === 'string' ? job.metadata.taskId : undefined
   const devTeamRoot = typeof job.metadata?.devTeamRoot === 'string' ? job.metadata.devTeamRoot : undefined
@@ -916,15 +1066,23 @@ async function advancePipelineStepChain(job: JobRecord): Promise<void> {
   const advanced = await advanceStepOnJobSuccess(devTeamRoot, taskId, pipelineStepId)
   if (!advanced) return
 
-  // xem docs/architecture/code/runner.md §10
+  // Có node điều phối ⇒ quyền start là của nó: cursor đã đi, `task.advanced` /
+  // `hitl.pending` đã phát (trong `advanceStepOnJobSuccess`), dừng ở đây. Phải
+  // đặt SAU advance — đặt trước thì orchestrator không bao giờ nhận được tín hiệu.
+  //
+  // `awaitFlagSync`: hàm này không giữ khoá task, và nếu người dùng vừa TẮT điều
+  // phối thì `submitJob` bên dưới sẽ đọc lại cờ cache ở lớp chặn đồng bộ. Cờ cũ
+  // chưa kịp ghi lại = một lần throw ngay giữa đường chain (E2).
   const orch = await resolveOrchestration(devTeamRoot, taskId, undefined, { awaitFlagSync: true })
   if (orch.active) return
 
+  // Stop once the clicked node itself has run, even if it advanced further —
+  // the user only asked to reach `chainTarget`, not run past it.
   if (chainTarget && pipelineStepId === chainTarget) return
 
   const nextStepId = String(advanced.state.current_phase ?? '')
   if (!nextStepId || nextStepId === 'completed' || nextStepId === pipelineStepId) return
-  if (advanced.state.hitl_pending) return
+  if (advanced.state.hitl_pending) return // gate reached — wait for approve/reject
 
   const pipeline = await loadPipelineConfig(devTeamRoot, taskId)
   const nextStep = (pipeline.steps || []).find((s: any) => s.id === nextStepId)
@@ -935,10 +1093,15 @@ async function advancePipelineStepChain(job: JobRecord): Promise<void> {
   try {
     userPrompt = readTextFileSync(joinPath(workspace, 'request.md'))
   } catch {
-    return
+    return // no request.md — leave the chain to stop rather than run with an empty prompt
   }
 
-  // xem docs/architecture/code/runner.md §10
+  // Drop `isChatFeedback` before spreading `job.metadata` into the next step's
+  // job — it marks only the job it was set on (a chat-resume round), and would
+  // otherwise leak forward onto every step the chain submits afterwards,
+  // wrongly suppressing advancePipelineStepChain for all of them.
+  // `orchestratorDispatch` / `orchestratorResume` cùng loại: chúng là vé của
+  // đúng một lượt, mang sang job sau là cấp quyền start cho một đường không xin.
   const {
     isChatFeedback: _isChatFeedback,
     orchestratorDispatch: _orchestratorDispatch,
@@ -947,11 +1110,14 @@ async function advancePipelineStepChain(job: JobRecord): Promise<void> {
   } = job.metadata || {}
 
   submitJob({
+    // Mỗi step tự giải runner của chính nó. Kế thừa `job.runnerId` làm pin của một
+    // step lây sang mọi step sau nó trong chain — đúng thứ task này phải sửa.
     runnerId: resolveStepRunnerId(nextStep).runnerId,
     agentRef: nextStep.agent,
     workspace,
     userPrompt,
     produces: Array.isArray(nextStep.produces) ? nextStep.produces : undefined,
+    // Fresh CLI session per step — do not resume the previous step's context.
     sessionMode: 'new',
     metadata: {
       ...carryMetadata,
@@ -962,6 +1128,9 @@ async function advancePipelineStepChain(job: JobRecord): Promise<void> {
 }
 
 export function submitJob(input: SubmitJobInput): JobRecord {
+  // Lưới an toàn cuối cho quyền start. Guard thật là `assertStartAllowed` ở
+  // tầng async của từng call-site; chạm được vào đây nghĩa là còn một đường
+  // start bị bỏ sót, nên nó ném lỗi thay vì lọc im lặng.
   assertStartAllowedSync(input.metadata)
   const id = crypto.randomUUID()
   const runner = input.runnerId ? getRunner(input.runnerId) : getDefaultRunner()
@@ -1027,6 +1196,7 @@ export function cancelJob(id: string): MutationResult {
   if (job.status === 'succeeded' || job.status === 'failed') {
     return { ok: false, status: 400, error: 'job already finished' }
   }
+  // Idempotent: already cancelled → ok without re-emit (avoid duplicate listeners).
   if (job.status === 'cancelled') return { ok: true }
 
   if (job.pid != null && job.pid > 0) {
@@ -1043,6 +1213,9 @@ export function cancelJob(id: string): MutationResult {
 
   removeRecoverEntry(id)
 
+  // No OS pid to SIGTERM for providers with no subprocess (AgenticApiProvider
+  // subclasses run the model call in-process) — abort the in-flight
+  // fetch/SDK call instead so cancelling actually stops the request.
   jobAbortControllers.get(id)?.abort()
 
   saveJob({ ...job, status: 'cancelled', finishedAt: new Date().toISOString(), pid: null })
@@ -1133,6 +1306,7 @@ export function sendJobFeedback(id: string, feedback: string): MutationResult<{ 
     applyTarget: parent.applyTarget,
     approvalArtifact: parent.approvalArtifact,
     parentJobId: parent.id,
+    // Carry the splice range so the feedback round splices its result the same way.
     ...(parent.spliceRange ? { spliceRange: parent.spliceRange } : {}),
   }
   saveJob(job)
@@ -1142,13 +1316,20 @@ export function sendJobFeedback(id: string, feedback: string): MutationResult<{ 
 }
 
 /**
- * Continue the conversation on a task's most recent finished (non-approval)
- * job, resuming the CLI session from the task's session ledger. The submitted
- * job is tagged `metadata.isChatFeedback` and does not advance `current_phase`.
+ * Continue the conversation with the agent on a task's most recent finished
+ * (non-approval) job, resuming the CLI session recorded in the task's session
+ * ledger (`sessionLedger.ts`) — the task-scoped counterpart to
+ * `sendJobFeedback` (approval flow, keyed by `jobId`). Runs against the real
+ * (non-scratch) workspace, and does not itself advance `current_phase`; the
+ * job it submits is tagged `metadata.isChatFeedback` so `runJob()` skips
+ * `advancePipelineStepChain` for it (see edge cases in design.md §4.4).
  *
- * While a job of the task is still active, `mode: 'queue'` (default) records
- * the feedback and returns `{ queued: true }`; `mode: 'immediate'` cancels the
- * active job of the same step and resumes its session right away.
+ * If a job for this task is still `queued`/`running`, default (`mode`
+ * omitted or `'queue'`) is to record the feedback and return `{ queued: true }`
+ * — `runJob` resubmits it automatically once that job finishes. `mode:
+ * 'immediate'` instead cancels the active job (only when it's the SAME step
+ * being chatted with, or the active job carries no step at all) and resumes
+ * its session right away.
  */
 export async function sendTaskFeedback(
   taskId: string,
@@ -1165,8 +1346,12 @@ export async function sendTaskFeedback(
      */
     orchestratorResume?: boolean
     /**
-     * Bắt buộc có job đã kết thúc của đúng `stepId` để resume; không có thì trả
-     * lỗi 400 thay vì rơi về job xong gần nhất.
+     * Bắt buộc phải có job đã kết thúc **của đúng `stepId`** để resume.
+     *
+     * Người dùng chat thì fallback "job xong gần nhất" là đúng ý (họ đang nói
+     * chuyện với task). Orchestrator resume một step **chưa từng chạy** thì
+     * fallback đó lại đẩy phản hồi vào session của một step khác — phải trả lỗi
+     * để nó halt kèm lý do.
      */
     requireStepMatch?: boolean
   } = {},
@@ -1174,7 +1359,8 @@ export async function sendTaskFeedback(
   const active = listJobs(50).find(
     (j) =>
       j.metadata?.taskId === taskId &&
-      // xem docs/architecture/code/runner.md §11
+      // Job "orchestrator đang nghĩ" không phải step đang chạy: coi nó là bận thì
+      // chat với một step trong lúc đó bị xếp hàng, phá ngoại lệ "chat không giới hạn".
       j.metadata?.orchestratorJob !== true &&
       (j.status === 'queued' || j.status === 'running' || j.status === 'awaiting_recovery'),
   )
@@ -1184,11 +1370,17 @@ export async function sendTaskFeedback(
     const activeStepId = stepIdOf(active)
     const sameStep = !activeStepId || !opts.stepId || activeStepId === opts.stepId
     if (opts.mode === 'immediate' && sameStep && cancelJob(active.id).ok) {
+      // `cancelJob` just flipped `active` to `'cancelled'` — resume its
+      // session directly instead of treating it as "no active job".
       parent = active
     } else {
       const devTeamRoot = typeof active.metadata?.devTeamRoot === 'string' ? active.metadata.devTeamRoot : undefined
       const stillActive = loadJob(active.id)
       if (stillActive && (stillActive.status === 'queued' || stillActive.status === 'running' || stillActive.status === 'awaiting_recovery')) {
+        // `queuePendingFeedback` only succeeds for a real dashboard task (one
+        // with a `.dev-state` file) — nl-chat's scratch sessions reuse this
+        // same function but have none, so they keep the original "busy" error
+        // instead of a `queued: true` that would never actually resubmit.
         const queued =
           devTeamRoot &&
           (await queuePendingFeedback(devTeamRoot, taskId, {
@@ -1197,6 +1389,7 @@ export async function sendTaskFeedback(
             ...(opts.source ? { source: opts.source } : {}),
           }))
         if (queued) {
+          // Job may have finished between the active check and the write — reclaim and send now.
           const after = loadJob(active.id)
           if (after && after.status !== 'queued' && after.status !== 'running' && after.status !== 'awaiting_recovery') {
             const taken = await takePendingFeedback(devTeamRoot, taskId)
@@ -1211,6 +1404,8 @@ export async function sendTaskFeedback(
         }
         return { ok: false, status: 409, error: 'step already running' }
       }
+      // Race: the cancel above lost to the job finishing on its own — fall
+      // through and treat it like there was no active job at all.
     }
   }
 
@@ -1220,10 +1415,17 @@ export async function sendTaskFeedback(
         (j) =>
           j.metadata?.taskId === taskId &&
           !j.applyTarget &&
+          // Job quyết định của orchestrator không thuộc step nào; để nó lọt vào
+          // fallback `finished[0]` là gửi phản hồi của một step vào session của
+          // orchestrator — lượt đó không advance, và khi xong lại bị đọc như một
+          // quyết định (không có sentinel ⇒ im lặng). Task đứng, không dấu vết.
           j.metadata?.orchestratorJob !== true &&
           (j.status === 'succeeded' || j.status === 'failed' || j.status === 'cancelled'),
       )
       .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
+    // Chatting from a step's popover must land in THAT step's session, not
+    // whatever ran last — prefer the newest finished job of the requested step
+    // (its metadata carries the session/workspace the resume plan reuses).
     const ofStep = opts.stepId ? finished.find((j) => stepIdOf(j) === opts.stepId) : undefined
     if (!ofStep && opts.requireStepMatch) {
       return { ok: false, status: 400, error: `no completed job for step ${opts.stepId}` }
@@ -1232,11 +1434,17 @@ export async function sendTaskFeedback(
   }
   if (!parent) return { ok: false, status: 400, error: 'no completed job to give feedback on' }
 
+  // The step may have changed agent since `parent` ran (pipeline edited via
+  // chat, or advanced past a retry loop) — re-resolve from the pipeline
+  // config that's live NOW rather than trusting the old job's `agentRef`.
   let agentRef = parent.agentRef
   const parentStepId = stepIdOf(parent)
 
   const ledger = loadTaskSessionLedger(projectId, taskId)
-  // xem docs/architecture/code/runner.md §11
+  // Lọc theo node: "còn phiên mở" phải là phiên CỦA STEP NÀY. Không lọc thì
+  // phản hồi gửi cho step A resume vào phiên đang mở của nút điều phối, và từ
+  // đó hai node dùng chung một phiên CLI. Parent không có `stepId` (job ad-hoc
+  // gắn vào task) giữ nguyên nghĩa cũ — "có entry mở nào đó thì nối tiếp".
   const hasOpenSession = ledger.sessions.some(
     (s) => s.status === 'open' && (!parentStepId || s.stepIds?.includes(parentStepId)),
   )
@@ -1248,7 +1456,9 @@ export async function sendTaskFeedback(
     if (step?.agent) agentRef = step.agent
   }
 
-  // xem docs/architecture/code/runner.md §11
+  // Giữ runner của job cha để resume đúng phiên CLI. Chỉ giải lại khi runner đó
+  // đã bị XOÁ hoặc TẮT — không xét eligibility, vì một job chạy trên runner
+  // console-command vẫn là job hợp lệ và không được đổi runner oan.
   let inheritedRunnerId = parent.runnerId === 'unknown' ? undefined : parent.runnerId
   if (inheritedRunnerId) {
     const parentRunner = getRunner(inheritedRunnerId)
@@ -1260,7 +1470,7 @@ export async function sendTaskFeedback(
     }
   }
 
-  // xem docs/architecture/code/runner.md §10
+  // Vé của đúng một lượt — xem `advancePipelineStepChain`.
   const {
     isChatFeedback: _isChatFeedback,
     orchestratorDispatch: _orchestratorDispatch,
@@ -1273,6 +1483,8 @@ export async function sendTaskFeedback(
     workspace: parent.workspace,
     userPrompt: feedback,
     produces: parent.produces,
+    // Resume when a ledger session is still open; otherwise start fresh so
+    // "new chat session" / close-then-reopen still works after × or +.
     sessionMode: hasOpenSession ? 'resume' : 'new',
     sessionId: hasOpenSession ? parent.sessionId : undefined,
     metadata: {
@@ -1299,7 +1511,7 @@ export function getApprovalDiff(
   try {
     before = readTextFileSync(joinPath(job.applyTarget, job.approvalArtifact))
   } catch {
-    before = ''
+    before = '' // artifact may not exist yet (a brand-new file the agent proposed creating)
   }
   let after: string
   try {
@@ -1312,7 +1524,12 @@ export function getApprovalDiff(
 
 /**
  * Apply an `awaiting_approval` job's scratch content to the real artifact.
- * Copies back only `approvalArtifact`, then discards the scratch workspace.
+ *
+ * Scope: this copies back ONLY `approvalArtifact` (the single file the user
+ * reviewed), never any other file the agent may have created in the scratch
+ * workspace. That is exactly right for a quick action, which always targets one
+ * artifact — the scratch copy is then discarded, so stray files never reach the
+ * real tree.
  */
 export function approveJob(id: string): MutationResult<{ job: JobRecord }> {
   const job = loadJob(id)
@@ -1350,7 +1567,9 @@ export function discardJob(id: string): MutationResult<{ job: JobRecord }> {
   return { ok: true, job: updated }
 }
 
-/** Best-effort liveness check for a job's pid. */
+// orphan reaper
+
+/** Best-effort liveness check — `(pid, startedAt)` pair from the job record. */
 export function isPidAlive(pid: number | null | undefined): boolean {
   if (pid == null || pid <= 0) return false
   try {

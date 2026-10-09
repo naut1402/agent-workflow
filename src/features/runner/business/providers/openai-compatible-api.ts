@@ -12,8 +12,10 @@ import {
 } from './agenticApiProvider.js'
 import type { McpToolBridge } from './mcpToolBridge.js'
 
+/** Chặn vòng lặp vô hạn khi model liên tục gọi tool — mirror anthropic-compatible-api. */
 const MAX_AGENT_LOOP_TURNS = 8
 
+/** One-line summary of tool args for the transcript — mirrors sessionTranscript.ts's describeToolUse. */
 function summarizeArgs(args: unknown): string {
   try {
     const json = typeof args === 'string' ? args : JSON.stringify(args)
@@ -81,6 +83,12 @@ const BASE_TOOLS: OpenAI.Chat.Completions.ChatCompletionFunctionTool[] = [
   },
 ]
 
+/**
+ * Base 4 file-ops always registered; `extraTools` (from `Connection.config.extraTools`,
+ * default `[]`) opts a Connection into shell/git/search/web on top — see agenticApiProvider.ts.
+ * `webSearchConfigured` additionally gates `web_search` alone so an unconfigured
+ * `BRAVE_SEARCH_API_KEY` hides the tool instead of registering one that always errors.
+ */
 function buildTools(extraTools: ExtraTool[], webSearchConfigured: boolean): OpenAI.Chat.Completions.ChatCompletionFunctionTool[] {
   const tools: OpenAI.Chat.Completions.ChatCompletionFunctionTool[] = [...BASE_TOOLS]
   if (extraTools.includes('shell')) {
@@ -171,9 +179,15 @@ function buildTools(extraTools: ExtraTool[], webSearchConfigured: boolean): Open
 }
 
 /**
- * `openai-api` / `gemini-api` / `xai-api` — one wrapper over the OpenAI-compatible
- * Chat Completions endpoint, driving the tool-use loop directly on the `openai` SDK.
- * xem docs/architecture/code/runner.md §29
+ * `openai-api` / `gemini-api` / `xai-api` — all expose an OpenAI-compatible
+ * Chat Completions endpoint, so one wrapper (differing only in `defaultBaseURL`)
+ * covers the group. The tool-use loop is driven directly against the `openai`
+ * SDK rather than `@openai/agents`: that SDK's Chat Completions converter emits
+ * non-spec fields on the follow-up request (the raw tool_call's `type`/`function`
+ * flattened onto the assistant message, plus OpenAI-only `strict: true`), which
+ * strict OpenAI-compat backends such as Gemini's reject — breaking every
+ * tool-calling turn after the first. Driving the SDK directly keeps the wire
+ * format exactly to spec (and per-call clients avoid shared global state).
  */
 export class OpenAiCompatibleProvider extends AgenticApiProvider {
   readonly providerId: string
@@ -202,6 +216,8 @@ export class OpenAiCompatibleProvider extends AgenticApiProvider {
 
     const extraTools = this.resolveExtraTools(ctx.runnerConfig)
     const baseTools = buildTools(extraTools, this.isWebSearchConfigured())
+    // `mcpBridge === null` ⇒ `bridgeTools` rỗng ⇒ `tools` và preamble
+    // byte-identical với bản trước khi có bridge.
     const bridgeTools = ctx.mcpBridge?.tools ?? []
     const tools: OpenAI.Chat.Completions.ChatCompletionFunctionTool[] = [
       ...baseTools,
@@ -223,6 +239,8 @@ export class OpenAiCompatibleProvider extends AgenticApiProvider {
       .join('\n\n')
     ctx.handlers.onSystemPrompt(systemContent)
 
+    // `messages` excludes the system prompt — it is re-prepended on every turn
+    // so the persisted rawMessages stay resume-ready without duplicating it.
     const priorMessages = (ctx.priorMessages ?? []) as OpenAI.Chat.Completions.ChatCompletionMessageParam[]
     const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = priorMessages.length
       ? [...priorMessages, { role: 'user', content: ctx.req.userPrompt }]
@@ -257,7 +275,10 @@ export class OpenAiCompatibleProvider extends AgenticApiProvider {
       usage.outputTokens += response.usage?.completion_tokens ?? 0
       usage.totalTokens += response.usage?.total_tokens ?? 0
 
-      // xem docs/architecture/code/runner.md §29
+      // Some OpenAI-compat gateways (e.g. OpenRouter free-tier models under
+      // load/rate-limit) answer 200 OK with an `error` field and no `choices`
+      // instead of a non-2xx status, so the SDK never throws. Surface that
+      // clearly instead of crashing on `choices[0]` of an empty array.
       const gatewayError = (response as { error?: { message?: string; code?: unknown } }).error
       if (gatewayError) {
         throw new AgenticRunError(
@@ -270,19 +291,31 @@ export class OpenAiCompatibleProvider extends AgenticApiProvider {
       }
 
       const message = response.choices[0]?.message
+      // Only function tool calls exist in this provider's toolset; filter keeps
+      // the union narrowed to the spec shape we echo back below.
       const calls = (message?.tool_calls ?? []).filter(
         (call): call is OpenAI.Chat.Completions.ChatCompletionMessageFunctionToolCall =>
           call.type === 'function',
       )
+      // Surface this turn's text as soon as it arrives — whether or not tool
+      // calls follow — instead of only the final no-tool-call turn (level-1
+      // streaming; see AgenticStreamHandlers). Not a real per-token delta
+      // (this SDK call isn't `stream: true`), so one call covers the whole turn.
       const turnText = typeof message?.content === 'string' ? message.content : ''
       if (turnText) ctx.handlers.onAssistantChunk(turnText, { done: true })
 
       if (!calls.length) {
         if (turnText.trim()) {
+          // Include the final reply in the persisted history so a resumed session
+          // sees the model's own last answer.
           messages.push({ role: 'assistant', content: turnText })
           return { finalText: turnText, usage, toolCalls, rawMessages: messages }
         }
 
+        // Empty content + no tool call — the model may not understand this
+        // provider's toolset. Give it exactly one nudge before treating this
+        // as a real failure instead of silently reporting job success (see
+        // agenticApiProvider.ts's EMPTY_REPLY_NUDGE_TEXT for rationale).
         if (!hasNudgedEmptyReply) {
           hasNudgedEmptyReply = true
           messages.push({ role: 'assistant', content: '' })
@@ -292,7 +325,9 @@ export class OpenAiCompatibleProvider extends AgenticApiProvider {
         throw new AgenticRunError(EMPTY_REPLY_ERROR_MESSAGE, messages)
       }
 
-      // xem docs/architecture/code/runner.md §29
+      // Rebuild the assistant message with only spec fields — echoing the
+      // provider's raw message object verbatim can carry extra fields that
+      // strict OpenAI-compat backends reject.
       messages.push({
         role: 'assistant',
         content: message?.content ?? null,
@@ -318,6 +353,7 @@ export class OpenAiCompatibleProvider extends AgenticApiProvider {
     throw new AgenticRunError(`exceeded ${MAX_AGENT_LOOP_TURNS} agent loop turns`, messages)
   }
 
+  /** Map one chat-completions function tool call onto a base-class sandbox op. */
   private async executeTool(
     call: OpenAI.Chat.Completions.ChatCompletionMessageFunctionToolCall,
     workspace: string,
@@ -329,6 +365,7 @@ export class OpenAiCompatibleProvider extends AgenticApiProvider {
     } catch {
       return { ok: false, error: 'invalid tool arguments JSON' }
     }
+    // TRƯỚC `switch`: xem chú thích tương ứng ở `anthropic-compatible-api.ts`.
     if (bridge?.has(call.function.name)) return bridge.call(call.function.name, args)
     const path = typeof args.path === 'string' ? args.path : ''
     switch (call.function.name) {

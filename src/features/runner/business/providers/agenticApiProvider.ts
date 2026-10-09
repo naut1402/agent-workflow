@@ -27,8 +27,9 @@ export type ExtraTool = 'shell' | 'git' | 'search' | 'web'
 const VALID_EXTRA_TOOLS: ExtraTool[] = ['shell', 'git', 'search', 'web']
 
 /**
- * Allowlisted binaries for `run_command` (argv-array only, no raw shell).
- * xem docs/architecture/code/runner.md §21
+ * Allowlisted binaries for `run_command` — no raw shell, argv-array only (no injection via `;`/`&&`/`$()`).
+ * Chỉ những binary image bảo đảm có (`docker/Dockerfile`) — list này vào thẳng tool description,
+ * tên không tồn tại là mời model gọi rồi nhận ENOENT. Bin project-local: gọi qua `npx <bin>`.
  */
 export const SHELL_ALLOWLIST = ['bun', 'npm', 'npx', 'node']
 const SHELL_TIMEOUT_MS = 60_000
@@ -50,6 +51,7 @@ export const RUNNER_RESPONSE_MARKER = '\n=== Phản hồi của runner ===\n\n'
 export const EMPTY_REPLY_ERROR_MESSAGE =
   'model trả lời rỗng và không gọi tool sau khi đã nhắc lại — có thể model không tương thích tốt với bộ tool hiện tại qua provider này'
 
+/** One-line description per tool name, shown to low-level models in the "tool usage preamble" (see `buildToolUsagePreamble`). */
 const TOOL_DESCRIPTIONS: Record<string, string> = {
   read_file: 'read_file(path) — đọc nội dung 1 file text trong workspace',
   write_file: 'write_file(path, content) — tạo mới/ghi đè 1 file text trong workspace',
@@ -73,6 +75,7 @@ function truncate(text: string | undefined | null, limit: number): string {
   return s.length > limit ? `${s.slice(0, limit)}…` : s
 }
 
+/** Shared shape for `run_command`/git tools — `ok` mirrors the process exit code, distinct from `SandboxErr` (used only when the process itself couldn't run). */
 interface ProcessResult {
   ok: boolean
   exitCode: number | null
@@ -91,6 +94,7 @@ function runGit(workspace: string, args: string[]): ProcessResult | SandboxErr {
   }
 }
 
+/** Depth-first collect of file paths under `root`, skipping `SEARCH_EXCLUDED_DIRS` — stops early once well past the match cap. */
 function collectTextFiles(root: string, out: string[]): void {
   let entries: Dirent[]
   try {
@@ -114,8 +118,11 @@ function isLikelyBinary(content: string): boolean {
 }
 
 /**
- * Thrown by `runConversation()` once `messages` has history worth keeping;
- * `execute()` persists `partialMessages` before surfacing the failure.
+ * Thrown by `runConversation()` instead of a plain `Error` once `messages` has
+ * accumulated any history worth keeping (system prompt, tool calls, partial
+ * turns) — lets `execute()` persist that history via `saveSessionMessages()`
+ * before surfacing the failure, so a resume after a mid-conversation error
+ * doesn't start from an empty session.
  */
 export class AgenticRunError extends Error {
   readonly partialMessages: unknown[]
@@ -136,7 +143,7 @@ export interface AgenticRunResult {
   rawMessages: unknown[]
 }
 
-/** JSON-stringify a tool outcome, truncated to 200 chars for the job log. */
+/** Same truncation rule as `summarize()`/`summarizeArgs()` (200 chars) — keeps a large tool outcome (e.g. `search_files` matches) from blowing up the job log. */
 export function summarizeResult(outcome: unknown): string {
   try {
     const json = JSON.stringify(outcome)
@@ -148,16 +155,24 @@ export function summarizeResult(outcome: unknown): string {
 }
 
 /**
- * Progress callbacks for `runConversation()`. A subclass that uses them must
- * call them for every tool call / assistant turn; `execute()` then skips
- * writing the transcript from the returned result.
+ * Lets `runConversation()` surface progress as it happens instead of the base
+ * class only seeing the final `AgenticRunResult` once the whole tool-use loop
+ * is done. A subclass that calls these opts out of the base class's legacy
+ * "write everything from the returned result" fallback (see `execute()`) —
+ * call them for every tool call / assistant turn, not just some.
  */
 export interface AgenticStreamHandlers {
   /** A tool call just finished executing this turn — `ok`/`resultSummary` reflect the outcome, not just the call. */
   onToolCall: (call: { name: string; argsSummary: string; ok: boolean; resultSummary: string }) => void
   /**
-   * Assistant text became available. `text` is a delta to append; the base
-   * class commits a transcript turn only at `done` (default `true`).
+   * Assistant text became available. `text` is a delta to append, not the
+   * full turn so far — callers that don't have real token streaming just
+   * call this once per turn with the whole turn text (`done` defaults to
+   * `true`). A future streaming subclass calls it many times per turn with
+   * `done: false`, then once more with the trailing delta (or `''`) and
+   * `done: true` — the base class buffers deltas and only commits a
+   * transcript turn (one JSONL line / chat bubble) at `done`, while still
+   * tailing every delta into the raw job log immediately.
    */
   onAssistantChunk: (text: string, opts?: { done?: boolean }) => void
   /** Called exactly once by `runConversation()`, right after the system prompt is built — before the first model call. */
@@ -175,7 +190,11 @@ export interface AgenticRunContext {
   signal?: AbortSignal
   /** Report tool calls / assistant text as they happen instead of only at the end — see `AgenticStreamHandlers`. */
   handlers: AgenticStreamHandlers
-  /** Tool MCP của job này, hoặc `null` khi Connection không bật server nào. */
+  /**
+   * Tool MCP của job này, hoặc `null` khi Connection không bật server nào.
+   * `null` là đường mặc định: subclass phải dựng `tools` và preamble y hệt bản
+   * trước khi có bridge — xem `buildToolUsagePreamble`.
+   */
   mcpBridge?: McpToolBridge | null
 }
 
@@ -225,6 +244,8 @@ export abstract class AgenticApiProvider implements RunnerProvider {
   async listModels(_apiKey: string, _baseURL: string): Promise<string[]> {
     throw new Error('provider này không hỗ trợ liệt kê model')
   }
+
+  // ---- Sandbox file-ops, shared by every subclass's tool implementations ----
 
   protected readWorkspaceFile(workspace: string, path: string): SandboxOk & { content: string } | SandboxErr {
     const p = resolvePathUnder(workspace, path)
@@ -279,7 +300,9 @@ export abstract class AgenticApiProvider implements RunnerProvider {
     }
   }
 
-  /** Reads `runnerConfig.extraTools`, dropping anything not in `ExtraTool`; unset resolves to `[]`. */
+  // ---- Opt-in extra tools (Connection.config.extraTools) — shared by every subclass ----
+
+  /** Reads `runnerConfig.extraTools`, dropping anything not in `ExtraTool` — an unset/legacy connection resolves to `[]` (no behavior change). */
   protected resolveExtraTools(runnerConfig: Record<string, any>): ExtraTool[] {
     const raw = runnerConfig?.extraTools
     if (!Array.isArray(raw)) return []
@@ -292,14 +315,19 @@ export abstract class AgenticApiProvider implements RunnerProvider {
   }
 
   /**
-   * Preamble listing the only tools registered for this turn, so the model
-   * ignores other tool names mentioned in agent markdown.
+   * Generated per-request from the tool names actually registered for this
+   * turn — tells low-level models (via OpenRouter, unfamiliar with the tool
+   * names baked into agent markdown written for the Claude Code CLI, e.g.
+   * `find_symbol`/`Skill`/`Write`) exactly which tools exist here and to
+   * ignore any others mentioned in the system prompt below it.
    */
   protected buildToolUsagePreamble(enabledTools: string[], mcpTools: McpBridgeTool[] = []): string {
     return [
       '## Tool khả dụng (DUY NHẤT — bỏ qua mọi tên tool khác được nhắc ở phần hướng dẫn bên dưới)',
       ...enabledTools.map((name) => `- ${TOOL_DESCRIPTIONS[name] ?? name}`),
-      // xem docs/architecture/code/runner.md §21
+      // 📌 BẮT BUỘC khi bridge mở: dòng tiêu đề ngay trên nói với model rằng danh
+      // sách này là DUY NHẤT. Thêm tool vào SDK mà không thêm vào đây thì model
+      // được bảo là chúng không tồn tại, và nó sẽ không gọi.
       ...mcpTools.map((t) => `- ${t.name}: ${t.description}`),
       '',
       'Hướng dẫn bên dưới có thể nhắc tới các công cụ không tồn tại ở đây (vd find_symbol, ' +
@@ -314,12 +342,18 @@ export abstract class AgenticApiProvider implements RunnerProvider {
     ].join('\n')
   }
 
+  /** Chars kept per embedded file in `buildProjectContextPreamble()` — enough for AGENTS.md/CLAUDE.md,
+   * bounded so a runaway file doesn't blow the context budget of small models. */
   private static readonly PROJECT_CONTEXT_FILE_LIMIT = 12_000
 
   /**
-   * Embeds the project's `AGENTS.md` / `CLAUDE.md` (outside the sandboxed
-   * workspace) into the system prompt.
-   * xem docs/architecture/code/runner.md §21
+   * Agent markdown (designer.md, reviewer.md, ...) universally instructs the model to read the
+   * project's agent hub — `AGENTS.md` / `CLAUDE.md` at the project root — paths that sit *above*
+   * `workspace` (the task folder). The sandbox tools here intentionally can't reach outside
+   * `workspace` (see `resolvePathUnder` — a security invariant, not an oversight), and unlike the
+   * CLI providers (real filesystem access, can walk up a directory when a literal path 404s) a
+   * weak model just hits "path outside workspace" or silently skips the rule. Embedding those
+   * files' content directly in the system prompt sidesteps the read entirely.
    */
   protected buildProjectContextPreamble(req: ExecuteRequest): string {
     const meta = req.metadata || {}
@@ -331,7 +365,7 @@ export abstract class AgenticApiProvider implements RunnerProvider {
         const content = readTextFileSync(joinPath(dir, fileName))
         sections.push(`### ${fileName}\n\n${truncate(content, AgenticApiProvider.PROJECT_CONTEXT_FILE_LIMIT)}`)
       } catch {
-        /* ignore */
+        /* file doesn't exist for this project — nothing to embed */
       }
     }
     tryEmbed(projectRoot, 'AGENTS.md')
@@ -362,7 +396,7 @@ export abstract class AgenticApiProvider implements RunnerProvider {
     }
   }
 
-  /** Read-only git tools — no commit/push/branch. */
+  /** Read-only git tools — no commit/push/branch (write ops are out of scope, see design.md §6). */
   protected gitStatus(workspace: string): ProcessResult | SandboxErr {
     return runGit(workspace, ['status', '--porcelain'])
   }
@@ -441,6 +475,8 @@ export abstract class AgenticApiProvider implements RunnerProvider {
     }
   }
 
+  // ---- RunnerProvider contract, shared by every subclass ----
+
   validateCredential(profile: CredentialProfile | undefined): { ok: boolean; errors: string[] } {
     const auth = resolveSecretRef(profile)
     if (isDirectSecretType(auth.type)) return { ok: true, errors: [] }
@@ -451,12 +487,17 @@ export abstract class AgenticApiProvider implements RunnerProvider {
   }
 
   validateRunnerConfig(_config: Record<string, unknown> | undefined): { ok: boolean; errors: string[] } {
+    // model/baseURL are optional — a connection with no model picked yet is valid
+    // (the future model-rotation feature is expected to fill it in at execute time).
     return { ok: true, errors: [] }
   }
 
   capabilities(): { supportsAgentFile: boolean; supportsStreaming: boolean; maxConcurrency: number } {
     return { supportsAgentFile: false, supportsStreaming: false, maxConcurrency: 1 }
   }
+
+  // ---- Job-log framing — mirrors the CLI providers' logPath convention so the
+  // Logs panel is not empty just because this provider never spawns a subprocess. ----
 
   private describePayload(req: ExecuteRequest, runnerConfig: Record<string, any>, sessionId: string): string {
     const agent = req.resolvedAgent
@@ -504,6 +545,8 @@ export abstract class AgenticApiProvider implements RunnerProvider {
       tokenUsage: result.tokenUsage,
     })
   }
+
+  // ---- Template method — fixed for every subclass, delegates to runConversation() ----
 
   async execute(req: ExecuteRequest, runnerConfig: Record<string, any>, credential: CredentialProfile): Promise<ExecuteResult> {
     const started = Date.now()
@@ -557,6 +600,11 @@ export abstract class AgenticApiProvider implements RunnerProvider {
       appendTranscriptTurn(this.providerId, sessionId, { role: 'user', text: req.userPrompt })
     }
 
+    // Streamed as `runConversation()` progresses (see `AgenticStreamHandlers`)
+    // instead of only once at the very end. `streamed` tracks whether the
+    // subclass actually used these — if it never calls them (e.g. the older,
+    // non-streaming shape), `execute()` falls back to writing everything from
+    // the returned `result` in one shot below, exactly as before.
     let streamed = false
     let assistantBuffer = ''
     const flushAssistantBuffer = (): void => {
@@ -589,7 +637,9 @@ export abstract class AgenticApiProvider implements RunnerProvider {
       },
     }
 
-    // xem docs/architecture/code/runner.md §22
+    // Mở TRƯỚC vòng hội thoại và đóng trong `finally` của cùng khối: transport
+    // stdio là tiến trình con, nên một đường thoát quên `close()` là rò tiến
+    // trình theo từng job. Mở hụt 🚫 không làm hỏng job — chỉ mất tool.
     let mcpBridge: McpToolBridge | null = null
     try {
       mcpBridge = await openMcpToolBridge({
@@ -619,7 +669,9 @@ export abstract class AgenticApiProvider implements RunnerProvider {
         mcpBridge,
       })
     } catch (err: any) {
-      flushAssistantBuffer()
+      flushAssistantBuffer() // don't lose a partially-streamed turn if the loop threw mid-turn
+      // `.length` guard: avoid overwriting an already-persisted session with `[]`
+      // if some future throw site forgets to pass a full `messages` array.
       if (err instanceof AgenticRunError && Array.isArray(err.partialMessages) && err.partialMessages.length) {
         saveSessionMessages(sessionId, err.partialMessages)
       }
