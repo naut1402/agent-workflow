@@ -23,25 +23,17 @@ export type RunnerCatalogLike = {
 
 const AGENT_CLI_PROVIDER_IDS = ['claude-code-cli', 'cursor-cli', 'codex-cli']
 
-/**
- * Phân loại family của một provider id.
- *
- * Quy tắc cứng chạy **trước** catalog: chúng là bản sao đúng của
- * `providerFamilyOf` bên backend (`business/providers/agentCli.ts`), mà backend
- * mới là nơi quyết định runner nào chạy agent được. Lệch hai bên nghĩa là UI cho
- * chọn một runner rồi job hỏng lúc chạy. `providers` chỉ đỡ cho provider lạ
- * (đăng ký runtime) mà quy tắc cứng chưa biết.
- */
+/** Bản FE của `providerFamilyOf` (`business/registry.ts`): catalog trước, quy tắc theo id sau. */
 export function familyOfProviderId(
   providerId: string | undefined,
   providers?: ProviderEntry[] | null,
 ): ProviderFamily {
   if (!providerId) return 'console-command'
+  const fromCatalog = (providers || []).find((p) => p?.id === providerId)?.family
+  if (fromCatalog) return fromCatalog
   if (providerId === 'console-command') return 'console-command'
   if (providerId === 'anthropic-api' || providerId.endsWith('-api')) return 'ai-api'
   if (AGENT_CLI_PROVIDER_IDS.includes(providerId)) return 'agent-cli'
-  const fromCatalog = (providers || []).find((p) => p?.id === providerId)?.family
-  if (fromCatalog) return fromCatalog
   return 'console-command'
 }
 
