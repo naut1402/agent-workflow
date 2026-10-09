@@ -9,7 +9,7 @@
  * prompt không bao giờ dạy agent gọi một tool không tồn tại.
  */
 import { dirnameFromImportMeta, existsSync, resolvePath } from '../../../../backend/lib/fileHelper.js'
-import type { McpStdioServer } from '../../../mcp/business/types.js'
+import type { McpStdioServer } from '../../../mcp/business/index.js'
 
 /**
  * Khoá entry trong file `--mcp-config`. Trùng id một server người dùng đã khai
@@ -60,8 +60,8 @@ export function buildSelfMcpEntry(input: {
     // tool `orchestrator_decide` (access `write`) vắng khỏi `tools/list` và
     // tuyến mcp hỏng trong im lặng.
     args: [entry, '--mode=full'],
-    // ⚠️ Giữ `env` ở mức TỐI THIỂU. `serialiseMcpServers` đẩy mọi giá trị env
-    // của entry stdio qua `collectSecretValues` → `isMaskableSecret`, mà
+    // ⚠️ Giữ `env` ở mức TỐI THIỂU. `McpServerSet.toCliConfig` đẩy mọi giá trị env
+    // của entry stdio qua `secretValues()` → `SecretMasker.isMaskable`, mà
     // heuristic đó chỉ là "dài ≥ 8 ký tự và không phải `env:NAME`" — nó 🚫
     // không phân biệt secret với đường dẫn. Mỗi khoá thêm vào đây là một chuỗi
     // bị `maskLog` thay bằng `***` ở MỌI dòng log của job điều phối.

@@ -17,7 +17,7 @@ Không Connection nào bật MCP thì đường này **hoàn toàn không chạy
 
 ## 2. Nơi lưu cấu hình
 
-Store là `mcp-servers.json` dưới `registryHome()` (`src/features/mcp/business/registry.ts`).
+Store là `mcp-servers.json` dưới `registryHome()` — `McpRegistry` (`src/features/mcp/business/McpRegistry.ts`, instance dùng chung `mcpRegistry`).
 
 - `registryHome()` mặc định `~/.dev-team-dashboard/`, override bằng biến môi trường `DEV_TEAM_DASHBOARD_HOME` (`src/backend/registry.ts`).
 - Shape: `{ version, servers[] }` với `MCP_SERVERS_VERSION = 2`.
@@ -40,7 +40,7 @@ Store là `mcp-servers.json` dưới `registryHome()` (`src/features/mcp/busines
 | `timeoutMs` | number | — | integer dương, trần `MCP_MAX_TIMEOUT_MS` = **600 000 ms**; mặc định `MCP_DEFAULT_TIMEOUT_MS` = **120 000 ms** |
 | `lastCheck` | object | — | Tóm tắt lần *Kiểm tra kết nối* gần nhất: `at`, `ok`, `toolCount`, `toolNames`, `error?` |
 
-**Sàn timeout `MCP_MIN_TIMEOUT_MS` = 5 000 ms cố ý KHÔNG áp ở API.** Schema `schemas/mcpServer.ts` chỉ có `.max()`, 🚫 không có `.min()` — bản ghi v1 có thể giữ giá trị dưới sàn của CLI, chặn ở endpoint là biến một cú bấm Lưu thành lỗi khó hiểu. Việc **kẹp về miền `[5s, 600s]` xảy ra lúc sinh file config** (`business/serialize.ts`, §7). 🚫 Đừng kết luận "API từ chối giá trị nhỏ" — nó nhận, rồi kẹp sau.
+**Sàn timeout `MCP_MIN_TIMEOUT_MS` = 5 000 ms cố ý KHÔNG áp ở API.** Schema `schemas/mcpServer.ts` chỉ có `.max()`, 🚫 không có `.min()` — bản ghi v1 có thể giữ giá trị dưới sàn của CLI, chặn ở endpoint là biến một cú bấm Lưu thành lỗi khó hiểu. Việc **kẹp về miền `[5s, 600s]` xảy ra lúc sinh file config** (`StdioMcpServer.toCliEntry`, §7). 🚫 Đừng kết luận "API từ chối giá trị nhỏ" — nó nhận, rồi kẹp sau.
 
 `lastCheck.toolNames` giữ tối đa **50** tên (`MCP_MAX_TOOL_NAMES`), mỗi tên cắt **120** ký tự; mô tả tool lưu lại cắt ở **200** ký tự (`MCP_MAX_TOOL_DESCRIPTION_LENGTH`).
 
@@ -59,7 +59,7 @@ Store là `mcp-servers.json` dưới `registryHome()` (`src/features/mcp/busines
 
 | Field | Kiểu | Bắt buộc | Ràng buộc |
 |---|---|---|---|
-| `url` | string | ✅ | `min(1)`; đi qua `assertMcpEndpoint` (§4) |
+| `url` | string | ✅ | `min(1)`; đi qua `RemoteMcpServer.assertEndpoint` (§4) |
 | `credentialId` | string \| null | — | Ref tới credential profile; giải lúc sinh file job |
 | `authHeader` | string | — | mặc định `Authorization` (`MCP_DEFAULT_AUTH_HEADER`) |
 | `authScheme` | string | — | mặc định `Bearer` (`MCP_DEFAULT_AUTH_SCHEME`) |
@@ -71,7 +71,7 @@ Dialog gợi ý sẵn path khi đổi transport — `MCP_DEFAULT_HTTP_PATH` = `/
 
 ## 4. Chốt endpoint
 
-`assertMcpEndpoint` (`business/endpointGuard.ts`) chạy ở cả `upsertServer` lẫn `testServer` cho mọi transport khác `stdio`:
+`RemoteMcpServer.assertEndpoint` (`business/RemoteMcpServer.ts`) chạy ở cả `upsertServer` (trên URL thô của payload, trước khi chuẩn hoá) lẫn `testServer` (`server.assertEndpoint()`) cho mọi transport khác `stdio`, và chạy lại ở **mọi hop** redirect khi kết nối (`guardedFetch`):
 
 - **`https`** — chấp nhận **mọi host**.
 - **`http`** — **chỉ** loopback / private: `isPrivateHostname(host)` hoặc một trong các literal `::1` · `[::1]` · `0.0.0.0`.
@@ -86,8 +86,8 @@ Dialog gợi ý sẵn path khi đổi transport — `MCP_DEFAULT_HTTP_PATH` = `/
 
 Ba luật, áp cùng lúc:
 
-1. **Mọi cấu hình trả về từ API đều mask** — `publicView` gọi `maskSecretValues`, thay giá trị `env` / `headers` bằng `MCP_MASK` = `***`.
-2. **`***` gửi ngược lên là sentinel "giữ nguyên"** — `mergeMaskedSecrets` khôi phục giá trị từ bản đã lưu. Không có luật này thì một cú bấm bật/tắt là ghi đè secret thật bằng `***`. Khoá mang `***` mà bản cũ **không có** thì **bỏ hẳn**: không có gì để khôi phục, và ghi literal `***` xuống server con còn tệ hơn thiếu khoá.
+1. **Mọi cấu hình trả về từ API đều mask** — `McpServer.masked()` thay giá trị `env` / `headers` (và secret trong `args`) bằng `SecretMasker.MASK` = `***`.
+2. **`***` gửi ngược lên là sentinel "giữ nguyên"** — `McpServer.restoreMasked` khôi phục giá trị từ bản đã lưu. Không có luật này thì một cú bấm bật/tắt là ghi đè secret thật bằng `***`. Khoá mang `***` mà bản cũ **không có** thì **bỏ hẳn**: không có gì để khôi phục, và ghi literal `***` xuống server con còn tệ hơn thiếu khoá.
 3. **`env:NAME` 🚫 không bị mask** — đó là **tên biến**, không phải giá trị, và người dùng còn phải sửa được nó trên UI.
 
 Thêm hai chi tiết:
@@ -118,7 +118,7 @@ Thêm hai chi tiết:
 
 ## 7. Tiêu thụ ở runner
 
-`prepareMcpConfigForJob` (`src/features/runner/business/providers/mcpJobConfig.ts`) sinh file `mcpServers` cho **từng job**:
+`prepareMcpConfigForJob` (`src/features/runner/business/providers/mcpJobConfig.ts`) chọn server qua `mcpRegistry.select` rồi sinh file `mcpServers` bằng `McpServerSet.toCliConfig` cho **từng job**:
 
 - **Vị trí**: `registryHome()/mcp-runtime/job-<jobId>.json` — 🚫 **không** trong workspace người dùng. File chứa secret đã giải; nằm trong repo thì lọt `git status` của chính agent.
 - **Quyền**: thư mục `0700`, file `0600` — `mode` set ngay lúc tạo (`writeFileSync` với `{ mode }`) nên không có cửa sổ file `0644` chứa token đã giải; thêm một `chmod` ngay sau để phủ ca ghi đè, vì `writeFileSync` giữ nguyên mode cũ khi file đã tồn tại.
@@ -132,6 +132,24 @@ Thêm hai chi tiết:
 ## 8. Giới hạn đã biết
 
 - **Server bị tắt hoặc bị xoá sau khi Connection đã chọn** thì job chạy **thiếu tool**, và chỉ có một dòng cảnh báo trong log job: `mcp <id>: không tìm thấy hoặc đang tắt — job chạy không có server này`. 🚫 Job không fail.
-- **`sanitiseMcpServerId` là ánh xạ nhiều-một** (`my.server` và `my server` cùng ra `myserver`). Upsert vì thế chỉ nhận id đã canonical — nếu không, tạo mới `my.server` khi `myserver` đã tồn tại sẽ xoá sổ cấu hình kia trong im lặng.
+- **`McpServer.sanitiseId` là ánh xạ nhiều-một** (`my.server` và `my server` cùng ra `myserver`). Upsert vì thế chỉ nhận id đã canonical — nếu không, tạo mới `my.server` khi `myserver` đã tồn tại sẽ xoá sổ cấu hình kia trong im lặng.
 - **Migrate v1 → v2 bỏ `timeoutMs` dưới 120 000 ms.** Ở v1 trường này chỉ tác động nút *Kiểm tra kết nối*; ở v2 nó còn xuống `startupTimeoutSec` của job. Giữ lại giá trị v1 là im lặng rút thời gian khởi động của job — bỏ trường là trả về mặc định, không phải mất dữ liệu.
 - **Mô tả tool lưu lại cắt 200 ký tự**, danh sách tên tool cắt 50 phần tử — `lastCheck` là tóm tắt, 🚫 không phải bản sao schema tool.
+
+---
+
+## 9. Cấu trúc module
+
+Vai client nằm ở `src/features/mcp/business/`, mỗi abstraction một file và mỗi hiện thực một file:
+
+| File | Vai trò |
+|---|---|
+| `McpServer.ts` | «abstract» một MCP server: `masked` · `restoreMasked` · `secretValues` · `destination` · `needsStoredSecret` · `warnings` · `assertEndpoint` · `resolve` · `toCliEntry` · `createTransport` |
+| `StdioMcpServer.ts` · `RemoteMcpServer.ts` | Hai hiện thực. `RemoteMcpServer` (`http` + `sse`) giữ chốt endpoint (§4) và `guardedFetch` |
+| `McpRegistry.ts` | Store `mcp-servers.json` (§2) và **chỗ lắp ráp duy nhất** biết hai hiện thực (`McpRegistry.normalise`) |
+| `McpServerSet.ts` | Bộ server của một job (`McpRegistry.select`) → `toCliConfig` sinh nội dung file `mcpServers` (§7) |
+| `McpClient.ts` | `McpClient.probe` (*Kiểm tra kết nối*) · `McpClient.open` → `McpSession` (phiên sống theo job của họ `ai-api`) |
+| `SecretMasker.ts` | Value object che secret (§5): `mask` · `maskDeep` · `stream`, cùng quy tắc nhận diện secret trong `args`. **Node-free** — dialog dùng chung quy tắc này |
+| `CredentialResolver.ts` | Cổng giải secret của credential profile — `runner` hiện thực, `mcp` 🚫 biết credential store |
+
+Kiểu dữ liệu và hằng một nguồn ở `src/features/mcp/schemas/mcpServer.ts` (schema Zod, type `z.infer`). FE chỉ import `schemas/mcpServer.ts` và `SecretMasker.ts` — các lớp còn lại kéo SDK MCP nên chỉ chạy ở backend.

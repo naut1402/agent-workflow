@@ -31,7 +31,7 @@ import {
   writeTextFileAtomicSync,
 } from '../../../../backend/lib/fileHelper.js'
 import { registryHome } from '../../../../backend/registry.js'
-import { sanitiseMcpServerId } from '../../../mcp/business/index.js'
+import { McpServer } from '../../../mcp/business/index.js'
 import {
   resolveJobMcpServers,
   tryChmod,
@@ -118,7 +118,7 @@ export function prepareCursorMcpWorkspace(input: PrepareMcpConfigInput): McpJobC
   // Bất biến argv: không `ids` VÀ không `extras` ⇒ không file nào chạm đĩa.
   if (!resolved) return null
 
-  const jobKey = sanitiseMcpServerId(input.jobId) ?? 'unknown'
+  const jobKey = McpServer.sanitiseId(input.jobId) ?? 'unknown'
   const dir = joinPath(input.workspace, CURSOR_DIR)
   const path = joinPath(dir, CURSOR_CONFIG)
   const gitignorePath = joinPath(dir, CURSOR_GITIGNORE)

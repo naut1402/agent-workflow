@@ -1,5 +1,5 @@
 import { apiGet, apiPost, apiRequest } from '../../../frontend/http/client'
-import type { McpServerConfig } from '../business/types'
+import type { McpServerConfig } from '../schemas/mcpServer'
 
 export interface McpProbeResponse {
   ok: boolean

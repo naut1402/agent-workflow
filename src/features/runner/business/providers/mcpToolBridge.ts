@@ -8,15 +8,8 @@
 // là đường MỌI job `ai-api` đi qua, kể cả job không liên quan MCP, và một chỗ
 // quên `close()` là rò tiến trình con stdio theo từng job.
 
-import {
-  collectSecretValues,
-  listMcpServers,
-  maskSecretText,
-  openMcpSession,
-  sanitiseMcpServerId,
-} from '../../../mcp/business/index.js'
-import type { McpSession } from '../../../mcp/business/index.js'
-import type { McpServerConfig } from '../../../mcp/business/types.js'
+import { McpClient, SecretMasker, mcpRegistry } from '../../../mcp/business/index.js'
+import type { McpServer, McpSession } from '../../../mcp/business/index.js'
 import { getCredential, isDirectSecretType, resolveSecretRef } from '../credentials.js'
 
 /** Khớp quy ước tên tool của Claude Code — `mcp__<server>__<tool>`. */
@@ -61,24 +54,19 @@ export interface OpenMcpToolBridgeInput {
 export async function openMcpToolBridge(
   input: OpenMcpToolBridgeInput,
 ): Promise<McpToolBridge | null> {
-  const ids = Array.isArray(input.ids) ? input.ids.filter((x): x is string => typeof x === 'string') : []
-  if (!ids.length) return null
-
   const warn = (message: string) => input.onWarning?.(message)
-  const servers = listMcpServers().filter((s) => ids.includes(s.id) && s.enabled)
-  const resolved = new Set(servers.map((s) => s.id))
-  for (const id of ids) {
-    if (!resolved.has(id)) warn(`mcp ${id}: không tìm thấy hoặc đang tắt — job chạy không có server này`)
-  }
-  if (!servers.length) return null
+  // Không `ids` ⇒ `null`; id rụng ⇒ cảnh báo; rụng hết ⇒ `null` — cùng luật chọn
+  // với đường CLI (`McpRegistry.select`).
+  const set = mcpRegistry.select({ ids: input.ids, onWarning: warn })
+  if (!set) return null
 
   const sessions = new Map<string, McpSession>()
   const routes = new Map<string, { session: McpSession; toolName: string }>()
   const tools: McpBridgeTool[] = []
   const secrets: string[] = []
 
-  for (const server of servers) {
-    const key = sanitiseMcpServerId(server.id)
+  for (const server of set.servers) {
+    const key = server.key
     if (!key) {
       warn(`mcp ${server.id}: id không hợp lệ — bỏ qua server này`)
       continue
@@ -87,30 +75,31 @@ export async function openMcpToolBridge(
     // mask của chính thông điệp lỗi bên dưới — server từ xa vọng lại token
     // trong body 401 là chuyện thường.
     const credentialSecret = resolveCredentialSecret(server)
-    const knownSecrets = [...collectSecretValues(server), ...(credentialSecret ? [credentialSecret] : [])]
+    const knownSecrets = [...server.secretValues(), ...(credentialSecret ? [credentialSecret] : [])]
 
     let session: McpSession
     try {
-      session = await openMcpSession(server, {
+      session = await McpClient.open(server, {
         cwd: input.workspace,
-        // Nhận ngay lúc phát sinh: `openMcpSession` ném thì 🚫 không có
+        // Nhận ngay lúc phát sinh: `McpClient.open` ném thì 🚫 không có
         // `session` nào để đọc `warnings`, mà đó đúng là ca cần giải thích nhất.
         onWarning: (message) => warn(`mcp ${server.id}: ${message}`),
-        // 📌 BẮT BUỘC. Thiếu nó thì `resolveHeaders` thấy `secret` rỗng + có
+        // 📌 BẮT BUỘC. Thiếu nó thì `RemoteMcpServer.resolve` thấy secret rỗng + có
         // `credentialId` ⇒ BỎ HẲN header xác thực, server trả 401, bridge trả
         // `null` và model mất sạch tool — tức #379 vô hiệu với đúng cấu hình mà
         // cảnh báo `argsSecretLiteral` đang khuyên dùng. Đường CLI giải ở
-        // `mcpJobConfig.ts` (`secretFor`); đường này phải giải tương đương.
-        secret: credentialSecret,
+        // `mcpJobConfig.ts` (`runnerCredentials`); đường này phải giải tương đương.
+        // Trả đúng secret đã giải ở trên — không giải lần hai.
+        credentials: { secretFor: () => credentialSecret },
       })
     } catch (err: any) {
       // Một server hỏng 🚫 không được làm chết cả job: nó chỉ mất đúng tool của
       // nó. Thông điệp lỗi có thể vọng lại secret nên mask trước khi ra log.
-      warn(`mcp ${server.id}: không mở được phiên — ${maskSecretText(String(err?.message ?? err), knownSecrets)}`)
+      warn(`mcp ${server.id}: không mở được phiên — ${new SecretMasker(knownSecrets).mask(String(err?.message ?? err))}`)
       continue
     }
     sessions.set(key, session)
-    secrets.push(...session.secrets, ...knownSecrets)
+    secrets.push(...session.masker.values, ...knownSecrets)
     for (const tool of session.tools) {
       if (!tool.name) continue
       // Prefix vừa chống trùng với tool sẵn có (`run_command`, `git_diff`, …)
@@ -124,26 +113,28 @@ export async function openMcpToolBridge(
   if (!sessions.size) return null
 
   const timeoutMs = input.callTimeoutMs ?? MCP_TOOL_CALL_TIMEOUT_MS
-  const uniqueSecrets = [...new Set(secrets)].filter(Boolean)
+  const masker = new SecretMasker(secrets)
 
   return {
     tools,
-    secrets: uniqueSecrets,
+    secrets: [...masker.values],
     has: (name) => routes.has(name),
     async call(name, args) {
       const route = routes.get(name)
       if (!route) return { ok: false, error: `tool ${name} không tồn tại` }
       try {
-        const result = await withTimeout(
+        const result = await McpClient.withTimeout(
           route.session.callTool(route.toolName, args ?? {}),
           timeoutMs,
-          name,
+          `mcp: tool ${name} quá hạn ${timeoutMs}ms`,
         )
-        return { ok: true, result: maskDeep(result, uniqueSecrets) }
+        // Kết quả tool đi thẳng vào log job và vào `messages` được persist —
+        // xem `SecretMasker.maskDeep`.
+        return { ok: true, result: masker.maskDeep(result) }
       } catch (err: any) {
         // 🚫 Không bao giờ ném: vòng tool-use coi đây là `is_error` và model tự
         // xử, thay vì cả job chết vì một server MCP hỏng giữa chừng.
-        return { ok: false, error: maskSecretText(String(err?.message ?? err), uniqueSecrets) }
+        return { ok: false, error: masker.mask(String(err?.message ?? err)) }
       }
     },
     async close() {
@@ -157,40 +148,15 @@ export async function openMcpToolBridge(
 }
 
 /**
- * Kết quả tool đi thẳng vào log job và vào `messages` được persist, nên secret
- * phải bị thay TRƯỚC khi nó rời hàm này — ràng buộc này áp cho cả họ `ai-api`,
- * không riêng `agent-cli` (ở đó `maskLog` lo phần tương ứng).
- */
-function maskDeep(value: unknown, secrets: readonly string[]): unknown {
-  if (!secrets.length) return value
-  if (typeof value === 'string') return maskSecretText(value, secrets)
-  if (Array.isArray(value)) return value.map((v) => maskDeep(v, secrets))
-  if (value && typeof value === 'object') {
-    const out: Record<string, unknown> = {}
-    for (const [k, v] of Object.entries(value as Record<string, unknown>)) out[k] = maskDeep(v, secrets)
-    return out
-  }
-  return value
-}
-
-/**
  * Secret của credential profile, giải y hệt đường CLI (`mcpJobConfig.ts`) và
  * đường Kiểm tra kết nối (`controller.ts`). `null` cho stdio: credential chỉ
  * gắn vào header của transport từ xa.
  */
-function resolveCredentialSecret(server: McpServerConfig): string | null {
-  if (server.transport === 'stdio' || !server.credentialId) return null
-  const resolved = resolveSecretRef(getCredential(server.credentialId))
+function resolveCredentialSecret(server: McpServer): string | null {
+  const config = server.config
+  if (config.transport === 'stdio' || !config.credentialId) return null
+  const resolved = resolveSecretRef(getCredential(config.credentialId))
   if (!isDirectSecretType(resolved.type)) return null
   return (resolved as { value?: string | null }).value ?? null
 }
 
-function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined
-  const guard = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`mcp: tool ${label} quá hạn ${ms}ms`)), ms)
-  })
-  return Promise.race([promise, guard]).finally(() => {
-    if (timer) clearTimeout(timer)
-  }) as Promise<T>
-}
