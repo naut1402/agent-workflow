@@ -9,6 +9,22 @@ import {
 } from '../../../../../src/features/runner/business/providers/claude-code-cli.js'
 import { mcpRegistry } from '../../../../../src/features/mcp/business/McpRegistry.js'
 import type { CredentialProfile, ResolvedAgent } from '../../../../../src/features/runner/business/types.js'
+import { registryHome } from '../../../../../src/backend/registry.js'
+import { ConfigFlagMcpDelivery } from '../../../../../src/features/runner/business/mcpDelivery/ConfigFlagMcpDelivery.js'
+import { NoMcpDelivery } from '../../../../../src/features/runner/business/mcpDelivery/NoMcpDelivery.js'
+import { WorkspaceFileMcpDelivery } from '../../../../../src/features/runner/business/mcpDelivery/WorkspaceFileMcpDelivery.js'
+import { RunnerCredentialResolver } from '../../../../../src/features/runner/business/RunnerCredentialResolver.js'
+
+/**
+ * Delivery y hệt bản `runner/business/registry.ts` lắp ráp cho claude / cursor.
+ * `createLocalConsoleProvider` dựng tay 🚫 còn tự suy cách giao theo `providerId`
+ * (G12) — ca MCP phải truyền tường minh. `runtimeDir` tính lại mỗi lần gọi vì
+ * từng ca đổi `DEV_TEAM_DASHBOARD_HOME`.
+ */
+const mcpCredentials = new RunnerCredentialResolver()
+const mcpRuntimeDir = () => path.join(registryHome(), 'mcp-runtime')
+const claudeMcpDelivery = () => new ConfigFlagMcpDelivery(mcpRuntimeDir, mcpCredentials)
+const cursorMcpDelivery = () => new WorkspaceFileMcpDelivery(mcpRuntimeDir, mcpCredentials)
 
 // Runs the shared local-console provider against real short-lived shell
 // scripts — no node:child_process mocking convention exists in this codebase
@@ -891,6 +907,7 @@ describe('claude-code-cli — execute() với MCP', () => {
       providerId: 'claude-code-cli',
       defaultCliPath: process.execPath,
       claudeStyleArgs: true,
+      mcpDelivery: claudeMcpDelivery(),
       ...over,
     })
   }
@@ -1009,7 +1026,7 @@ describe('claude-code-cli — execute() với MCP', () => {
     const { cliPath, flags } = nodeCli('mcp-echo')
 
     const result = await run(
-      mcpProvider({ mcpDelivery: 'unsupported' }),
+      mcpProvider({ mcpDelivery: new NoMcpDelivery() }),
       { cliPath, flags, mcpServers: ['on1'] },
     )
 
@@ -1217,6 +1234,7 @@ describe('claude-code-cli — self-MCP cho job điều phối (Tf2f484e2)', () =
       providerId: 'claude-code-cli',
       defaultCliPath: process.execPath,
       claudeStyleArgs: true,
+      mcpDelivery: claudeMcpDelivery(),
     })
     const result = await provider.execute(
       {
@@ -1411,6 +1429,7 @@ describe('claude-code-cli — self-MCP cho job điều phối (Tf2f484e2)', () =
       providerId: 'claude-code-cli',
       defaultCliPath: process.execPath,
       claudeStyleArgs: true,
+      mcpDelivery: claudeMcpDelivery(),
     })
     const result = await provider.execute(
       {
@@ -1492,6 +1511,7 @@ describe('cursor-cli — MCP qua workspace config file (#378)', () => {
       defaultCliPath: process.execPath,
       claudeStyleArgs: false,
       sessionCapture: 'parse-json',
+      mcpDelivery: cursorMcpDelivery(),
     })
   }
 
