@@ -2,7 +2,8 @@
 import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { ref, onMounted } from 'vue'
 import { deleteMcpServer, fetchMcpServers, saveMcpServer } from '../scripts/mcpApi'
-import { MCP_MASK, type McpServerConfig } from '../business/types'
+import { SecretMasker } from '../business/SecretMasker'
+import type { McpServerConfig } from '../schemas/mcpServer'
 import Icon from '../../../frontend/ui/Icon.vue'
 import McpServerDialog from './McpServerDialog.vue'
 
@@ -62,7 +63,7 @@ function openCopy(s: McpServerConfig, e: Event) {
   const bag = copy.transport === 'stdio' ? copy.env : copy.headers
   let cleared = false
   for (const [k, v] of Object.entries(bag || {})) {
-    if (v !== MCP_MASK) continue
+    if (v !== SecretMasker.MASK) continue
     bag[k] = ''
     cleared = true
   }

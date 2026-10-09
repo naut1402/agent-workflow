@@ -2,63 +2,32 @@ import { AbstractController } from '../../backend/http/AbstractController.js'
 import { emitAudit } from '../../backend/log/store.js'
 import { emitEntity } from '../../backend/events/index.js'
 import { getCredential, isDirectSecretType, resolveSecretRef } from '../runner/business/index.js'
+import { McpServerTestSchema, McpServerUpsertSchema } from './schemas/mcpServer.js'
 import {
-  McpServerTestSchema,
-  McpServerUpsertSchema,
-  collectMcpServerWarnings,
-} from './schemas/mcpServer.js'
-import {
-  MCP_MASK,
-  assertMcpEndpoint,
-  deleteMcpServer,
-  getMcpServer,
-  listMcpServers,
-  maskSecretValues,
-  mergeMaskedSecrets,
-  normaliseMcpServer,
-  probeMcpServer,
-  recordCheckResult,
-  upsertMcpServer,
-  type McpServerConfig,
+  McpClient,
+  McpRegistry,
+  RemoteMcpServer,
+  mcpRegistry,
+  type CredentialResolver,
 } from './business/index.js'
 
-/** Secret không bao giờ rời tiến trình qua response — mọi cấu hình trả về đều mask. */
-function publicView(server: McpServerConfig): McpServerConfig {
-  return maskSecretValues(server)
-}
-
 /**
- * Đích thật mà probe sẽ nói chuyện. Dùng để so bản nháp với bản đã lưu: cùng
- * `id` là chưa đủ, vì `id` do người gửi đặt còn secret thì lấy từ bản đã lưu.
- *
- * 📌 So trên giá trị THÔ, 🚫 không mask. Mask hai vế thì mọi arg đứng sau một cờ
- * mang tên secret (`--auth`, `--token`, …) đều thành `***` ở cả hai bên, nên đổi
- * GIÁ TRỊ của nó không còn làm đích khác đi — tức nới đúng cái cổng này ra.
- * Ca cụ thể: đã lưu `--auth https://internal --token sk-REAL`, gửi lên
- * `--auth https://attacker --token ***` ⇒ mask hai vế cho kết quả bằng nhau ⇒
- * khôi phục `sk-REAL` rồi probe tới host của người gửi.
- *
- * Vấn đề "bản nháp mang `***` nên không bao giờ khớp" (E3) được xử lý ở CHỖ GỌI,
- * bằng cách so bản ĐÃ KHÔI PHỤC thay vì bản thô — xem `testServer`.
+ * Credential của server từ xa vẫn giải qua `runner` (vault + `credentials.json`).
+ * Dựng tại chỗ thành `CredentialResolver` để `mcp/business` chỉ thấy cổng, 🚫 không
+ * thấy store — cạnh `controller` → `runner` này được cắt ở phần sau của #468.
  */
-function destinationOf(server: McpServerConfig): string {
-  return server.transport === 'stdio'
-    ? `stdio ${server.command} ${JSON.stringify(server.args ?? [])}`
-    : `${server.transport} ${server.url}`
-}
-
-/** Bản nháp có ô nào đang là `***`, tức đang trông chờ khôi phục từ bản đã lưu. */
-function needsStoredSecret(server: McpServerConfig): boolean {
-  const bag = server.transport === 'stdio' ? server.env : server.headers
-  if (Object.values(bag || {}).some((v) => v === MCP_MASK)) return true
-  if (server.transport !== 'stdio') return false
-  // `args` mang hai dạng mask: ô trọn vẹn `***` và dạng gộp `--token=***`.
-  return (server.args ?? []).some((a) => a === MCP_MASK || a.endsWith(`=${MCP_MASK}`))
+const runnerCredentials: CredentialResolver = {
+  secretFor(credentialId) {
+    const resolved = resolveSecretRef(getCredential(credentialId))
+    if (!isDirectSecretType(resolved.type)) return null
+    return (resolved as { value?: string | null }).value ?? null
+  },
 }
 
 export class McpController extends AbstractController {
+  /** Secret không bao giờ rời tiến trình qua response — mọi cấu hình trả về đều mask. */
   listServers() {
-    return this.ok({ servers: listMcpServers().map(publicView) })
+    return this.ok({ servers: mcpRegistry.list().map((s) => s.masked()) })
   }
 
   async upsertServer() {
@@ -68,15 +37,18 @@ export class McpController extends AbstractController {
     if (!parsed.success) return this.badRequest(firstIssue(parsed.error))
 
     const input = parsed.data
+    // Kiểm trên URL THÔ của payload, TRƯỚC `normalise`: `normalise` cắt khoảng
+    // trắng và trả `null` cho URL rỗng/id hỏng, nên kiểm sau nó là đổi thông
+    // điệp lỗi người dùng nhận (`mcp: invalid URL` thành `invalid mcp server config`).
     if (input.transport !== 'stdio') {
       try {
-        assertMcpEndpoint(input.url)
+        RemoteMcpServer.assertEndpoint(input.url)
       } catch (err: any) {
         return this.badRequest(String(err?.message ?? err))
       }
     }
 
-    const result = upsertMcpServer(input)
+    const result = mcpRegistry.upsert(input)
     if ('error' in result) return this.json(result.status || 400, { error: result.error })
 
     emitAudit({ op: 'update', entity: 'mcp-server', identifier: result.server.id, projectId: null })
@@ -84,12 +56,12 @@ export class McpController extends AbstractController {
     // Cảnh báo tính trên bản ĐÃ LƯU, không phải payload gửi lên: payload mang
     // `***` ở ô người dùng không sửa, nên tính trên nó là bỏ sót đúng ca
     // «secret thật vẫn đang nằm trong args».
-    const warnings = [...result.warnings, ...collectMcpServerWarnings(result.server)]
-    return this.ok({ saved: true, server: publicView(result.server), warnings })
+    const warnings = [...result.warnings, ...result.server.warnings()]
+    return this.ok({ saved: true, server: result.server.masked(), warnings })
   }
 
   deleteServer() {
-    const result = deleteMcpServer(this.c.req.query('id') || '')
+    const result = mcpRegistry.delete(this.c.req.query('id') || '')
     if ('error' in result) return this.json(result.status || 400, { error: result.error })
     // `result.id` đã sanitise — audit phải ghi đúng thứ bị xoá, không phải chuỗi thô.
     if (result.deleted) {
@@ -113,7 +85,7 @@ export class McpController extends AbstractController {
     const parsed = McpServerTestSchema.safeParse(b.value)
     if (!parsed.success) return this.badRequest(firstIssue(parsed.error))
 
-    const draft = normaliseMcpServer(parsed.data.server)
+    const draft = McpRegistry.normalise(parsed.data.server)
     if (!draft) return this.badRequest('invalid mcp server config')
 
     // Bản nháp từ dialog mang `***` ở các ô người dùng không sửa — probe bằng
@@ -124,40 +96,37 @@ export class McpController extends AbstractController {
     // khoá (probe sẽ 401 và người dùng đi sửa nhầm chỗ).
     //
     // So trên bản ĐÃ KHÔI PHỤC (`candidate`), 🚫 không phải bản thô: ô nào mang
-    // `***` thì `mergeMaskedSecrets` thay bằng đúng giá trị đã lưu nên hai vế
+    // `***` thì `restoreMasked` thay bằng đúng giá trị đã lưu nên hai vế
     // khớp (E3), còn ô nào người gửi điền GIÁ TRỊ MỚI thì giá trị đó đi thẳng
     // vào `candidate` và làm đích khác đi ⇒ vẫn chặn. Khôi phục rồi mới so là
     // an toàn: nếu so ra khác thì `candidate` bị vứt, 🚫 không probe, 🚫 không
     // response nào mang nó.
-    const saved = getMcpServer(draft.id)
+    const saved = mcpRegistry.get(draft.id)
     const testWarnings: string[] = []
-    const candidate = saved ? mergeMaskedSecrets(draft, saved, testWarnings) : draft
-    const sameTarget = Boolean(saved) && destinationOf(saved!) === destinationOf(candidate)
-    if (!sameTarget && needsStoredSecret(draft)) {
+    const candidate = saved ? draft.restoreMasked(saved, testWarnings) : draft
+    const sameTarget = Boolean(saved) && saved!.destination() === candidate.destination()
+    if (!sameTarget && draft.needsStoredSecret()) {
       return this.badRequest(
         'đích kết nối đã đổi so với cấu hình đã lưu — nhập lại secret hoặc lưu cấu hình mới trước khi kiểm tra',
       )
     }
     const server = sameTarget ? candidate : draft
-    if (server.transport !== 'stdio') {
-      try {
-        assertMcpEndpoint(server.url)
-      } catch (err: any) {
-        return this.badRequest(String(err?.message ?? err))
-      }
+    try {
+      server.assertEndpoint()
+    } catch (err: any) {
+      return this.badRequest(String(err?.message ?? err))
     }
 
-    const secret = server.transport === 'stdio' ? null : resolveCredentialSecret(server.credentialId)
-    const result = await probeMcpServer(server, {
+    const result = await McpClient.probe(server, {
       listTools: parsed.data.listTools !== false,
-      secret,
+      credentials: runnerCredentials,
     })
 
     // Chỉ ghi `lastCheck` khi vừa đo đúng cấu hình đang lưu. Bản nháp (đổi url
     // rồi bấm Kiểm tra, sau đó Huỷ) mà vẫn ghi thì panel hiện một trạng thái
     // không thuộc cấu hình nào đang tồn tại.
     if (sameTarget) {
-      recordCheckResult(server.id, {
+      mcpRegistry.recordCheck(server.id, {
         at: new Date().toISOString(),
         ok: result.ok,
         toolCount: result.tools.length,
@@ -181,18 +150,11 @@ export class McpController extends AbstractController {
       // `testWarnings` mang `argsSecretDropped`: một ô `***` neo lệch đã bị BỎ,
       // nên probe đang chạy thiếu tham số. Đánh rơi nó là người dùng nhận một
       // lỗi 🚫 không liên quan gì tới nguyên nhân thật.
-      warnings: [...new Set([...testWarnings, ...collectMcpServerWarnings(server), ...result.warnings])],
+      warnings: [...new Set([...testWarnings, ...server.warnings(), ...result.warnings])],
       error: result.error,
       durationMs: result.durationMs,
     })
   }
-}
-
-function resolveCredentialSecret(credentialId: string | null | undefined): string | null {
-  if (!credentialId) return null
-  const resolved = resolveSecretRef(getCredential(credentialId))
-  if (!isDirectSecretType(resolved.type)) return null
-  return (resolved as { value?: string | null }).value ?? null
 }
 
 function firstIssue(error: { issues: { path: (string | number)[]; message: string }[] }): string {
