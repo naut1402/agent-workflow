@@ -16,8 +16,9 @@ import { capturePage } from './_capture'
  * 2. Overlay thật sự chặn con trỏ (hit-testing).
  * 3. Nút đóng ở `.modal-head` KHÔNG bị phủ — người dùng luôn thoát được.
  *
- * Chọn `McpServerDialog` làm mẫu: nút Lưu của nó nằm TRONG `.modal-body`, nên
- * người dùng luôn đang cuộn ở đáy lúc bấm — đúng tình huống mà F1 làm hỏng.
+ * Chọn `McpServerDialog` làm mẫu: form dài nhất nên `.modal-body` chắc chắn
+ * tràn ở viewport thấp, và ca này cuộn xuống đáy rồi mới bấm Lưu (ở slot
+ * `footer` của `CDialog`, ngoài overlay) — đúng tình huống mà F1 làm hỏng.
  */
 
 const MCP_LABEL = 'E2E overlay probe'

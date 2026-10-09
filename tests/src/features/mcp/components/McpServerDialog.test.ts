@@ -971,3 +971,35 @@ describe('McpServerDialog — cảnh báo secret literal trong `args` (#385)', (
     expect(savedWithWarningsShown()).toBe(false)
   })
 })
+
+/**
+ * Hàng nút đi qua slot `footer` của `CDialog`: nằm ngoài vùng cuộn và ngoài
+ * `CLoadingOverlay`, nên lúc đang lưu nó phải tự khoá bằng `:disabled`.
+ */
+describe('McpServerDialog — hàng nút ở footer của CDialog', () => {
+  it('hàng nút nằm ngoài .modal-body và ngoài .c-loading-host', async () => {
+    await mountDialog()
+    const actions = document.body.querySelector('.modal-actions')!
+    expect(actions).not.toBeNull()
+    expect(actions.closest('.modal-body')).toBeNull()
+    expect(actions.closest('.c-loading-host')).toBeNull()
+  })
+
+  it('đang lưu: cả Huỷ lẫn Lưu đều khoá', async () => {
+    let release: () => void = () => {}
+    vi.mocked(saveMcpServer).mockImplementationOnce(
+      () => new Promise((resolve) => {
+        release = () => resolve({ saved: true, server: editableServer() } as any)
+      }),
+    )
+    await mountDialog()
+    await fillMinimalStdio('Đang lưu')
+    await click(buttonByText(mcpVi.dialog.save))
+
+    expect(buttonByText(mcpVi.dialog.saving).disabled).toBe(true)
+    expect(buttonByText(mcpVi.dialog.cancel).disabled).toBe(true)
+
+    release()
+    await flushPromises()
+  })
+})

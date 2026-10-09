@@ -83,7 +83,7 @@ Quy ước: [`docs/agent-rules/testing.md`](../docs/agent-rules/testing.md) §3�
 | `tests/src/frontend/lib` | vitest | `frontend/lib`, `backend/configs`, `features/monitor/composables` | 10 | `npx vitest run tests/src/frontend/lib` |
 | `tests/src/frontend/plugins` | vitest | `frontend/composables`, `frontend/configs`, `frontend/plugins` | 1 | `npx vitest run tests/src/frontend/plugins` |
 | `tests/src/frontend/shell` | vitest | `frontend/shell` | 3 | `npx vitest run tests/src/frontend/shell` |
-| `tests/src/frontend/ui` | vitest | `frontend/ui`, `features/runner/components`, `features/knowledge/components` | 8 | `npx vitest run tests/src/frontend/ui` |
+| `tests/src/frontend/ui` | vitest | `frontend/ui`, `features/runner/components`, `features/knowledge/components` | 9 | `npx vitest run tests/src/frontend/ui` |
 | `tests/src/server` | bun | `features/settings/business`, `backend/registry.ts`, `backend/apiServer.ts` | 3 | `bun test tests/src/server/*.test.ts` |
 | `tests/src/server/agents` | bun | `features/agent-editor/business` | 5 | `bun test tests/src/server/agents` |
 | `tests/src/server/artifactActions` | bun | `features/monitor/business`, `features/monitor/schemas` | 1 | `bun test tests/src/server/artifactActions` |

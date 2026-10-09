@@ -1826,7 +1826,8 @@ describe('PipelineView — canvas corner actions (auto-layout, đổi profile)',
 
     const dialog = document.body.querySelector('.modal[role="dialog"]')
     expect(dialog).not.toBeNull()
-    expect(dialog?.getAttribute('aria-label')).toBe('Đổi pipeline profile')
+    const labelId = dialog?.getAttribute('aria-labelledby')
+    expect(document.getElementById(labelId!)?.textContent?.trim()).toBe('Đổi pipeline profile')
     // Không điều hướng/rời PipelineView — component vẫn còn nguyên trong DOM.
     expect(w.find('.vflow-container').exists()).toBe(true)
     w.unmount()
