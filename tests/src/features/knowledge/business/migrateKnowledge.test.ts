@@ -2,10 +2,12 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { migrateKnowledgeToSqlite } from '../../../../src/backend/db/migrateKnowledge'
-import { resetDbForTest } from '../../../../src/backend/db/client'
-import { listCollections } from '../../../../src/features/knowledge/business/collections'
-import { createFileDriver } from '../../../../src/features/knowledge/business/fileDriver'
+import { resetDbForTest } from '../../../../../src/backend/db/client'
+import {
+  getKnowledgeDriver,
+  listCollections,
+  migrateKnowledgeToSqlite,
+} from '../../../../../src/features/knowledge/business/index'
 
 /**
  * Lệnh migrate `collections.yaml` → `dashboard.sqlite`.
@@ -85,7 +87,7 @@ describe('nạp sidecar vào bảng', () => {
 
   test('thành viên resolve lại đúng sau khi chuyển (entry_ids ∪ tags)', async () => {
     await writeSidecar()
-    const driver = createFileDriver(root)
+    const { driver } = await getKnowledgeDriver(root)
     await driver.write({ slug: 'a', content: 'c' })
     await driver.write({ slug: 'b', tags: ['vue'], content: 'c' })
     await driver.write({ slug: 'c', content: 'c' })
@@ -97,6 +99,14 @@ describe('nạp sidecar vào bảng', () => {
   test('store chưa từng có sidecar thì bỏ qua im lặng, không báo lỗi', async () => {
     const results = await migrateKnowledgeToSqlite()
     expect(ofStore(results)).toMatchObject({ sourceExists: false, collections: 0 })
+  })
+})
+
+describe('store được quét', () => {
+  /** Khoá store của lệnh migrate phải đúng khoá runtime tra (`storeKeysOf`). */
+  test('project qua `DEV_TEAM_ROOT` rồi tới store global, khoá = thư mục knowledge', async () => {
+    const results = await migrateKnowledgeToSqlite()
+    expect(results.map((r) => r.storeKey)).toEqual([path.join(root, 'knowledge'), path.join(home, 'knowledge')])
   })
 })
 
@@ -115,7 +125,7 @@ describe('idempotent (G6 · E3)', () => {
     await writeSidecar()
     await migrateKnowledgeToSqlite()
 
-    const { updateCollection } = await import('../../../../src/features/knowledge/business/collections')
+    const { updateCollection } = await import('../../../../../src/features/knowledge/business/collections')
     await updateCollection(root, 'nhom-cu', { name: 'Tên mới', tags: [] } as any)
     await migrateKnowledgeToSqlite()
 

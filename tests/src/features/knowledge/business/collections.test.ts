@@ -12,7 +12,12 @@ import {
   updateCollection,
 } from '../../../../../src/features/knowledge/business/collections'
 import { createTag, listTagMeta } from '../../../../../src/features/knowledge/business/tags'
-import { createFileDriver, knowledgeRoot } from '../../../../../src/features/knowledge/business/fileDriver'
+import {
+  getKnowledgeDriver,
+  knowledgeRoot,
+  listKnowledge,
+  type KnowledgeDriver,
+} from '../../../../../src/features/knowledge/business/index'
 import { resetDbForTest } from '../../../../../src/backend/db/client'
 
 /**
@@ -27,14 +32,14 @@ import { resetDbForTest } from '../../../../../src/backend/db/client'
  */
 
 let root: string
-let driver: ReturnType<typeof createFileDriver>
+let driver: KnowledgeDriver
 const prevHome = process.env.DEV_TEAM_DASHBOARD_HOME
 
 beforeEach(async () => {
   root = await fs.mkdtemp(path.join(os.tmpdir(), 'kn-coll-'))
   process.env.DEV_TEAM_DASHBOARD_HOME = path.join(root, '.home')
   resetDbForTest()
-  driver = createFileDriver(root)
+  driver = (await getKnowledgeDriver(root)).driver
 })
 afterEach(async () => {
   resetDbForTest()
@@ -94,7 +99,7 @@ describe('CRUD collection', () => {
 
     await deleteCollection(root, 'c')
     expect((await listCollections(root)).collections).toHaveLength(0)
-    expect(await driver.list()).toHaveLength(1)
+    expect(await listKnowledge(driver, root)).toHaveLength(1)
   })
 
   test('không đổi được scope của nhóm đã có', async () => {
@@ -149,13 +154,13 @@ describe('findCollectionSafe — đường ĐỌC entry', () => {
 
     expect(await findCollectionSafe(root, 'c')).toMatchObject({ id: 'c', tags: ['grp'] })
     expect(await findCollectionSafe(root, 'khong-co')).toBeNull()
-    expect((await driver.list({ collection: 'c' })).map((e) => e.id)).toEqual(['project/in'])
+    expect((await listKnowledge(driver, root, { collection: 'c' })).map((e) => e.id)).toEqual(['project/in'])
   })
 
   /** Nhóm không tồn tại ⇒ **rỗng**, 🚫 không phải "trả hết": lọc hụt an toàn hơn lọc thừa. */
   test('lọc theo nhóm không tồn tại trả rỗng, không trả toàn bộ', async () => {
     await driver.write({ slug: 'x', content: 'c' })
-    expect(await driver.list({ collection: 'khong-co' })).toHaveLength(0)
+    expect(await listKnowledge(driver, root, { collection: 'khong-co' })).toHaveLength(0)
   })
 })
 
@@ -172,7 +177,7 @@ describe('renameTag', () => {
     expect((await listCollections(root)).tagAliases).toEqual({ a: 'b' })
 
     // Alias phải ĐƯỢC DÙNG: lọc theo tên cũ vẫn ra đúng hai entry.
-    expect((await driver.list({ tags: ['a'] })).map((e) => e.id).sort()).toEqual(['project/e1', 'project/e2'])
+    expect((await listKnowledge(driver, root, { tags: ['a'] })).map((e) => e.id).sort()).toEqual(['project/e1', 'project/e2'])
   })
 
   test('`to` bỏ trống = xoá tag, không tạo alias', async () => {

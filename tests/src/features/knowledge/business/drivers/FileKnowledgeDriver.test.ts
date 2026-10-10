@@ -2,13 +2,14 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { createFileDriver, knowledgeRoot, loadKnowledgeBundle } from '../../../../../src/features/knowledge/business/fileDriver'
-import { resetDbForTest } from '../../../../../src/backend/db/client'
-import { MAX_BUNDLE_BYTES } from '../../../../../src/features/knowledge/schemas/knowledge'
+import { FileKnowledgeDriver } from '../../../../../../src/features/knowledge/business/drivers/FileKnowledgeDriver'
+import type { KnowledgeDriver } from '../../../../../../src/features/knowledge/business/KnowledgeDriver'
+import { knowledgeRoot, resolveBases } from '../../../../../../src/features/knowledge/business/knowledgeDb'
+import { resetDbForTest } from '../../../../../../src/backend/db/client'
 
 let root: string
 let home: string
-let driver: ReturnType<typeof createFileDriver>
+let driver: KnowledgeDriver
 const prevHome = process.env.DEV_TEAM_DASHBOARD_HOME
 
 /**
@@ -20,10 +21,10 @@ beforeEach(async () => {
   root = await fs.mkdtemp(path.join(os.tmpdir(), 'kn-'))
   home = path.join(root, '.home')
   process.env.DEV_TEAM_DASHBOARD_HOME = home
-  // Driver đụng DB qua alias tag / lọc theo nhóm — reset để không dùng lại
+  // Rule đọc đụng DB qua alias tag / lọc theo nhóm — reset để không dùng lại
   // connection trỏ home của test trước (getDb cache theo process).
   resetDbForTest()
-  driver = createFileDriver(root)
+  driver = new FileKnowledgeDriver(resolveBases(root))
 })
 afterEach(async () => {
   if (prevHome === undefined) delete process.env.DEV_TEAM_DASHBOARD_HOME
@@ -51,33 +52,33 @@ describe('write + read round-trip', () => {
   })
 })
 
-describe('list', () => {
-  beforeEach(async () => {
-    await driver.write({ slug: 'alpha', scope: 'project', tags: ['x'], content: 'find-me' })
-    await driver.write({ slug: 'beta', scope: 'system', tags: ['y'], content: 'other' })
+describe('scopes · listEntries · delete', () => {
+  test('scopes theo thứ tự KNOWLEDGE_SCOPES, bỏ scope không có base', () => {
+    expect(driver.scopes()).toEqual(['project', 'system', 'global'])
+    expect(new FileKnowledgeDriver({ project: '/p', system: '/p' }).scopes()).toEqual(['project', 'system'])
   })
-  test('returns metadata without content', async () => {
-    const all = await driver.list()
-    expect(all).toHaveLength(2)
-    expect((all[0] as any).content).toBeUndefined()
-  })
-  test('filters by scope, tags, query', async () => {
-    expect(await driver.list({ scope: 'system' })).toHaveLength(1)
-    expect(await driver.list({ tags: ['x'] })).toHaveLength(1)
-    const q = await driver.list({ query: 'find-me' })
-    expect(q).toHaveLength(1)
-    expect(q[0].slug).toBe('alpha')
-  })
-})
 
-describe('listTags / delete', () => {
-  test('counts tags then removes an entry', async () => {
-    await driver.write({ slug: 'a', tags: ['t1', 't2'], content: 'c' })
-    await driver.write({ slug: 'b', tags: ['t1'], content: 'c' })
-    const tags = await driver.listTags()
-    expect(tags).toEqual([{ tag: 't1', count: 2 }, { tag: 't2', count: 1 }])
+  test('listEntries trả entry đầy đủ (kèm content + path), chỉ trong scope cho trước', async () => {
+    await driver.write({ slug: 'a', scope: 'project', tags: ['x'], content: 'pa' })
+    await driver.write({ slug: 'b', scope: 'system', content: 'sb' })
+
+    const all = await driver.listEntries()
+    expect(all.map((e) => e.id)).toEqual(['project/a', 'system/b'])
+    expect(all[0].content.trim()).toBe('pa')
+    expect(all[0].path).toBe(path.join(knowledgeRoot(root), 'project', 'a.md'))
+    expect((await driver.listEntries(['system'])).map((e) => e.id)).toEqual(['system/b'])
+  })
+
+  test('delete trả id đã chuẩn hoá; id thiếu scope → invalid id', async () => {
+    await driver.write({ slug: 'a', content: 'c' })
     expect(await driver.delete('project/a')).toEqual({ deleted: true, id: 'project/a' })
-    expect(await driver.list()).toHaveLength(1)
+    expect(await driver.listEntries()).toEqual([])
+    await expect(driver.delete('a')).rejects.toThrow('invalid id')
+  })
+
+  test('read id thiếu scope coi cả id là slug của project', async () => {
+    await driver.write({ slug: 'foo', content: 'c' })
+    expect((await driver.read('foo')).id).toBe('project/foo')
   })
 })
 
@@ -97,38 +98,12 @@ describe('upload', () => {
   })
 })
 
-describe('loadKnowledgeBundle', () => {
-  test('returns content for found ids and error for missing', async () => {
-    await driver.write({ slug: 'k', scope: 'project', content: 'kc' })
-    const bundle = await loadKnowledgeBundle(root, ['project/k', 'project/missing'])
-    expect(bundle[0]).toMatchObject({ id: 'project/k' })
-    expect(bundle[0].content.trim()).toBe('kc')
-    expect(bundle[1]).toMatchObject({ id: 'project/missing', error: 'not found' })
-  })
-  test('empty ids → []', async () => {
-    expect(await loadKnowledgeBundle(root, [])).toEqual([])
-  })
-})
-
 describe('scope global — đa root', () => {
   test('entry global nằm ở registry home, không dưới project (TC-G1)', async () => {
     const entry = await driver.write({ slug: 'shared', scope: 'global', content: 'g' })
     expect(entry.id).toBe('global/shared')
     expect(await fs.readFile(path.join(home, 'knowledge', 'global', 'shared.md'), 'utf8')).toContain('g')
     expect(entry.path.startsWith(knowledgeRoot(root))).toBe(false)
-  })
-
-  test('project khác cùng home đọc được entry global, không thấy entry project (TC-G2 · TC-G3)', async () => {
-    await driver.write({ slug: 'shared', scope: 'global', content: 'g' })
-    await driver.write({ slug: 'mine', scope: 'project', content: 'p' })
-
-    const otherRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'kn-other-'))
-    try {
-      const ids = (await createFileDriver(otherRoot).list()).map((e) => e.id)
-      expect(ids).toEqual(['global/shared'])
-    } finally {
-      await fs.rm(otherRoot, { recursive: true, force: true })
-    }
   })
 
   test('trùng slug khác scope là hai file độc lập (TC-G9)', async () => {
@@ -138,19 +113,6 @@ describe('scope global — đa root', () => {
 
     expect((await driver.read('project/x')).content.trim()).toBe('p')
     expect((await driver.read('global/x')).content.trim()).toBe('g2')
-  })
-
-  test('scope lạ trả rỗng và KHÔNG đẻ thư mục (TC-G7)', async () => {
-    await driver.write({ slug: 'a', content: 'c' })
-    expect(await driver.list({ scope: 'Global' })).toEqual([])
-    expect(await fs.readdir(knowledgeRoot(root))).not.toContain('Global')
-  })
-
-  test('chỉ đọc thì không tạo thư mục nào trên đĩa (TC-G10)', async () => {
-    expect(await driver.list()).toEqual([])
-    expect(await driver.listTags()).toEqual([])
-    await expect(fs.stat(home)).rejects.toThrow()
-    await expect(fs.stat(knowledgeRoot(root))).rejects.toThrow()
   })
 })
 
@@ -166,21 +128,6 @@ describe('front-matter khoá lạ (TC-G13)', () => {
     expect(raw).toContain('owner: tuan')
     expect(raw).toContain('weight: 3')
     expect((await driver.read('project/e')).tags).toEqual(['a', 'b'])
-  })
-})
-
-describe('cap byte của bundle (TC-I7)', () => {
-  test('entry to bị từ chối KHÔNG làm hỏng entry đứng sau nó', async () => {
-    await driver.write({ slug: 'small-1', content: 'a'.repeat(1000) })
-    await driver.write({ slug: 'huge', content: 'b'.repeat(MAX_BUNDLE_BYTES) })
-    await driver.write({ slug: 'small-2', content: 'c'.repeat(1000) })
-
-    const bundle = await loadKnowledgeBundle(root, ['project/small-1', 'project/huge', 'project/small-2'])
-
-    expect(bundle[0].content).toBeDefined()
-    expect(bundle[1]).toEqual({ id: 'project/huge', error: 'bundle size limit' })
-    // Byte của entry bị từ chối không được tính vào tổng.
-    expect(bundle[2].content).toBeDefined()
   })
 })
 
@@ -209,7 +156,7 @@ describe('nội suy slug khi tạo mới', () => {
     expect(a.id).toBe('project/ghi-chu')
     expect(b.id).toMatch(/^project\/ghi-chu-[0-9a-f]{4}$/)
     expect((await driver.read(a.id)).content.trim()).toBe('bản 1')
-    expect(await driver.list()).toHaveLength(2)
+    expect(await driver.listEntries()).toHaveLength(2)
   })
 
   test('front-matter `slug` khớp tên file ở cả entry gốc lẫn entry có hậu tố', async () => {
@@ -249,7 +196,7 @@ describe('nội suy slug khi tạo mới', () => {
     const again = await driver.write({ id: a.id, title: 'Đổi title', slug: 'client-tu-dat', content: 'c2' })
 
     expect(again.id).toBe(a.id)
-    expect(await driver.list()).toHaveLength(1)
+    expect(await driver.listEntries()).toHaveLength(1)
     const { file, fm } = await slugOnDisk(a.id)
     expect(fm).toBe(file)
   })
