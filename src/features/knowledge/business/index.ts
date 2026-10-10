@@ -24,6 +24,7 @@ export {
   loadKnowledgeBundle,
 } from './fileDriver.js'
 export { KnowledgeDbError } from './knowledgeDb.js'
+export { migrateKnowledgeToSqlite } from './collectionsYaml.js'
 export {
   listCollections,
   createCollection,
