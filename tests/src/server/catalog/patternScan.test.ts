@@ -12,7 +12,7 @@ import {
   resolveSkillPathByPatterns,
   scanAgentsByPatterns,
   scanSkillsByPatterns,
-} from '../../../../src/features/pipeline-editor/business/catalog/scan'
+} from '../../../../src/features/pipeline-editor/business/catalog/sources/PatternSource'
 
 let root: string
 /** A sibling of `root`, reachable only by following a symlink out of it. */
