@@ -3,7 +3,7 @@ import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { computed, onMounted, ref } from 'vue'
 import { slugify } from '../../../shared/lib/stringUtils'
 import { saveProviderConfig, deleteProviderConfig } from '../scripts/ProviderDialogApi'
-import { DEFAULT_BASE_URLS } from '../scripts/agenticProviderDefaults'
+import { defaultBaseUrlOf } from '../lib/providerCatalog'
 import type { ProviderConfigOption, ProviderEntry } from '../types'
 import { useApiAction } from '../../../frontend/composables/useApiAction'
 import CDialog from '../../../frontend/ui/CDialog.vue'
@@ -30,7 +30,7 @@ const providerId = ref('')
 const baseURL = ref('')
 const { pending: saving, run: runSave } = useApiAction()
 const error = ref('')
-const baseUrlPlaceholder = computed(() => DEFAULT_BASE_URLS[providerId.value] || '')
+const baseUrlPlaceholder = computed(() => defaultBaseUrlOf(providerId.value, props.providers))
 
 const aiProviders = computed(() => props.providers.filter((p) => p.kind === 'ai-provider'))
 const aiProviderSelectOptions = computed(() => aiProviders.value.map((p) => ({ value: p.id, label: p.label })))
