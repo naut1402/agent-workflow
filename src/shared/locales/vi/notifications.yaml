@@ -1,0 +1,9 @@
+bell:
+  title: Thông báo
+  empty: Chưa có thông báo nào.
+  markAllRead: Đánh dấu đã đọc tất cả
+message:
+  hitlPending: Task {taskId} đang chờ duyệt (HITL)
+  qaReady: Task {taskId} đã có QA sẵn sàng
+flag:
+  unread: Chưa đọc

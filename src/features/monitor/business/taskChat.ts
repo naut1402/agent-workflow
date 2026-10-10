@@ -18,9 +18,10 @@ const RESPONSE_HEADER = '=== Phản hồi của runner (stdout/stderr) ==='
 const RESULT_HEADER = '=== Kết quả ==='
 const MAX_FALLBACK_CHARS = 4000
 
-function clipFallback(text: string): string {
+function clipFallback(text: string): { text: string; truncated?: boolean } {
   const t = text.trim()
-  return t.length > MAX_FALLBACK_CHARS ? `${t.slice(0, MAX_FALLBACK_CHARS)}\n…(đã cắt bớt)` : t
+  if (t.length <= MAX_FALLBACK_CHARS) return { text: t }
+  return { text: t.slice(0, MAX_FALLBACK_CHARS), truncated: true }
 }
 
 /** Agent reply for a finished job when the CLI transcript file is missing. */
@@ -77,14 +78,14 @@ function synthesizeTurnsFromJob(job: JobRecord, startIndex = 0): TranscriptTurn[
   const turns: TranscriptTurn[] = []
   const prompt = typeof job.userPrompt === 'string' ? job.userPrompt.trim() : ''
   if (prompt) {
-    turns.push({ index: startIndex + turns.length, role: 'user', text: clipFallback(prompt) })
+    turns.push({ index: startIndex + turns.length, role: 'user', ...clipFallback(prompt) })
   }
   const out = chatTextOfJob(job)
   if (out) {
     turns.push({
       index: startIndex + turns.length,
       role: 'assistant',
-      text: clipFallback(out),
+      ...clipFallback(out),
       at: job.finishedAt || job.startedAt || undefined,
     })
   }
@@ -119,11 +120,11 @@ function transcriptCoversLatestJob(turns: TranscriptTurn[], latest: JobRecord | 
   const out = chatTextOfJob(latest)
   if (!prompt && !out) return true
   const texts = turns.map((t) => t.text.trim())
-  if (prompt && texts.some((t) => t === clipFallback(prompt) || t.includes(prompt.slice(0, 80)))) {
+  if (prompt && texts.some((t) => t === clipFallback(prompt).text || t.includes(prompt.slice(0, 80)))) {
     return true
   }
   if (out) {
-    const clip = clipFallback(out)
+    const clip = clipFallback(out).text
     if (texts.some((t) => t === clip || t.includes(clip.slice(0, 80)))) return true
   }
   return false

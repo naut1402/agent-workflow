@@ -18,9 +18,10 @@ function transcriptFile(providerId: string, sessionId: string): string {
   return joinPath(registryHome(), 'agent-sdk-transcripts', providerId, `${sessionId}.jsonl`)
 }
 
-function clip(text: string): string {
+function clip(text: string): { text: string; truncated?: boolean } {
   const t = text.trim()
-  return t.length > MAX_TURN_CHARS ? `${t.slice(0, MAX_TURN_CHARS)}\n…(đã cắt bớt)` : t
+  if (t.length <= MAX_TURN_CHARS) return { text: t }
+  return { text: t.slice(0, MAX_TURN_CHARS), truncated: true }
 }
 
 export interface ReadApiAgentTranscriptOptions {
@@ -61,7 +62,7 @@ export function readApiAgentTranscript(
     all.push({
       index: all.length,
       role,
-      text: clip(text),
+      ...clip(text),
       tool: typeof entry.tool === 'string' ? entry.tool : undefined,
       at: typeof entry.at === 'string' ? entry.at : undefined,
     })

@@ -16,7 +16,7 @@ Xác định **feature sở hữu** trước, rồi đặt artifact đúng lớp
 | Zod schema domain | `schemas/` của feature |
 | UI Vue / composable | `components/`, `composables/` |
 | FE gọi API | `scripts/*Api.ts` (dùng `apiGet` / `apiPost` từ `src/frontend/http/client`) |
-| Chuỗi UI | `locales/vi.ts` (+ `en` khuyến nghị) |
+| Chuỗi UI | `src/shared/locales/vi/<namespace>.yaml` (+ `en/` khuyến nghị) — [`coding-guideline.md`](coding-guideline.md) §6 |
 | Style chỉ **1** component render selector gốc | `<style scoped lang="scss">` trong chính `.vue` |
 | Style **≥2** component cùng feature | `features/<f>/styles/*.scss` + `@use` từ `styles/index.scss` |
 | Style xuyên feature, hoặc element do JS/`core` tạo runtime | `src/frontend/styles/` (shell) hoặc primitive `src/frontend/ui/C<Name>.vue` |
@@ -25,14 +25,15 @@ Xác định **feature sở hữu** trước, rồi đặt artifact đúng lớp
 | Ghi audit / request log | `src/backend/log/` — feature `logs` chỉ đọc/stream |
 
 - **Không tạo cây song song** kiểu `server/<domain>` hay helper "misc" ngoài convention.
-- **Feature tự mang `styles/index.scss` và `locales/{vi,en}.ts`** — glob eager ở `src/frontend/main.ts` tự nạp, không liệt kê tay, không sửa hub wiring.
+- **Feature tự mang `styles/index.scss`** — glob eager ở `src/frontend/main.ts` tự nạp, không liệt kê tay, không sửa hub wiring.
+- **Chuỗi UI không nằm trong feature** — khai ở `src/shared/locales/<locale>/<namespace>.yaml`, tên file là namespace; thêm file là đủ, không đăng ký tay.
 
 ## 2. Tổ chức `business/`
 
 > [!IMPORTANT]
 > <span style="color:#a371f7">File trong `business/` chia theo **quan hệ abstraction ↔ hiện thực**, không theo capability (kiểu thao tác, loại dữ liệu).</span>
 
-**Phạm vi**: `src/features/*/business/` và `mcp/`. 🚫 Không áp cho `src/{backend,frontend,shared}/lib` (`*Utils`, `*Lib`, `fileHelper`), `components/`, `styles/`, `locales/`, `schemas/`, `scripts/*Api.ts` — nhóm này giữ quy ước riêng ở §1, §3, §5.
+**Phạm vi**: `src/features/*/business/` và `mcp/`. 🚫 Không áp cho `src/{backend,frontend,shared}/lib` (`*Utils`, `*Lib`, `fileHelper`), `components/`, `styles/`, `schemas/`, `scripts/*Api.ts` — nhóm này giữ quy ước riêng ở §1, §3, §5.
 
 ### 2.1 Phân biệt logic trừu tượng và logic chi tiết
 

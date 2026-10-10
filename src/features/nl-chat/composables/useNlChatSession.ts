@@ -9,6 +9,7 @@ import { saveCustomAgent } from '../../agent-editor/scripts/agentEditorApi'
 import { createAutomation } from '../../automations/scripts/automationsApi'
 import { mintTaskId } from '../../monitor/lib/createTaskForm'
 import { TASK_ID_PATTERN } from '../../monitor/schemas/taskCreate'
+import { t } from '../../../frontend/plugins/i18n'
 
 // Drives the floating NL chat surface end to end: chat with the `nl-chat-builder` agent until it hands back a draft, then persist it through the SAME create APIs the existing dialogs use (design.md F0012 §4.2).
 // Kept as a composable (no render needed) so the state machine is unit-testable by mocking the API client, same pattern as useAgentBuild.ts.
@@ -90,9 +91,9 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
     for (;;) {
       const res = await fetchJob(id)
       const job: JobLike | undefined = res?.job
-      if (!job) throw new Error('job missing')
+      if (!job) throw new Error(t('nlChat.builder.jobMissing'))
       if (isTerminal(job.status)) return job
-      if (Date.now() >= deadline) return { ...job, status: 'failed', error: 'timeout waiting for job' }
+      if (Date.now() >= deadline) return { ...job, status: 'failed', error: t('nlChat.builder.jobTimeout') }
       await sleep(pollMs)
     }
   }
@@ -117,7 +118,7 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
         catalogAgentIds.value = new Set(ids)
       } catch {
         // Giữ nguyên set cũ: guard ref agent đã fail-closed theo `catalogError`, nên không cần xoá dữ liệu để chặn.
-        catalogError.value = 'Không tải được danh sách agent để kiểm tra — vui lòng thử lại.'
+        catalogError.value = t('nlChat.builder.catalogLoadFailed')
       }
     })().finally(() => {
       catalogInflight = null
@@ -142,7 +143,7 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
         catalogProfileNames.value = new Set(names)
       } catch {
         // Giữ nguyên set cũ: `profileNameError` đã fail-closed theo `profileError` nên không cần xoá dữ liệu để chặn.
-        profileError.value = 'Không tải được danh sách pipeline profile để kiểm tra — vui lòng thử lại.'
+        profileError.value = t('nlChat.builder.profilesLoadFailed')
       }
     })().finally(() => {
       profilesInflight = null
@@ -180,10 +181,10 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
     if (refs.length === 0) return null
     if (profileError.value) return profileError.value
     const known = catalogProfileNames.value
-    if (!known) return 'Đang kiểm tra danh sách pipeline profile...'
+    if (!known) return t('nlChat.builder.checkingProfiles')
     const invalid = refs.filter((n) => !known.has(n))
     return invalid.length > 0
-      ? `Pipeline profile không tồn tại: ${invalid.join(', ')} — sửa lại hoặc bỏ trống để dùng pipeline mặc định.`
+      ? t('nlChat.builder.unknownProfiles', { profiles: invalid.join(', ') })
       : null
   }
 
@@ -219,11 +220,11 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
 
       if (!chatSessionId.value && res?.chatSessionId) chatSessionId.value = res.chatSessionId
       const jobId: string | undefined = res?.job?.id
-      if (!jobId) throw new Error('no job id returned')
+      if (!jobId) throw new Error(t('nlChat.builder.noJobId'))
 
       const finalJob = await pollJob(jobId)
       if (finalJob.status !== 'succeeded') {
-        throw new Error(finalJob.error || `job ${finalJob.status}`)
+        throw new Error(finalJob.error || t('nlChat.builder.jobEnded', { status: finalJob.status }))
       }
 
       const turn = await fetchNlChatTurn(chatSessionId.value as string, projectId)
@@ -237,7 +238,7 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
           // Draft with no usable entity type — stay in chat and ask, instead of stranding the user on a preview we cannot persist.
           messages.value.push({
             role: 'assistant',
-            text: 'Mình chưa rõ bạn muốn tạo Task, Pipeline, Agent hay Automation — bạn nói rõ giúp mình nhé?',
+            text: t('nlChat.builder.entityUnclear'),
           })
           return
         }
@@ -272,13 +273,13 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
       await loadCatalog()
       // Fail-closed cả khi set cũ còn đó nhưng lần nạp gần nhất hỏng, vì `catalogAgentIds` có thể là dữ liệu cũ hơn thực tế.
       if (catalogError.value || !catalogAgentIds.value) {
-        error.value = catalogError.value || 'Chưa kiểm tra được danh sách agent hợp lệ — vui lòng thử lại.'
+        error.value = catalogError.value || t('nlChat.builder.catalogUnchecked')
         step.value = 'previewDraft'
         return
       }
       const invalid = findInvalidPipelineAgentRefs(editedDraft)
       if (invalid.length > 0) {
-        error.value = `Pipeline tham chiếu agent không tồn tại trong catalog: ${invalid.join(', ')}`
+        error.value = t('nlChat.builder.pipelineUnknownAgents', { agents: invalid.join(', ') })
         step.value = 'previewDraft'
         return
       }
@@ -295,7 +296,7 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
     }
     const projectId = opts.getProjectId()
     if (entityType.value === 'agent' && agentScope.value === 'project' && !projectId) {
-      error.value = 'Chưa chọn project — chọn project ở header hoặc đổi phạm vi agent sang "Toàn cục".'
+      error.value = t('nlChat.builder.noProjectSelected')
       step.value = 'previewDraft'
       return
     }
