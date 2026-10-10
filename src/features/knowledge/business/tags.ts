@@ -8,7 +8,7 @@ import {
   type TagCreateBody,
   type TagUpdateBody,
 } from '../schemas/knowledge.js'
-import { sanitiseTags } from './fileDriver.js'
+import { sanitiseTags } from './KnowledgeDriver.js'
 import {
   knowledgeDb,
   storeKeysOf,
@@ -274,4 +274,25 @@ export async function readTagAliasesSafe(devTeamRoot: string): Promise<Record<st
   } catch {
     return {}
   }
+}
+
+/**
+ * Tag client gửi lên → tên hiện hành, theo alias trong `knowledge_tag_aliases`.
+ *
+ * Không có bước này thì `?tags=` và bookmark của người dùng chết ngay sau một
+ * lần rename — mà giữ alias chính là lý do `renameTag` ghi nó ra.
+ */
+export async function resolveTagAliases(devTeamRoot: string, tags: string[]): Promise<string[]> {
+  const aliases = await readTagAliasesSafe(devTeamRoot)
+  if (!Object.keys(aliases).length) return tags
+  return [
+    ...new Set(
+      tags.map((tag) => {
+        let cur = tag
+        // Chuỗi a→b→c cần lặp; trần 8 để alias vòng không treo request.
+        for (let i = 0; i < 8 && aliases[cur] && aliases[cur] !== cur; i++) cur = aliases[cur]
+        return cur
+      }),
+    ),
+  ]
 }
