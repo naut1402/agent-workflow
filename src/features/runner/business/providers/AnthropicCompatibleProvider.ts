@@ -4,12 +4,13 @@ import {
   AgenticRunError,
   EMPTY_REPLY_ERROR_MESSAGE,
   EMPTY_REPLY_NUDGE_TEXT,
-  SHELL_ALLOWLIST,
   summarizeResult,
+  type AgenticCompletionContext,
   type AgenticRunContext,
   type AgenticRunResult,
-  type ExtraTool,
-} from './agenticApiProvider.js'
+} from './AgenticApiProvider.js'
+import * as workspaceTools from './agenticWorkspaceTools.js'
+import type { TokenUsage } from './RunnerProvider.js'
 import type { McpJobDelivery } from '../mcpDelivery/McpJobDelivery.js'
 import type { McpToolBridge } from '../mcpDelivery/ToolBridgeMcpDelivery.js'
 
@@ -33,16 +34,16 @@ const LIST_DIRECTORY_TOOL: Anthropic.Messages.Tool = {
 /**
  * Base 2 tools (text editor + list_directory) always registered; `extraTools`
  * (from `Connection.config.extraTools`, default `[]`) opts a Connection into
- * shell/git/search/web on top — see agenticApiProvider.ts. `webSearchConfigured`
+ * shell/git/search/web on top — see agenticWorkspaceTools.ts. `webSearchConfigured`
  * additionally gates `web_search` alone so an unconfigured `BRAVE_SEARCH_API_KEY`
  * hides the tool instead of registering one that always errors.
  */
-function buildTools(extraTools: ExtraTool[], webSearchConfigured: boolean): Anthropic.Messages.ToolUnion[] {
+function buildTools(extraTools: workspaceTools.ExtraTool[], webSearchConfigured: boolean): Anthropic.Messages.ToolUnion[] {
   const tools: Anthropic.Messages.ToolUnion[] = [TEXT_EDITOR_TOOL, LIST_DIRECTORY_TOOL]
   if (extraTools.includes('shell')) {
     tools.push({
       name: 'run_command',
-      description: `Run a shell command in the workspace. Only these binaries are allowed: ${SHELL_ALLOWLIST.join(', ')}.`,
+      description: `Run a shell command in the workspace. Only these binaries are allowed: ${workspaceTools.SHELL_ALLOWLIST.join(', ')}.`,
       input_schema: {
         type: 'object',
         properties: {
@@ -138,10 +139,29 @@ export class AnthropicCompatibleProvider extends AgenticApiProvider {
   readonly providerId: string
   private readonly defaultBaseURL: string
 
-  constructor(providerId: string, defaultBaseURL: string, mcpDelivery?: McpJobDelivery<McpToolBridge>) {
+  /**
+   * @param ui nhãn + gợi ý UI của endpoint này — có thì provider vào catalog
+   *   (`providerRegistry.ts` truyền; test dựng tay có thể bỏ).
+   */
+  constructor(
+    providerId: string,
+    defaultBaseURL: string,
+    mcpDelivery?: McpJobDelivery<McpToolBridge>,
+    ui?: { label: string; modelHint?: string; secretEnvHint?: string },
+  ) {
     super(mcpDelivery)
     this.providerId = providerId
     this.defaultBaseURL = defaultBaseURL
+    if (ui) {
+      this.catalog = {
+        kind: 'ai-provider',
+        label: ui.label,
+        modelListing: 'api',
+        defaultBaseURL,
+        ...(ui.modelHint ? { modelHint: ui.modelHint } : {}),
+        ...(ui.secretEnvHint ? { secretEnvHint: ui.secretEnvHint } : {}),
+      }
+    }
   }
 
   async listModels(apiKey: string, baseURL: string): Promise<string[]> {
@@ -150,6 +170,30 @@ export class AnthropicCompatibleProvider extends AgenticApiProvider {
     const ids: string[] = []
     for await (const m of page) ids.push(m.id)
     return ids.sort()
+  }
+
+  /** Hook một lượt (`complete()`): một request messages, không tool. */
+  protected override async completeOnce(ctx: AgenticCompletionContext): Promise<{ text: string; usage?: TokenUsage }> {
+    const client = new Anthropic({
+      apiKey: ctx.apiKey,
+      baseURL: ctx.baseURL || this.defaultBaseURL,
+      ...(ctx.timeoutMs ? { timeout: ctx.timeoutMs } : {}),
+    })
+    const response = await client.messages.create(
+      {
+        model: ctx.model,
+        ...(ctx.system ? { system: ctx.system } : {}),
+        max_tokens: ctx.maxTokens || 4096,
+        messages: [{ role: 'user', content: ctx.prompt }],
+      },
+      { signal: ctx.signal },
+    )
+    const inputTokens = response.usage?.input_tokens ?? 0
+    const outputTokens = response.usage?.output_tokens ?? 0
+    return {
+      text: textOf(response.content),
+      usage: { inputTokens, outputTokens, totalTokens: inputTokens + outputTokens },
+    }
   }
 
   protected async runConversation(ctx: AgenticRunContext): Promise<AgenticRunResult> {
@@ -162,8 +206,8 @@ export class AnthropicCompatibleProvider extends AgenticApiProvider {
       ? [...priorMessages]
       : [{ role: 'user', content: ctx.req.userPrompt }]
 
-    const extraTools = this.resolveExtraTools(ctx.runnerConfig)
-    const baseTools = buildTools(extraTools, this.isWebSearchConfigured())
+    const extraTools = workspaceTools.resolveExtraTools(ctx.runnerConfig)
+    const baseTools = buildTools(extraTools, workspaceTools.isWebSearchConfigured())
     // `mcpBridge === null` ⇒ `bridgeTools` rỗng ⇒ `tools` và preamble
     // byte-identical với bản trước khi có bridge.
     const bridgeTools = ctx.mcpBridge?.tools ?? []
@@ -176,8 +220,8 @@ export class AnthropicCompatibleProvider extends AgenticApiProvider {
       })),
     ]
     const system = [
-      this.buildToolUsagePreamble(baseTools.map((t) => t.name), bridgeTools),
-      this.buildProjectContextPreamble(ctx.req),
+      workspaceTools.buildToolUsagePreamble(baseTools.map((t) => t.name), bridgeTools),
+      workspaceTools.buildProjectContextPreamble(ctx.req),
       ctx.req.resolvedAgent.systemPrompt || '',
     ]
       .filter(Boolean)
@@ -235,7 +279,7 @@ export class AnthropicCompatibleProvider extends AgenticApiProvider {
         // Empty content + no tool use — the model may not understand this
         // provider's toolset. Give it exactly one nudge before treating this
         // as a real failure instead of silently reporting job success (see
-        // agenticApiProvider.ts's EMPTY_REPLY_NUDGE_TEXT for rationale).
+        // AgenticApiProvider.ts's EMPTY_REPLY_NUDGE_TEXT for rationale).
         // Deliberately does NOT push an empty assistant message — Anthropic's
         // API rejects any non-final message with empty content ("all messages
         // must have non-empty content except for the optional final assistant
@@ -286,33 +330,33 @@ export class AnthropicCompatibleProvider extends AgenticApiProvider {
     if (bridge?.has(block.name)) return bridge.call(block.name, input)
     switch (block.name) {
       case 'list_directory':
-        return this.listWorkspaceDirectory(workspace, typeof input.path === 'string' ? input.path : undefined)
+        return workspaceTools.listWorkspaceDirectory(workspace, typeof input.path === 'string' ? input.path : undefined)
       case 'run_command': {
         const command = typeof input.command === 'string' ? input.command : ''
         const args = Array.isArray(input.args) ? input.args.filter((a): a is string => typeof a === 'string') : []
-        return this.runShellCommand(workspace, command, args)
+        return workspaceTools.runShellCommand(workspace, command, args)
       }
       case 'git_status':
-        return this.gitStatus(workspace)
+        return workspaceTools.gitStatus(workspace)
       case 'git_diff':
-        return this.gitDiff(workspace, typeof input.path === 'string' ? input.path : undefined, Boolean(input.staged))
+        return workspaceTools.gitDiff(workspace, typeof input.path === 'string' ? input.path : undefined, Boolean(input.staged))
       case 'git_log':
-        return this.gitLog(workspace, typeof input.limit === 'number' ? input.limit : undefined)
+        return workspaceTools.gitLog(workspace, typeof input.limit === 'number' ? input.limit : undefined)
       case 'search_files':
-        return this.searchFiles(workspace, typeof input.pattern === 'string' ? input.pattern : '', typeof input.path === 'string' ? input.path : undefined)
+        return workspaceTools.searchFiles(workspace, typeof input.pattern === 'string' ? input.pattern : '', typeof input.path === 'string' ? input.path : undefined)
       case 'web_search':
-        return this.webSearch(typeof input.query === 'string' ? input.query : '')
+        return workspaceTools.webSearch(typeof input.query === 'string' ? input.query : '')
       case 'fetch_url':
-        return this.fetchUrl(typeof input.url === 'string' ? input.url : '')
+        return workspaceTools.fetchUrl(typeof input.url === 'string' ? input.url : '')
       case 'str_replace_based_edit_tool': {
         const path = typeof input.path === 'string' ? input.path : ''
         switch (input.command) {
           case 'view':
-            return this.readWorkspaceFile(workspace, path)
+            return workspaceTools.readWorkspaceFile(workspace, path)
           case 'create':
-            return this.writeWorkspaceFile(workspace, path, typeof input.file_text === 'string' ? input.file_text : '')
+            return workspaceTools.writeWorkspaceFile(workspace, path, typeof input.file_text === 'string' ? input.file_text : '')
           case 'str_replace':
-            return this.editWorkspaceFile(
+            return workspaceTools.editWorkspaceFile(
               workspace,
               path,
               typeof input.old_str === 'string' ? input.old_str : '',
@@ -339,21 +383,13 @@ export class AnthropicCompatibleProvider extends AgenticApiProvider {
   }
 
   private insertIntoFile(workspace: string, path: string, insertLine: number, text: string) {
-    const current = this.readWorkspaceFile(workspace, path)
+    const current = workspaceTools.readWorkspaceFile(workspace, path)
     // Narrow via `'error' in v` rather than `!v.ok` — see coding-convention.md §2
     // (boolean-discriminant narrowing is fragile under this repo's vue-tsc).
     if ('error' in current) return current
     const lines = current.content.split('\n')
     const at = Math.max(0, Math.min(insertLine, lines.length))
     lines.splice(at, 0, text)
-    return this.writeWorkspaceFile(workspace, path, lines.join('\n'))
+    return workspaceTools.writeWorkspaceFile(workspace, path, lines.join('\n'))
   }
-}
-
-export function createAnthropicCompatibleProvider(
-  providerId: string,
-  defaultBaseURL: string,
-  mcpDelivery?: McpJobDelivery<McpToolBridge>,
-): AnthropicCompatibleProvider {
-  return new AnthropicCompatibleProvider(providerId, defaultBaseURL, mcpDelivery)
 }

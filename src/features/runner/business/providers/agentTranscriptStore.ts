@@ -10,7 +10,7 @@ import { registryHome } from '../../../../backend/registry.js'
 /**
  * Transcript store for the API-based agentic providers (`AgenticApiProvider`
  * subclasses) — the equivalent of the on-disk JSONL a CLI (Claude/Cursor)
- * writes itself, so `taskChat.ts`/`apiAgentTranscript.ts` (monitor feature)
+ * writes itself, so `taskChat.ts`/`transcripts/ApiAgentTranscriptReader.ts` (monitor feature)
  * can surface the same `role: 'tool'` activity turns for these providers.
  *
  * Two files per session, both under `registryHome()`:
@@ -30,7 +30,12 @@ function transcriptDir(providerId: string): string {
   return joinPath(registryHome(), 'agent-sdk-transcripts', providerId)
 }
 
-function transcriptFile(providerId: string, sessionId: string): string {
+/**
+ * Đường dẫn transcript JSONL của một phiên provider API. Runner là bên ghi nên
+ * runner giữ quy ước path; bên đọc (chat của monitor) lấy qua barrel thay vì
+ * tự viết lại path.
+ */
+export function agentTranscriptFile(providerId: string, sessionId: string): string {
   return joinPath(transcriptDir(providerId), `${sessionId}.jsonl`)
 }
 
@@ -47,7 +52,7 @@ export function appendTranscriptTurn(providerId: string, sessionId: string, turn
   try {
     mkdirSync(transcriptDir(providerId), { recursive: true })
     const line = JSON.stringify({ ...turn, at: turn.at ?? new Date().toISOString() })
-    appendTextFileSync(transcriptFile(providerId, sessionId), `${line}\n`)
+    appendTextFileSync(agentTranscriptFile(providerId, sessionId), `${line}\n`)
   } catch {
     /* best-effort — transcript bookkeeping must not fail the job */
   }
@@ -57,7 +62,7 @@ export function appendTranscriptTurn(providerId: string, sessionId: string, turn
 export function readTranscriptTurns(providerId: string, sessionId: string): AgentTranscriptTurn[] {
   let raw: string
   try {
-    raw = readTextFileSync(transcriptFile(providerId, sessionId))
+    raw = readTextFileSync(agentTranscriptFile(providerId, sessionId))
   } catch {
     return []
   }

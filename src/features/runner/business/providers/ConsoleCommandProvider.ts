@@ -1,7 +1,15 @@
 import { appendTextFileSync, existsSync, joinPath } from '../../../../backend/lib/fileHelper.js'
 import { spawn } from '../../../../backend/lib/processHelper.js'
-import type { ExecuteRequest, ExecuteResult, RunnerProvider } from '../types.js'
+import type { CredentialProfile } from '../types.js'
 import { formatJobLogFooter, formatJobLogHeader } from '../jobLogFormat.js'
+import { NoMcpDelivery } from '../mcpDelivery/NoMcpDelivery.js'
+import type {
+  ExecuteRequest,
+  ExecuteResult,
+  ProviderCatalogInfo,
+  RunnerProvider,
+  TranscriptFormat,
+} from './RunnerProvider.js'
 
 interface ProcResult {
   exitCode: number | null
@@ -186,105 +194,118 @@ function runProcess(
  * shell-split job prompt as argv. Does not inject AI agent system prompts,
  * `-p`, or `--allowedTools`.
  */
-export function createConsoleCommandProvider(): RunnerProvider {
-  return {
-    providerId: 'console-command',
-    family: 'console-command',
+export class ConsoleCommandProvider implements RunnerProvider {
+  readonly providerId = 'console-command'
+  readonly family = 'console-command' as const
+  /** Lệnh console không phải agent AI — jobQueue bỏ qua agentRef, không ghép system prompt. */
+  readonly acceptsAgent = false
+  readonly mcpDelivery = new NoMcpDelivery()
+  readonly transcriptFormat: TranscriptFormat = 'none'
+  readonly catalog: ProviderCatalogInfo = {
+    kind: 'local-console',
+    label: 'Console command',
+    modelListing: 'none',
+  }
 
-    validateRunnerConfig(config) {
-      const errors: string[] = []
-      if (!config?.cliPath) errors.push('cliPath is required')
-      return { ok: errors.length === 0, errors }
-    },
+  validateRunnerConfig(config: Record<string, unknown> | undefined) {
+    const errors: string[] = []
+    if (!config?.cliPath) errors.push('cliPath is required')
+    return { ok: errors.length === 0, errors }
+  }
 
-    validateCredential() {
-      // local-console jobs use an implicit cli-session credential — nothing to validate.
-      return { ok: true, errors: [] }
-    },
+  validateCredential(_profile?: CredentialProfile) {
+    // local-console jobs use an implicit cli-session credential — nothing to validate.
+    return { ok: true, errors: [] }
+  }
 
-    capabilities() {
-      return {
-        supportsAgentFile: false,
-        supportsStreaming: false,
-        maxConcurrency: 1,
-      }
-    },
+  capabilities() {
+    return {
+      supportsAgentFile: false,
+      supportsStreaming: false,
+      maxConcurrency: 1,
+    }
+  }
 
-    async execute(req: ExecuteRequest, runnerConfig: Record<string, any>, _credential, onLog?, onStart?): Promise<ExecuteResult> {
-      const started = Date.now()
-      const cliPath = String(runnerConfig.cliPath || 'sh')
-      const flags = Array.isArray(runnerConfig.flags) ? runnerConfig.flags.map(String) : []
-      // Ignore resolvedAgent.systemPrompt — console commands are not AI agents.
-      const { args } = buildConsoleInvocation({ flags, userPrompt: req.userPrompt || '' })
+  async execute(
+    req: ExecuteRequest,
+    runnerConfig: Record<string, any>,
+    _credential: CredentialProfile,
+    onLog?: (chunk: string) => void,
+    onStart?: (info: { pid: number | null }) => void,
+  ): Promise<ExecuteResult> {
+    const started = Date.now()
+    const cliPath = String(runnerConfig.cliPath || 'sh')
+    const flags = Array.isArray(runnerConfig.flags) ? runnerConfig.flags.map(String) : []
+    // Ignore resolvedAgent.systemPrompt — console commands are not AI agents.
+    const { args } = buildConsoleInvocation({ flags, userPrompt: req.userPrompt || '' })
 
-      const logPath = req.metadata?.logPath as string | undefined
-      const appendLog = (text: string) => {
-        if (!logPath) return
-        try {
-          appendTextFileSync(logPath, text)
-        } catch {
-          /* ignore */
-        }
-      }
-
-      appendLog(
-        describePayload({
-          workspace: req.workspace,
-          cliPath,
-          args,
-          userPrompt: req.userPrompt || '',
-          metadata: req.metadata,
-        }),
-      )
-
-      const wrappedOnLog = (chunk: string) => {
-        onLog?.(chunk)
-        appendLog(chunk)
-      }
-
-      const timeoutMs = req.timeoutMs || runnerConfig.timeoutMs || 600_000
-      let procResult: ProcResult
+    const logPath = req.metadata?.logPath as string | undefined
+    const appendLog = (text: string) => {
+      if (!logPath) return
       try {
-        procResult = await runProcess(cliPath, args, {
-          cwd: req.workspace,
-          env: { ...process.env },
-          timeoutMs,
-          onLog: wrappedOnLog,
-          onStart,
-        })
-      } catch (err: any) {
-        const result: ExecuteResult = {
-          ok: false,
-          exitCode: null,
-          durationMs: Date.now() - started,
-          logPath,
-          error: String(err.message || err),
-        }
-        appendLog(describeResult(result))
-        return result
+        appendTextFileSync(logPath, text)
+      } catch {
+        /* ignore */
       }
+    }
 
-      const artifactsFound: string[] = []
-      if (req.produces?.length) {
-        for (const name of req.produces) {
-          const fp = joinPath(req.workspace, name)
-          if (existsSync(fp)) artifactsFound.push(name)
-        }
-      }
+    appendLog(
+      describePayload({
+        workspace: req.workspace,
+        cliPath,
+        args,
+        userPrompt: req.userPrompt || '',
+        metadata: req.metadata,
+      }),
+    )
 
-      const ok = procResult.exitCode === 0 && !procResult.killed
+    const wrappedOnLog = (chunk: string) => {
+      onLog?.(chunk)
+      appendLog(chunk)
+    }
+
+    const timeoutMs = req.timeoutMs || runnerConfig.timeoutMs || 600_000
+    let procResult: ProcResult
+    try {
+      procResult = await runProcess(cliPath, args, {
+        cwd: req.workspace,
+        env: { ...process.env },
+        timeoutMs,
+        onLog: wrappedOnLog,
+        onStart,
+      })
+    } catch (err: any) {
       const result: ExecuteResult = {
-        ok,
-        exitCode: procResult.exitCode,
+        ok: false,
+        exitCode: null,
         durationMs: Date.now() - started,
         logPath,
-        artifactsFound,
-        error: ok ? undefined : formatFailure(procResult, timeoutMs),
-        timedOut: procResult.killed,
-        stdout: procResult.stdout,
+        error: String(err.message || err),
       }
       appendLog(describeResult(result))
       return result
-    },
+    }
+
+    const artifactsFound: string[] = []
+    if (req.produces?.length) {
+      for (const name of req.produces) {
+        const fp = joinPath(req.workspace, name)
+        if (existsSync(fp)) artifactsFound.push(name)
+      }
+    }
+
+    const ok = procResult.exitCode === 0 && !procResult.killed
+    const result: ExecuteResult = {
+      ok,
+      exitCode: procResult.exitCode,
+      durationMs: Date.now() - started,
+      logPath,
+      artifactsFound,
+      error: ok ? undefined : formatFailure(procResult, timeoutMs),
+      timedOut: procResult.killed,
+      stdout: procResult.stdout,
+    }
+    appendLog(describeResult(result))
+    return result
   }
 }
