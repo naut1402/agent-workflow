@@ -33,6 +33,7 @@ const OVERLAY = '.c-loading-overlay'
 async function mountDialog() {
   const w = mount(KnowledgeCollectionDialog, {
     props: { collection: null, tags: [], projectId: 'p1' },
+    global: { stubs: { teleport: true } },
   })
   await flushPromises()
   return w

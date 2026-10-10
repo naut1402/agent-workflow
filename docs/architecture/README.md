@@ -126,7 +126,7 @@ Domain nằm trong `src/features/<name>/business/`. Coupling xuống: `backend/c
 **Cấu hình / biên soạn (người dùng chỉnh sửa config, nội dung):**
 
 - **Registry** (`src/backend/registry.ts`) — nguồn sự thật cho project registry, dùng chung bởi REST và MCP server.
-- **MCP (vai client)** (`src/features/mcp/`) — store `mcp-servers.json` dưới `registryHome()`, chốt URL riêng qua `assertMcpEndpoint` (`https` mọi host · `http` chỉ loopback/private — cố ý không dùng `fetchUrlSafe`, xem `AGENTS.md` §4 Review); tiêu thụ qua `runner/business/providers/mcpJobConfig.ts` → `claude-code-cli.ts` (`--mcp-config` + `--strict-mcp-config`).
+- **MCP (vai client)** (`src/features/mcp/`) — thực thể `McpServer` «abstract» với hai hiện thực `StdioMcpServer` · `RemoteMcpServer`; `McpRegistry` giữ store `mcp-servers.json` dưới `registryHome()` và là chỗ lắp ráp duy nhất biết hai hiện thực; `McpClient` kết nối (probe / phiên theo job); `SecretMasker` che secret (Node-free, FE dùng chung); kiểu + hằng một nguồn ở `schemas/mcpServer.ts`. `SelfMcpServer` (`extends StdioMcpServer`) là entry trỏ vào chính dashboard cho job điều phối và nguồn hằng hợp đồng với tiến trình `mcp/stdio.ts`. Credential đi qua cổng `CredentialResolver` mà `runner` đăng ký lúc nạp (`useCredentialResolver`), nên `mcp` 🚫 import `runner`; `isPrivateHostname` ở `src/backend/lib/netUtils.ts`. Chốt URL riêng qua `RemoteMcpServer.assertEndpoint` (`https` mọi host · `http` chỉ loopback/private — cố ý không dùng `fetchUrlSafe`, xem `AGENTS.md` §4 Review); tiêu thụ qua `RunnerProvider.mcpDelivery` (`runner/business/mcpDelivery/`, lắp ráp ở `runner/business/registry.ts`): claude nhận file `--mcp-config` + `--strict-mcp-config`, cursor nhận `<workspace>/.cursor/mcp.json` + `--approve-mcps`, họ `ai-api` nhận tool MCP thẳng vào vòng tool-use. Chi tiết: [`docs/mcp/client.md`](../mcp/client.md).
 - **Pipeline / Catalog / Rules** (feature pipeline-editor) — pipeline config layered + merge; catalog agent/skill và rule project đọc theo convention, cộng thêm path khớp `settings.scanPatterns`.
 - **Knowledge** — entry lưu qua file driver đa root; **collection + tag** lưu ở `dashboard.sqlite` (khác driver với entry).
 
@@ -181,6 +181,8 @@ Chi tiết implementation cụ thể — tên file, hàm, bảng schema. Đây l
 | [4.4 DB (SQLite)](#44-db-sqlite) | Trước khi bật `logging.driver: sqlite` hoặc thêm bảng mới |
 | [4.5 Config shell](#45-config-shell) | Không chắc 1 setting nên đặt ở preference shell hay schema business |
 | [4.6 Styling](#46-styling) | Thêm style mới xuyên feature |
+| [`code/runner.md`](code/runner.md) | Sửa id runner/connection, runner mặc định, hoặc cách phân loại family của provider |
+| [`code/monitor.md`](code/monitor.md) | Sửa validate task id ở business `monitor` (`createQa`), hoặc pattern task id của MCP |
 | [`events/`](events/README.md) | Viết subscriber, thêm emit mới, tra cứu 1 domain event cụ thể |
 
 ### 4.1 Frontend
@@ -272,7 +274,7 @@ Preference/version shell tách theo scope chạy: `src/frontend/configs/` cho pr
 | File / thư mục | Vai trò |
 |---|---|
 | `src/frontend/configs/appSettings.ts` | Preference shell (theme/locale/notifications UI); core/plugins dùng. **Không** nhầm với schema business của feature `settings` (`autoscan`, `dashboardSettings`, `githubTokens`, `scanPatterns` ở `features/settings/schemas/`). |
-| `src/backend/configs/appVersion.ts` | Semver từ `package.json`. |
+| `src/backend/configs/appVersion.ts` | Semver đọc thẳng `package.json` (chỉ chạy trên Bun/Node — MCP server dùng). **Không gộp** với `src/frontend/lib/appVersion.ts`: bản FE đọc `__APP_VERSION__` do Vite `define` bơm vào lúc build, vì browser không có `package.json`. Nguồn chân lý của cả hai là `package.json` → `version`. |
 | `src/features/<feature>/schemas/` | Schema domain (task, log, autoscan, …) — Zod + `z.infer`, validate biên I/O của feature đó. |
 | `src/backend/lib/` | Helper Node-only: `fileHelper` (`resolvePathUnder`), `processHelper`, `yamlLib`, `dirModuleLoader`, `arrayUtils`, `dateUtils`. |
 | `src/frontend/lib/` | Helper thuần browser: `theme`, `markdownLib`, `diffLib`, `authToken`, `workflowSteps`, `pipelineArtifactGraph`, `appVersion`. |

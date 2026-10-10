@@ -2,15 +2,28 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { openMcpSession, probeMcpServer } from '../../../../../src/features/mcp/business/client.js'
+import {
+  McpClient,
+  type McpProbeOptions,
+} from '../../../../../src/features/mcp/business/McpClient.js'
+import { McpServer } from '../../../../../src/features/mcp/business/McpServer.js'
 import { startFakeMcpHttp } from './fake-mcp-http.mjs'
 import {
   MCP_DEFAULT_TIMEOUT_MS,
   MCP_MAX_TIMEOUT_MS,
-  resolveTimeoutMs,
   type McpRemoteServer,
+  type McpServerConfig,
   type McpStdioServer,
-} from '../../../../../src/features/mcp/business/types.js'
+} from '../../../../../src/features/mcp/schemas/mcpServer.js'
+import { toMcpServer } from './toMcpServer.js'
+
+/** `McpClient.probe` / `McpClient.open` nhận entity — các ca dựng bản ghi rồi bọc ở đây. */
+function probeServer(server: McpServerConfig, opts?: McpProbeOptions) {
+  return McpClient.probe(toMcpServer(server), opts)
+}
+function openSession(server: McpServerConfig, opts?: McpProbeOptions) {
+  return McpClient.open(toMcpServer(server), opts)
+}
 
 /**
  * TC-28…TC-31 — `probeMcpServer` trên transport stdio, chạy server MCP THẬT
@@ -65,10 +78,10 @@ async function waitUntilDead(pid: number, timeoutMs = 3000): Promise<boolean> {
   return !isAlive(pid)
 }
 
-describe('probeMcpServer — stdio', () => {
+describe('McpClient.probe — stdio', () => {
   // TC-28
   test('TC-28: probe thành công ⇒ serverInfo + tools theo shape `tools/list`', async () => {
-    const result = await probeMcpServer(fakeServer('ok'), { listTools: true, timeoutMs: 15_000 })
+    const result = await probeServer(fakeServer('ok'), { listTools: true, timeoutMs: 15_000 })
 
     expect(result.ok).toBe(true)
     expect(result.error).toBeUndefined()
@@ -90,7 +103,7 @@ describe('probeMcpServer — stdio', () => {
     const pidFile = pidFilePath()
     const started = Date.now()
     // `env` của server đi thẳng vào env tiến trình con — fixture dùng nó để ghi PID.
-    const result = await probeMcpServer(
+    const result = await probeServer(
       fakeServer('hang', { env: { FAKE_MCP_PID_FILE: pidFile } }),
       { listTools: true, timeoutMs: 1000 },
     )
@@ -107,7 +120,7 @@ describe('probeMcpServer — stdio', () => {
 
   // TC-30
   test('TC-30: server chết ngay khi khởi động ⇒ ok false, error mang thông điệp gốc', async () => {
-    const result = await probeMcpServer(fakeServer('crash'), { listTools: true, timeoutMs: 5000 })
+    const result = await probeServer(fakeServer('crash'), { listTools: true, timeoutMs: 5000 })
 
     expect(result.ok).toBe(false)
     expect(typeof result.error).toBe('string')
@@ -116,7 +129,7 @@ describe('probeMcpServer — stdio', () => {
 
   // TC-31
   test('TC-31: lệnh không tồn tại ⇒ ok false, không ném, không treo', async () => {
-    const result = await probeMcpServer(
+    const result = await probeServer(
       fakeServer('ok', { command: 'dtd-lenh-chac-chan-khong-ton-tai-9f2a', args: [] }),
       { listTools: true, timeoutMs: 5000 },
     )
@@ -171,12 +184,12 @@ function withEnv<T>(vars: Record<string, string | undefined>, fn: () => T): T {
   }
 }
 
-describe('probeMcpServer — env truyền xuống server con (nhóm D)', () => {
+describe('McpClient.probe — env truyền xuống server con (nhóm D)', () => {
   // TC-D01
   test('TC-D01: biến NGOÀI danh sách hẹp cũ vẫn tới được tiến trình con', async () => {
     const file = envDumpFile()
     const result = await withEnv({ MCP_PROBE_CANARY: 'xin-chao' }, () =>
-      probeMcpServer(fakeServer('ok', { env: { FAKE_MCP_ENV_FILE: file } }), {
+      probeServer(fakeServer('ok', { env: { FAKE_MCP_ENV_FILE: file } }), {
         listTools: true,
         timeoutMs: 15_000,
       }),
@@ -191,7 +204,7 @@ describe('probeMcpServer — env truyền xuống server con (nhóm D)', () => {
   test('TC-D02: biến khai riêng cho server THẮNG biến cùng tên của tiến trình dashboard', async () => {
     const file = envDumpFile()
     const result = await withEnv({ MCP_PROBE_OVERRIDE: 'env-ngoai' }, () =>
-      probeMcpServer(
+      probeServer(
         fakeServer('ok', { env: { FAKE_MCP_ENV_FILE: file, MCP_PROBE_OVERRIDE: 'cua-server' } }),
         { listTools: true, timeoutMs: 15_000 },
       ),
@@ -205,7 +218,7 @@ describe('probeMcpServer — env truyền xuống server con (nhóm D)', () => {
   test('TC-D03: biến rỗng / biến đã xoá ⇒ lượt kiểm tra vẫn chạy, 🚫 không ném vì `undefined`', async () => {
     const file = envDumpFile()
     const result = await withEnv({ MCP_PROBE_EMPTY: '', MCP_PROBE_DELETED: undefined }, () =>
-      probeMcpServer(fakeServer('ok', { env: { FAKE_MCP_ENV_FILE: file } }), {
+      probeServer(fakeServer('ok', { env: { FAKE_MCP_ENV_FILE: file } }), {
         listTools: true,
         timeoutMs: 15_000,
       }),
@@ -230,7 +243,7 @@ describe('probeMcpServer — env truyền xuống server con (nhóm D)', () => {
     const result = await withEnv(
       { CLAUDE_PROJECT_DIR: undefined, CLAUDE_CODE_SESSION_ID: undefined, CLAUDECODE: undefined },
       () =>
-        probeMcpServer(fakeServer('ok', { env: { FAKE_MCP_ENV_FILE: file } }), {
+        probeServer(fakeServer('ok', { env: { FAKE_MCP_ENV_FILE: file } }), {
           listTools: true,
           timeoutMs: 15_000,
         }),
@@ -244,7 +257,7 @@ describe('probeMcpServer — env truyền xuống server con (nhóm D)', () => {
   }, 30_000)
 })
 
-describe('probeMcpServer — timeout khởi động (nhóm D)', () => {
+describe('McpClient.probe — timeout khởi động (nhóm D)', () => {
   /**
    * TC-D04 — mặc định timeout khởi động khớp job.
    *
@@ -255,7 +268,7 @@ describe('probeMcpServer — timeout khởi động (nhóm D)', () => {
    */
   test('TC-D04: server 🚫 không khai timeout, khởi động chậm hơn 15s ⇒ vẫn PASS', async () => {
     const started = Date.now()
-    const result = await probeMcpServer(
+    const result = await probeServer(
       fakeServer('ok', { env: { FAKE_MCP_DELAY_MS: String(SLOW_START_MS) } }),
       { listTools: true },
     )
@@ -276,18 +289,18 @@ describe('probeMcpServer — timeout khởi động (nhóm D)', () => {
    * nó còn sống thì ca này đỏ. 🚫 Không hạ kỳ vọng về mốc 60s.
    */
   test('TC-D05: server khai 300000 ⇒ ngân sách hiệu lực là 300000, 🚫 không bị cắt về 60s', () => {
-    expect(resolveTimeoutMs(undefined, 300_000)).toBe(300_000)
-    expect(resolveTimeoutMs(undefined, 300_000)).toBeGreaterThan(60_000)
+    expect(McpServer.resolveTimeoutMs(undefined, 300_000)).toBe(300_000)
+    expect(McpServer.resolveTimeoutMs(undefined, 300_000)).toBeGreaterThan(60_000)
     // Trần mới vẫn là trần: giá trị vượt nó bị kẹp, 🚫 không truyền thẳng.
-    expect(resolveTimeoutMs(undefined, MCP_MAX_TIMEOUT_MS + 1)).toBe(MCP_MAX_TIMEOUT_MS)
+    expect(McpServer.resolveTimeoutMs(undefined, MCP_MAX_TIMEOUT_MS + 1)).toBe(MCP_MAX_TIMEOUT_MS)
     // 🚫 Không khai gì ⇒ mặc định mới, không phải mốc cũ.
-    expect(resolveTimeoutMs(undefined, undefined)).toBe(MCP_DEFAULT_TIMEOUT_MS)
+    expect(McpServer.resolveTimeoutMs(undefined, undefined)).toBe(MCP_DEFAULT_TIMEOUT_MS)
   })
 
   // TC-D06
   test('TC-D06: server khai 5000 mà khởi động lâu hơn ⇒ bỏ cuộc đúng theo giá trị đã khai', async () => {
     const started = Date.now()
-    const result = await probeMcpServer(
+    const result = await probeServer(
       fakeServer('ok', { timeoutMs: 5000, env: { FAKE_MCP_DELAY_MS: '30000' } }),
       { listTools: true },
     )
@@ -311,7 +324,7 @@ describe('probeMcpServer — timeout khởi động (nhóm D)', () => {
   test('TC-29b: bắt tay chậm rồi treo ⇒ `tools/list` chỉ được phần NGÂN SÁCH CÒN LẠI', async () => {
     const budgetMs = 3000
     const started = Date.now()
-    const result = await probeMcpServer(
+    const result = await probeServer(
       fakeServer('init-then-hang', { env: { FAKE_MCP_DELAY_MS: '1500' } }),
       { listTools: true, timeoutMs: budgetMs },
     )
@@ -327,7 +340,7 @@ describe('probeMcpServer — timeout khởi động (nhóm D)', () => {
   }, 60_000)
 })
 
-describe('probeMcpServer — kịch bản hồi quy và thông điệp lỗi (nhóm D)', () => {
+describe('McpClient.probe — kịch bản hồi quy và thông điệp lỗi (nhóm D)', () => {
   /**
    * TC-D07 — kịch bản hồi quy của bug gốc, dựng lại đủ CẢ HAI điều kiện: server
    * phụ thuộc một biến env ngoài danh sách hẹp cũ VÀ khởi động lâu hơn mốc 15s.
@@ -335,7 +348,7 @@ describe('probeMcpServer — kịch bản hồi quy và thông điệp lỗi (nh
    */
   test('TC-D07: server cần biến env ngoài danh sách cũ + khởi động chậm ⇒ kiểm tra PASS và lấy được tool', async () => {
     const result = await withEnv({ MCP_PROBE_NEEDED: 'co-mat' }, () =>
-      probeMcpServer(
+      probeServer(
         fakeServer('ok', {
           env: { FAKE_MCP_REQUIRED_ENV: 'MCP_PROBE_NEEDED', FAKE_MCP_DELAY_MS: String(SLOW_START_MS) },
         }),
@@ -350,7 +363,7 @@ describe('probeMcpServer — kịch bản hồi quy và thông điệp lỗi (nh
   // TC-D07 (đối chứng) — thiếu đúng biến đó thì vẫn fail: ca trên 🚫 không xanh vì lý do khác.
   test('TC-D07 (đối chứng): thiếu biến bắt buộc ⇒ lượt kiểm tra FAIL', async () => {
     const result = await withEnv({ MCP_PROBE_NEEDED: undefined }, () =>
-      probeMcpServer(fakeServer('ok', { env: { FAKE_MCP_REQUIRED_ENV: 'MCP_PROBE_NEEDED' } }), {
+      probeServer(fakeServer('ok', { env: { FAKE_MCP_REQUIRED_ENV: 'MCP_PROBE_NEEDED' } }), {
         listTools: true,
         timeoutMs: 10_000,
       }),
@@ -362,17 +375,17 @@ describe('probeMcpServer — kịch bản hồi quy và thông điệp lỗi (nh
 
   // TC-D08 — nới điều kiện 🚫 KHÔNG được biến lỗi thật thành pass giả.
   test('TC-D08: lệnh không tồn tại / server chết / URL remote không kết nối được ⇒ vẫn FAIL', async () => {
-    const missingCommand = await probeMcpServer(
+    const missingCommand = await probeServer(
       fakeServer('ok', { command: 'dtd-lenh-chac-chan-khong-ton-tai-9f2a', args: [] }),
       { listTools: true, timeoutMs: 5000 },
     )
     expect(missingCommand.ok).toBe(false)
 
-    const crashed = await probeMcpServer(fakeServer('crash'), { listTools: true, timeoutMs: 5000 })
+    const crashed = await probeServer(fakeServer('crash'), { listTools: true, timeoutMs: 5000 })
     expect(crashed.ok).toBe(false)
 
     // Loopback cổng 1: từ chối kết nối ngay, 🚫 không ra mạng ngoài (§1.4).
-    const refused = await probeMcpServer(
+    const refused = await probeServer(
       {
         id: 'remote-refused',
         label: 'remote refused',
@@ -403,7 +416,7 @@ describe('probeMcpServer — kịch bản hồi quy và thông điệp lỗi (nh
     const result = await withEnv(
       { HOME: home, MCP_PROBE_API_KEY: apiKey, MCP_PROBE_PLAIN: plain },
       () =>
-        probeMcpServer(
+        probeServer(
           // Lệnh không tồn tại mang cả ba chuỗi ⇒ thông điệp ENOENT chứa đủ chúng.
           fakeServer('ok', { command: `${home}/${plain}/khong-ton-tai-${apiKey}`, args: [] }),
           { listTools: true, timeoutMs: 5000 },
@@ -430,7 +443,7 @@ describe('probeMcpServer — kịch bản hồi quy và thông điệp lỗi (nh
   test('TC-D10: `cwd` của server áp dụng cho lượt kiểm tra (job thì không — chênh lệch cố ý)', async () => {
     const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-mcp-cwd-'))
     const file = envDumpFile()
-    const result = await probeMcpServer(
+    const result = await probeServer(
       fakeServer('ok', { cwd, env: { FAKE_MCP_ENV_FILE: file } }),
       { listTools: true, timeoutMs: 15_000 },
     )
@@ -487,7 +500,7 @@ function remoteServer(
   } as McpRemoteServer
 }
 
-describe('probeMcpServer — guard redirect (nhóm A của #385)', () => {
+describe('McpClient.probe — guard redirect (nhóm A của #385)', () => {
   for (const transport of TRANSPORTS) {
     const entry = entryPathOf(transport)
     const keep = () => keepMethodStatus(transport)
@@ -498,7 +511,7 @@ describe('probeMcpServer — guard redirect (nhóm A của #385)', () => {
       srv.plan = ({ pathname }) =>
         pathname === entry ? { status: 302, location: 'http://example.com/mcp' } : null
       try {
-        const result = await probeMcpServer(
+        const result = await probeServer(
           remoteServer(transport, srv.url(entry), { headers: { 'X-API-Key': SEC_CANARY } }),
           { listTools: true, timeoutMs: 8000 },
         )
@@ -524,7 +537,7 @@ describe('probeMcpServer — guard redirect (nhóm A của #385)', () => {
           ? { status: 302, location: 'https://mcp-redirect-target.invalid/mcp' }
           : null
       try {
-        const result = await probeMcpServer(remoteServer(transport, srv.url(entry)), {
+        const result = await probeServer(remoteServer(transport, srv.url(entry)), {
           listTools: true,
           timeoutMs: 8000,
         })
@@ -547,7 +560,7 @@ describe('probeMcpServer — guard redirect (nhóm A của #385)', () => {
       a.plan = ({ pathname }) =>
         pathname === entry ? { status: keep(), location: b.url(entry) } : null
       try {
-        await probeMcpServer(
+        await probeServer(
           remoteServer(transport, a.url(entry), { headers: { 'X-API-Key': SEC_CANARY } }),
           { listTools: true, timeoutMs: 8000 },
         )
@@ -571,9 +584,9 @@ describe('probeMcpServer — guard redirect (nhóm A của #385)', () => {
       a.plan = ({ pathname }) =>
         pathname === entry ? { status: keep(), location: b.url(entry) } : null
       try {
-        await probeMcpServer(
+        await probeServer(
           remoteServer(transport, a.url(entry), { credentialId: 'cred-1' }),
-          { listTools: true, timeoutMs: 8000, secret: SEC_CANARY },
+          { listTools: true, timeoutMs: 8000, credentials: { secretFor: () => SEC_CANARY } },
         )
 
         expect(a.hops[0]?.headers.authorization).toBe(`Bearer ${SEC_CANARY}`)
@@ -592,7 +605,7 @@ describe('probeMcpServer — guard redirect (nhóm A của #385)', () => {
       srv.plan = ({ pathname }) =>
         pathname === entry ? { status: keep(), location: dest } : null
       try {
-        const result = await probeMcpServer(
+        const result = await probeServer(
           remoteServer(transport, srv.url(entry), { headers: { 'X-API-Key': SEC_CANARY } }),
           { listTools: true, timeoutMs: 8000 },
         )
@@ -616,7 +629,7 @@ describe('probeMcpServer — guard redirect (nhóm A của #385)', () => {
       srv.plan = ({ index }) => ({ status: keep(), location: `${entry}?n=${index + 1}` })
       try {
         const started = Date.now()
-        const result = await probeMcpServer(remoteServer(transport, srv.url(entry)), {
+        const result = await probeServer(remoteServer(transport, srv.url(entry)), {
           listTools: true,
           timeoutMs: 8000,
         })
@@ -642,7 +655,7 @@ describe('probeMcpServer — guard redirect (nhóm A của #385)', () => {
       srv.plan = ({ pathname }) =>
         chain[pathname] ? { status: keep(), location: chain[pathname] } : null
       try {
-        const result = await probeMcpServer(remoteServer(transport, srv.url(entry)), {
+        const result = await probeServer(remoteServer(transport, srv.url(entry)), {
           listTools: true,
           timeoutMs: 8000,
         })
@@ -664,7 +677,7 @@ describe('probeMcpServer — guard redirect (nhóm A của #385)', () => {
       srv.plan = ({ pathname }) => (pathname === entry ? { status: 302 } : null)
       try {
         const started = Date.now()
-        const result = await probeMcpServer(remoteServer(transport, srv.url(entry)), {
+        const result = await probeServer(remoteServer(transport, srv.url(entry)), {
           listTools: true,
           timeoutMs: 8000,
         })
@@ -690,7 +703,7 @@ describe('probeMcpServer — guard redirect (nhóm A của #385)', () => {
       b.plan = ({ pathname }) =>
         pathname === entry ? { status: keep(), location: a.url(backPath) } : null
       try {
-        await probeMcpServer(
+        await probeServer(
           remoteServer(transport, a.url(entry), { headers: { 'X-API-Key': SEC_CANARY } }),
           { listTools: true, timeoutMs: 8000 },
         )
@@ -712,9 +725,9 @@ describe('probeMcpServer — guard redirect (nhóm A của #385)', () => {
       srv.plan = ({ pathname }) =>
         pathname === entry ? { status: keep(), location: `${entry}-x` } : null
       try {
-        const result = await probeMcpServer(
+        const result = await probeServer(
           remoteServer(transport, srv.url(entry), { credentialId: 'cred-1' }),
-          { listTools: true, timeoutMs: 8000, secret: SEC_CANARY },
+          { listTools: true, timeoutMs: 8000, credentials: { secretFor: () => SEC_CANARY } },
         )
 
         expect(JSON.stringify(result)).not.toContain(SEC_CANARY)
@@ -729,7 +742,7 @@ describe('probeMcpServer — guard redirect (nhóm A của #385)', () => {
       const dest = `${entry}/v2`
       srv.plan = ({ pathname }) => (pathname === entry ? { status: keep(), location: dest } : null)
       try {
-        const result = await probeMcpServer(remoteServer(transport, srv.url(entry)), {
+        const result = await probeServer(remoteServer(transport, srv.url(entry)), {
           listTools: true,
           timeoutMs: 8000,
         })
@@ -762,7 +775,7 @@ describe('probeMcpServer — guard redirect (nhóm A của #385)', () => {
           pathname === entry ? { status: keep(), location: 'ht!tp://' } : null
         try {
           const started = Date.now()
-          const result = await probeMcpServer(remoteServer(transport, srv.url(entry)), {
+          const result = await probeServer(remoteServer(transport, srv.url(entry)), {
             listTools: true,
             timeoutMs: 8000,
           })
@@ -783,7 +796,7 @@ describe('probeMcpServer — guard redirect (nhóm A của #385)', () => {
           pathname === entry ? { status: 302, location: 'http://[' } : null
         try {
           const started = Date.now()
-          const result = await probeMcpServer(remoteServer(transport, srv.url(entry)), {
+          const result = await probeServer(remoteServer(transport, srv.url(entry)), {
             listTools: true,
             timeoutMs: 8000,
           })
@@ -809,7 +822,7 @@ describe('probeMcpServer — guard redirect (nhóm A của #385)', () => {
     const srv = await startFakeMcpHttp({ mode: 'sse' })
     srv.plan = ({ pathname }) => (pathname === '/sse' ? { status: 302, location: '/sse/' } : null)
     try {
-      const result = await probeMcpServer(remoteServer('sse', srv.url('/sse')), {
+      const result = await probeServer(remoteServer('sse', srv.url('/sse')), {
         listTools: true,
         timeoutMs: 8000,
       })
@@ -831,7 +844,7 @@ describe('probeMcpServer — guard redirect (nhóm A của #385)', () => {
     srv.plan = ({ pathname }) =>
       pathname === '/mcp' ? { status: 307, location: '/mcp-kept' } : null
     try {
-      await probeMcpServer(remoteServer('http', srv.url('/mcp')), {
+      await probeServer(remoteServer('http', srv.url('/mcp')), {
         listTools: true,
         timeoutMs: 8000,
       })
@@ -852,7 +865,7 @@ describe('probeMcpServer — guard redirect (nhóm A của #385)', () => {
       srv.plan = ({ pathname }) =>
         pathname === '/mcp' ? { status, location: '/mcp-downgraded' } : null
       try {
-        await probeMcpServer(remoteServer('http', srv.url('/mcp')), {
+        await probeServer(remoteServer('http', srv.url('/mcp')), {
           listTools: true,
           timeoutMs: 8000,
         })
@@ -875,7 +888,7 @@ describe('probeMcpServer — guard redirect (nhóm A của #385)', () => {
  * nên ca ở đây đo bằng **PID tiến trình con thật**. Quên `close()` là rò tiến
  * trình theo từng job — thứ chỉ spawn thật mới bắt được.
  */
-describe('openMcpSession — phiên theo job', () => {
+describe('McpClient.open — phiên theo job', () => {
   function alive(pid: number): boolean {
     try {
       process.kill(pid, 0)
@@ -900,7 +913,7 @@ describe('openMcpSession — phiên theo job', () => {
    * Hai vế assert trong CÙNG một ca để chênh lệch này 🚫 trôi.
    */
   test('openMcpSession điền `inputSchema`; `probeMcpServer` cố ý KHÔNG', async () => {
-    const session = await openMcpSession(fakeServer('ok'), { timeoutMs: 15_000 })
+    const session = await openSession(fakeServer('ok'), { timeoutMs: 15_000 })
     try {
       expect(session.tools.map((t) => t.name).sort()).toEqual(['echo', 'ping'])
       const echo = session.tools.find((t) => t.name === 'echo')!
@@ -911,13 +924,13 @@ describe('openMcpSession — phiên theo job', () => {
       await session.close()
     }
 
-    const probed = await probeMcpServer(fakeServer('ok'), { listTools: true, timeoutMs: 15_000 })
+    const probed = await probeServer(fakeServer('ok'), { listTools: true, timeoutMs: 15_000 })
     expect(probed.ok).toBe(true)
     expect(probed.tools.every((t) => t.inputSchema === undefined)).toBe(true)
   }, 30_000)
 
   test('`callTool` gọi được nhiều lần trên cùng phiên; `close()` idempotent', async () => {
-    const session = await openMcpSession(fakeServer('ok'), { timeoutMs: 15_000 })
+    const session = await openSession(fakeServer('ok'), { timeoutMs: 15_000 })
 
     expect(JSON.stringify(await session.callTool('echo', { text: 'lan-1' }))).toContain('lan-1')
     expect(JSON.stringify(await session.callTool('echo', { text: 'lan-2' }))).toContain('lan-2')
@@ -928,7 +941,7 @@ describe('openMcpSession — phiên theo job', () => {
 
   test('`close()` giết tiến trình con của transport stdio', async () => {
     const pidFile = pidFilePath()
-    const session = await openMcpSession(fakeServer('ok', { env: { FAKE_MCP_PID_FILE: pidFile } }), {
+    const session = await openSession(fakeServer('ok', { env: { FAKE_MCP_PID_FILE: pidFile } }), {
       timeoutMs: 15_000,
     })
     const pid = Number(fs.readFileSync(pidFile, 'utf8'))
@@ -945,7 +958,7 @@ describe('openMcpSession — phiên theo job', () => {
   test('mở hụt ⇒ tự đóng tại chỗ, 🚫 rò tiến trình con', async () => {
     const pidFile = pidFilePath()
     await expect(
-      openMcpSession(fakeServer('init-then-hang', { env: { FAKE_MCP_PID_FILE: pidFile } }), {
+      openSession(fakeServer('init-then-hang', { env: { FAKE_MCP_PID_FILE: pidFile } }), {
         timeoutMs: 1200,
       }),
     ).rejects.toThrow()
@@ -957,7 +970,7 @@ describe('openMcpSession — phiên theo job', () => {
   test('`onWarning` phát NGAY lúc dựng transport, kể cả khi `connect()` ném sau đó', async () => {
     const warnings: string[] = []
     await expect(
-      openMcpSession(
+      openSession(
         fakeServer('init-then-hang', { env: { TOKEN: 'env:BIEN_CHAC_CHAN_KHONG_TON_TAI_123' } }),
         { timeoutMs: 1200, onWarning: (m) => warnings.push(m) },
       ),

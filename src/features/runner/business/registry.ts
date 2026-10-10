@@ -1,18 +1,28 @@
 import { joinPath, mkdirSync, readTextFileSync, writeTextFileAtomicSync } from '../../../backend/lib/fileHelper.js'
 import { registryHome } from '../../../backend/registry.js'
-import { ensureLegacyConnection, getConnection } from './connections.js'
+import { PROVIDER_CATALOG, catalogFamilyOf, ensureLegacyConnection, getConnection } from './connections.js'
+import { ConfigFlagMcpDelivery } from './mcpDelivery/ConfigFlagMcpDelivery.js'
+import { ToolBridgeMcpDelivery } from './mcpDelivery/ToolBridgeMcpDelivery.js'
+import { WorkspaceFileMcpDelivery } from './mcpDelivery/WorkspaceFileMcpDelivery.js'
 import { createClaudeCodeCliProvider } from './providers/claude-code-cli.js'
 import { createCursorCliProvider } from './providers/cursor-cli.js'
 import { createCodexCliProvider } from './providers/codex-cli.js'
 import { createConsoleCommandProvider } from './providers/console-command.js'
 import { createOpenAiCompatibleProvider } from './providers/openai-compatible-api.js'
 import { createAnthropicCompatibleProvider } from './providers/anthropic-compatible-api.js'
-import { providerFamilyOf } from './providers/agentCli.js'
+import { providerFamilyFromId } from './providers/agentCli.js'
+import { RunnerCredentialResolver } from './RunnerCredentialResolver.js'
+import { useCredentialResolver } from '../../mcp/business/index.js'
 import {
   DEFAULT_CONNECTION_ID,
   RUNNERS_VERSION,
   sanitiseConnectionId,
   sanitiseRunnerId,
+  type DefaultRunnerReason,
+  type DefaultRunnerResolution,
+  type McpDelivery,
+  type ProviderCatalogEntry,
+  type ProviderFamily,
   type RunnerConfig,
   type RunnersStore,
   type MutationResult,
@@ -113,9 +123,22 @@ export function saveRunners(store: RunnersStore): RunnersStore {
   return store
 }
 
-export function listRunners(): { defaultRunnerId: string | null; runners: RunnerConfig[] } {
+export function listRunners(): {
+  defaultRunnerId: string | null
+  effectiveDefaultRunnerId: string | null
+  defaultRunnerIssue: { runnerId: string | null; reason: DefaultRunnerReason } | null
+  runners: RunnerConfig[]
+} {
   const store = loadRunners()
-  return { defaultRunnerId: store.defaultRunnerId, runners: store.runners }
+  const d = resolveDefaultRunner(store)
+  return {
+    // `defaultRunnerId` giữ nguyên nghĩa cũ (id người dùng đã chốt); hai trường
+    // dẫn xuất bên dưới cho UI biết runner nào job KHÔNG pin sẽ thật sự chạy.
+    defaultRunnerId: store.defaultRunnerId,
+    effectiveDefaultRunnerId: d.runner?.id ?? null,
+    defaultRunnerIssue: d.reason === 'ok' ? null : { runnerId: d.runnerId, reason: d.reason },
+    runners: store.runners,
+  }
 }
 
 export function getRunner(id: unknown): RunnerConfig | null {
@@ -124,26 +147,84 @@ export function getRunner(id: unknown): RunnerConfig | null {
   return loadRunners().runners.find((r) => r.id === clean) || null
 }
 
+/** Vì sao một runner KHÔNG đủ điều kiện làm default AI; `null` = đủ điều kiện. */
+function defaultRunnerIssueOf(r: RunnerConfig): 'disabled' | 'no-connection' | 'not-ai' | null {
+  if (r.enabled === false) return 'disabled'
+  const conn = getConnection(r.connectionId)
+  if (!conn?.providerId) return 'no-connection'
+  const family = providerFamilyOf(conn.providerId)
+  return family === 'agent-cli' || family === 'ai-api' ? null : 'not-ai'
+}
+
+/**
+ * Nguồn sự thật duy nhất cho "runner nào chạy khi job không pin".
+ *
+ * Chỉ xét **đúng** runner đã được ghi nhận làm mặc định — không rơi về "runner hợp
+ * lệ đầu tiên" nữa: rơi như vậy làm step chạy bằng runner người dùng chưa bao giờ
+ * chọn. Thà đứng lại với lý do đọc được còn hơn chạy sai runner.
+ *
+ * `store` truyền vào để call site đã load rồi không phải đọc lại file.
+ */
+export function resolveDefaultRunner(store: RunnersStore = loadRunners()): DefaultRunnerResolution {
+  if (!store.runners.length) return { runner: null, runnerId: null, reason: 'no-runners' }
+  const id = store.defaultRunnerId
+  if (!id) return { runner: null, runnerId: null, reason: 'unset' }
+  const r = store.runners.find((x) => x.id === id)
+  if (!r) return { runner: null, runnerId: id, reason: 'missing' }
+  const issue = defaultRunnerIssueOf(r)
+  return issue
+    ? { runner: null, runnerId: id, reason: issue }
+    : { runner: r, runnerId: id, reason: 'ok' }
+}
+
+/** Throttle theo cặp (id, reason) — hàm này chạy ở mọi lần submit job, không được spam log. */
+let lastDefaultWarn = ''
+
+/**
+ * Đưa throttle về trạng thái biết trước. Chỉ dùng cho test: biến trên sống xuyên
+ * process nên hai ca đo số dòng log trong cùng file sẽ ảnh hưởng nhau.
+ */
+export function resetDefaultRunnerWarn(): void {
+  lastDefaultWarn = ''
+}
+
 export function getDefaultRunner(): RunnerConfig | null {
-  const store = loadRunners()
-  const hit =
-    store.runners.find((r) => r.id === store.defaultRunnerId && isEligibleDefaultAiRunner(r)) ||
-    store.runners.find((r) => isEligibleDefaultAiRunner(r))
-  return hit || null
+  const res = resolveDefaultRunner()
+  if (res.reason !== 'ok') {
+    const key = `${res.runnerId ?? '-'}:${res.reason}`
+    if (key !== lastDefaultWarn) {
+      lastDefaultWarn = key
+      console.warn(
+        `[runner] không có runner mặc định dùng được (${res.runnerId ?? 'chưa đặt'}: ${res.reason})`,
+      )
+    }
+  } else {
+    // Về `ok` thì xoá dấu, để lần hỏng sau vẫn được log một lần.
+    lastDefaultWarn = ''
+  }
+  return res.runner
 }
 
 /** Agent CLI / AI API only — never console-command or unknown/missing provider. */
 export function isEligibleDefaultAiRunner(r: RunnerConfig): boolean {
-  if (r.enabled === false) return false
-  const conn = getConnection(r.connectionId)
-  if (!conn?.providerId) return false
-  const family = providerFamilyOf(conn.providerId)
-  return family === 'agent-cli' || family === 'ai-api'
+  return defaultRunnerIssueOf(r) === null
 }
 
 export function upsertRunner(runner: any): MutationResult<{ runner: RunnerConfig }> {
   const id = sanitiseRunnerId(runner?.id)
   if (!id) return { ok: false, error: 'invalid runner id' }
+
+  // `create: true` chỉ do dialog "tạo mới" của FE gửi. Caller lập trình (test,
+  // migration, automation) không gửi cờ này ⇒ giữ nguyên hành vi upsert-merge.
+  // Id suy từ slugify(tên) nên trùng tên = trùng id: không chặn thì bản ghi mới
+  // thay chỗ bản ghi cũ mà không ai thấy.
+  //
+  // Chặn TRƯỚC mọi tác dụng phụ: `ensureLegacyConnection` bên dưới ghi đĩa, nên
+  // guard đặt sau nó sẽ để lại một connection mới rồi mới trả 409. 409 phải là
+  // một no-op hoàn toàn.
+  if (runner?.create === true && loadRunners().runners.some((r) => r.id === id)) {
+    return { ok: false, status: 409, error: `runner id "${id}" đã tồn tại` }
+  }
 
   let connectionId = sanitiseConnectionId(runner.connectionId)
   // Accept legacy payload during transition.
@@ -243,14 +324,28 @@ function register(provider: RunnerProvider): void {
   providers.set(provider.providerId, provider)
 }
 
-register(createClaudeCodeCliProvider())
-register(createCursorCliProvider())
+// ── Lắp ráp cách giao MCP ──────────────────────────────────────────────────
+// Chỗ DUY NHẤT biết provider nào nhận MCP bằng cách nào. Provider không được
+// truyền delivery (codex ⇒ `NoMcpDelivery`, console ⇒ không khai) không nhận MCP.
+//
+// Một adapter credential dùng chung: cả ba cách giao giải `credentialId` của
+// server từ xa giống hệt nhau.
+const mcpCredentials = new RunnerCredentialResolver()
+// Cùng instance cho caller không nhận resolver qua tham số (`mcp/controller.ts`
+// lấy lại bằng `credentialResolver()`) — nhờ vậy `mcp` 🚫 import `runner`.
+useCredentialResolver(mcpCredentials)
+/** File cấu hình job (claude) và ledger workspace (cursor) — 🚫 trong workspace người dùng. */
+const mcpRuntimeDir = () => joinPath(registryHome(), 'mcp-runtime')
+const mcpToolBridge = new ToolBridgeMcpDelivery(mcpCredentials)
+
+register(createClaudeCodeCliProvider({ mcpDelivery: new ConfigFlagMcpDelivery(mcpRuntimeDir, mcpCredentials) }))
+register(createCursorCliProvider({ mcpDelivery: new WorkspaceFileMcpDelivery(mcpRuntimeDir, mcpCredentials) }))
 register(createCodexCliProvider())
 register(createConsoleCommandProvider())
-register(createOpenAiCompatibleProvider('openai-api', 'https://api.openai.com/v1'))
-register(createOpenAiCompatibleProvider('gemini-api', 'https://generativelanguage.googleapis.com/v1beta/openai'))
-register(createOpenAiCompatibleProvider('xai-api', 'https://api.x.ai/v1'))
-register(createAnthropicCompatibleProvider('anthropic-api', 'https://api.anthropic.com'))
+register(createOpenAiCompatibleProvider('openai-api', 'https://api.openai.com/v1', mcpToolBridge))
+register(createOpenAiCompatibleProvider('gemini-api', 'https://generativelanguage.googleapis.com/v1beta/openai', mcpToolBridge))
+register(createOpenAiCompatibleProvider('xai-api', 'https://api.x.ai/v1', mcpToolBridge))
+register(createAnthropicCompatibleProvider('anthropic-api', 'https://api.anthropic.com', mcpToolBridge))
 
 /**
  * Register (or replace) a provider at runtime. Built-in providers are registered
@@ -266,8 +361,43 @@ export function getProvider(providerId: string): RunnerProvider | null {
   return providers.get(providerId) || null
 }
 
+export function providerFamilyOf(providerId: string): ProviderFamily {
+  return catalogFamilyOf(providerId) ?? providers.get(providerId)?.family ?? providerFamilyFromId(providerId)
+}
+
 export function listProviderIds(): string[] {
   return [...providers.keys()]
+}
+
+/**
+ * Catalog provider cho UI. `mcpDelivery` lấy thẳng từ delivery đã lắp ráp vào
+ * provider — 🚫 bảng tra riêng theo `providerId`, nên catalog không lệch được
+ * khỏi thứ job thật sự nhận. Provider không khai delivery ⇒ `'unsupported'`.
+ *
+ * Nằm ở đây chứ 🚫 ở `connections.ts`: file này đã import `connections.ts`, nên
+ * gọi ngược `getProvider` từ đó là vòng import.
+ */
+export function listProviderCatalog(): ProviderCatalogEntry[] {
+  return PROVIDER_CATALOG.map((e) => ({
+    ...e,
+    mcpDelivery: getProvider(e.id)?.mcpDelivery?.kind ?? 'unsupported',
+  }))
+}
+
+/**
+ * Dọn dấu vết giao MCP mồ côi lúc bootstrap (tiến trình trước bị kill giữa job):
+ * file token plaintext dưới `mcp-runtime/`, `.cursor/mcp.json` trong repo người
+ * dùng kèm khoá treo. Một lượt cho mỗi `kind` — nhiều provider dùng chung một
+ * cách giao thì dọn chung một lần.
+ */
+export function cleanupOrphanedMcpDeliveries(): void {
+  const done = new Set<McpDelivery>()
+  for (const provider of providers.values()) {
+    const delivery = provider.mcpDelivery
+    if (!delivery || done.has(delivery.kind)) continue
+    done.add(delivery.kind)
+    delivery.cleanupOrphans()
+  }
 }
 
 /** Vì sao step pin không dùng được — dùng cho log, không đổi hành vi (luôn fallback default). */

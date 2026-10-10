@@ -1,22 +1,23 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { assertMcpEndpoint } from '../../../../../src/features/mcp/business/endpointGuard.js'
-import { fetchUrlSafe, isPrivateHostname } from '../../../../../src/features/agent-editor/business/index.js'
+import { RemoteMcpServer } from '../../../../../src/features/mcp/business/RemoteMcpServer.js'
+import { fetchUrlSafe } from '../../../../../src/features/agent-editor/business/index.js'
+import { isPrivateHostname } from '../../../../../src/backend/lib/netUtils.js'
 
 /**
- * TC-11…TC-18 — chốt URL riêng của MCP (`assertMcpEndpoint`).
+ * TC-11…TC-18 — chốt URL riêng của MCP (`RemoteMcpServer.assertEndpoint`).
  *
  * "Chặn" = ném; "cho phép" = không ném. Biên private lấy từ RFC 1918, không phải
  * danh sách nội bộ, nên assert thẳng theo giao thức.
  */
 
 function allow(url: string) {
-  expect(() => assertMcpEndpoint(url)).not.toThrow()
+  expect(() => RemoteMcpServer.assertEndpoint(url)).not.toThrow()
 }
 function block(url: unknown) {
-  expect(() => assertMcpEndpoint(url)).toThrow()
+  expect(() => RemoteMcpServer.assertEndpoint(url)).toThrow()
 }
 
-describe('assertMcpEndpoint — cho phép', () => {
+describe('RemoteMcpServer.assertEndpoint — cho phép', () => {
   // TC-11
   test('TC-11: https mọi host', () => {
     for (const url of [
@@ -56,7 +57,7 @@ describe('assertMcpEndpoint — cho phép', () => {
   })
 })
 
-describe('assertMcpEndpoint — biên và chặn', () => {
+describe('RemoteMcpServer.assertEndpoint — biên và chặn', () => {
   // TC-14
   test('TC-14: biên của dải private theo RFC 1918', () => {
     block('http://172.15.0.1/mcp')
@@ -76,7 +77,7 @@ describe('assertMcpEndpoint — biên và chặn', () => {
       // Suffix attack: host thật là `attacker.io`, không phải `example.com`.
       'http://example.com.attacker.io/mcp',
     ]) {
-      expect(() => assertMcpEndpoint(url)).toThrow(/loopback|private|cục bộ/i)
+      expect(() => RemoteMcpServer.assertEndpoint(url)).toThrow(/loopback|private|cục bộ/i)
     }
   })
 
@@ -100,7 +101,7 @@ describe('assertMcpEndpoint — biên và chặn', () => {
     for (const value of junk) {
       let caught: unknown
       try {
-        assertMcpEndpoint(value)
+        RemoteMcpServer.assertEndpoint(value)
       } catch (err) {
         caught = err
       }
@@ -118,7 +119,7 @@ describe('TC-18: guard mới không đụng fetchUrlSafe', () => {
 
   test('TC-18: fetchUrlSafe vẫn từ chối loopback (http và https), D1/B3 không nới', async () => {
     // Trước task này `fetchUrlSafe` đã chặn cả hai — bất biến phải còn nguyên,
-    // kể cả khi `assertMcpEndpoint` cho phép chính các URL đó (TC-12).
+    // kể cả khi `RemoteMcpServer.assertEndpoint` cho phép chính các URL đó (TC-12).
     await expect(fetchUrlSafe('http://127.0.0.1')).rejects.toThrow(/https/i)
     await expect(fetchUrlSafe('https://127.0.0.1')).rejects.toThrow(/private/i)
     expect(isPrivateHostname('127.0.0.1')).toBe(true)

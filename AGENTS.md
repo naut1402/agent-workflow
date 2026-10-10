@@ -257,6 +257,7 @@ Dùng khi review PR đụng `src/features/*`, `src/backend/**`, `src/frontend/**
 - [ ] **Không wiring thủ công** — không thêm tay nếu glob/auto-load đã đủ (route / `apiServer` registry / styles / locales / `registerMode`).
 - [ ] **Đặt style đúng tầng** — 1 component render selector gốc → `<style scoped>`; ≥2 cùng feature → `features/<f>/styles/`; xuyên feature → `src/frontend/styles/`. Không thêm file `styles/*.scss` chỉ-comment.
 - [ ] **Danh sách dài không bị cắt cụt** — xem checklist **Chiến lược tràn nội dung UI** ở [Testing](#testing).
+- [ ] **Dialog modal qua `CDialog`** — không tự dựng `Teleport` / `.modal-backdrop` / handler `Escape` trong feature; [`ui-design-guideline.md`](docs/agent-rules/ui-design-guideline.md) §3.
 - [ ] **Tuân thủ mode-registry khi thêm/sửa mode** — đối chiếu checklist Implement › **Thêm mode mới ở FE shell**.
 - [ ] **Chia file theo abstraction ↔ hiện thực** — trong `business/` / `mcp/`: một abstraction một file, một hiện thực một file; abstraction không chứa chi tiết (env var, path, tên nhà cung cấp); không gom interface vào `types.ts` chung.
 - [ ] **Module không có abstraction thì gom theo nghiệp vụ** — không tách file theo kiểu thao tác (`store` / `fetch` / `paths` / `scan` mỏng).
@@ -281,7 +282,7 @@ Dùng khi review PR đụng `src/features/*`, `src/backend/**`, `src/frontend/**
 - [ ] **Đọc FS phòng thủ** — `safeReadDir` / `statSafe` / `readYamlSafe`; lỗi file không làm sập request.
 - [ ] **Chống traversal** — input path từ user đã sanitize / `resolvePathUnder`.
 - [ ] **Ghi atomic** — file quan trọng ghi qua temp + rename (registry, runners, settings).
-- [ ] **Fetch qua wrapper an toàn** — URL người dùng qua `fetchUrlSafe` (https, chặn private host). Ngoại lệ duy nhất: endpoint MCP (`http`/`sse`) đi qua `assertMcpEndpoint` của feature `mcp` (`https` mọi host · `http` chỉ loopback/private) — chốt riêng vì ca dùng chính là server chạy local (playwright, serena), không dùng làm tiền lệ cho endpoint mới.
+- [ ] **Fetch qua wrapper an toàn** — URL người dùng qua `fetchUrlSafe` (https, chặn private host). Ngoại lệ duy nhất: endpoint MCP (`http`/`sse`) đi qua `RemoteMcpServer.assertEndpoint` của feature `mcp` (`https` mọi host · `http` chỉ loopback/private) — chốt riêng vì ca dùng chính là server chạy local (playwright, serena), không dùng làm tiền lệ cho endpoint mới.
 - [ ] **Pattern scan tuỳ chỉnh không escape project root** — `settings.scanPatterns` lọc 3 lớp: `sanitiseScanPattern` → `expandScanPatterns` (bỏ qua symlink) → `resolvePathUnder(projectRoot, …)` cho mỗi match.
 - [ ] **Biến môi trường tuỳ chọn/bắt buộc đúng chỗ** — `ANTHROPIC_API_KEY` tuỳ chọn, `DASHBOARD_SECRET_KEY` bắt buộc cho vault; hành vi khi thiếu ở [`README.md`](README.md) › Biến môi trường.
 - [ ] **Emit & catalog event khớp code** — `emit` / `emitEntity` sau persist, payload không secret; file mode trong [`docs/architecture/events/`](docs/architecture/events/README.md) và `DashboardEventType` đổi theo, hoặc nợ `docs/todo/` có lý do.

@@ -65,9 +65,6 @@ export default {
     addTitle: 'Add runner',
     editTitle: 'Edit runner',
   },
-  a11y: {
-    close: 'Close',
-  },
   messages: {
     saved: 'Saved {id}',
     enabled: 'Enabled {id}',
@@ -92,6 +89,20 @@ export default {
     credentialSecretRequired: 'Paste a secret value, connect via browser, or fill in the advanced secretRef',
     providerConfigRequired: 'Select a provider (or configure a new one)',
     credentialRequired: 'Select or create a credential',
+    idTaken: 'Runner id "{id}" is already taken — pick another name',
+    connIdTaken: 'Connection id "{id}" is already taken — pick another name',
+  },
+  hints: {
+    generatedId: 'Will be saved as: {id}',
+  },
+  // Mirrors the backend `DefaultRunnerReason` set exactly.
+  defaultIssue: {
+    'no-runners': 'No runners yet — jobs without a pinned runner will fail.',
+    unset: 'No default runner set — jobs without a pinned runner will fail.',
+    missing: 'Default runner "{id}" is no longer in the list — pick another default.',
+    disabled: 'Default runner "{id}" is disabled — jobs without a pinned runner will fail.',
+    'no-connection': 'Default runner "{id}" points at a missing connection — fix the connection or pick another runner.',
+    'not-ai': 'Default runner "{id}" is not an AI runner — pick an Agent CLI or AI API runner.',
   },
   connectionDialog: {
     title: 'Add connection',
@@ -145,6 +156,10 @@ export default {
     mcpServersLabel: 'MCP servers',
     mcpServersHint: 'Only enabled MCP servers show up here. Pick none and the runner command line stays unchanged.',
     mcpUnsupported: 'This provider does not consume MCP config yet — the pick is still saved for later.',
+    mcpToolBridge:
+      'API providers load these MCP servers\' tools straight into their own tool-use loop — the model sees them as «mcp__<server id>__<tool name>».',
+    mcpWorkspaceFile:
+      'With cursor-cli the MCP config file is written INSIDE the workspace («.cursor/mcp.json») for the duration of the run and then removed — an existing file of yours is backed up and restored. The job also runs with «--approve-mcps», so these servers are added to the local approval list («~/.cursor») and that side effect outlives the job.',
     mcpEmpty: 'No enabled MCP server yet. Add one in the MCP tab.',
     mcpMissing: 'disabled or deleted',
     connectViaBrowser: 'Connect via browser',

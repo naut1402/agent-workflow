@@ -69,6 +69,9 @@ export default {
   loadingOverlay: {
     label: 'Working…',
   },
+  dialog: {
+    close: 'Close',
+  },
   markdownView: {
     metadata: 'Metadata',
     untitledSection: 'Untitled section',

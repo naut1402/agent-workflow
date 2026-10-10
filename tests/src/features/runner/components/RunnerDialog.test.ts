@@ -101,14 +101,111 @@ describe('RunnerDialog — cấu trúc chống regression UI', () => {
 
   // Đúng một vùng cuộn: 2 .modal-body lồng nhau sinh scrollbar kép, 0 thì hàng
   // nút bị vẽ ra ngoài border dưới khi nội dung vượt max-height của .modal.
-  // Dialog này cố ý đặt .modal-actions *trong* .modal-body (margin-top: auto),
-  // nên chỉ assert .modal-head nằm ngoài.
-  it('dialog có đúng một .modal-body và .modal-head nằm ngoài nó', () => {
+  // Hàng nút đi qua slot `footer` của CDialog: ngoài vùng cuộn, ngoài overlay.
+  it('dialog có đúng một .modal-body; .modal-head và .modal-actions nằm ngoài nó', () => {
     mountDialog()
     const modal = document.querySelector('.modal')!
     const bodies = modal.querySelectorAll('.modal-body')
     expect(bodies).toHaveLength(1)
     expect(bodies[0].querySelector('.modal-head')).toBeNull()
-    expect(modal.querySelectorAll('.modal-actions button').length).toBeGreaterThan(0)
+    const actions = modal.querySelector('.modal-actions')!
+    expect(actions.querySelectorAll('button').length).toBeGreaterThan(0)
+    expect(actions.closest('.modal-body')).toBeNull()
+    expect(actions.closest('.c-loading-host')).toBeNull()
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// T6fabee9b — dialog phải nói trước id sẽ tạo, và chỉ đường "tạo mới" mới gửi cờ
+// `create`. Sửa một runner đã có thì 🚫 không bao giờ được 409: payload sửa mà
+// mang cờ đó là tự khoá chính mình ra khỏi bản ghi của mình.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const EXISTING_RUNNER = {
+  id: 'claude-1',
+  name: 'Claude 1',
+  connectionId: 'conn-1',
+  enabled: true,
+  maxConcurrency: 1,
+  config: { timeoutMs: 600000 },
+}
+
+function hint(): HTMLElement | null {
+  return document.body.querySelector<HTMLElement>('.runner-dialog .cfg-hint')
+}
+function nameInput(): DOMWrapper<Element> {
+  return new DOMWrapper(document.querySelector('.field input.cfg-input')!)
+}
+async function clickSave() {
+  const btn = [...document.querySelectorAll('button.btn-primary')].find((b) =>
+    b.textContent?.includes('Lưu'),
+  ) as HTMLButtonElement
+  btn.click()
+  await flushPromises()
+}
+
+describe('RunnerDialog — cờ create và hint id', () => {
+  it('TC-D38: mode create ⇒ hiện id suy từ tên, payload mang create: true', async () => {
+    mountDialog({ mode: 'create' })
+    await nameInput().setValue('Claude 1')
+
+    expect(hint()?.textContent?.trim()).toBe(runnerVi.hints.generatedId.replace('{id}', 'claude-1'))
+
+    await clickSave()
+    expect(saveRunner).toHaveBeenCalledWith(expect.objectContaining({ id: 'claude-1', create: true }))
+  })
+
+  it('TC-D38b: mode edit ⇒ 🚫 không hint, payload 🚫 không có cờ create', async () => {
+    mountDialog({ runner: EXISTING_RUNNER, mode: 'edit' })
+
+    expect(hint()).toBe(null)
+
+    await clickSave()
+    const payload = vi.mocked(saveRunner).mock.calls[0][0] as Record<string, unknown>
+    expect(payload.id).toBe('claude-1')
+    expect('create' in payload).toBe(false)
+  })
+
+  it('TC-D38c: mode copy ⇒ giữ id đã mint (🚫 không suy lại từ tên) và vẫn gửi create', async () => {
+    mountDialog({ runner: { ...EXISTING_RUNNER, id: 'claude-1-copy', name: 'Claude 1 (copy)' }, mode: 'copy' })
+
+    expect(hint()?.textContent?.trim()).toBe(
+      runnerVi.hints.generatedId.replace('{id}', 'claude-1-copy'),
+    )
+
+    await clickSave()
+    expect(saveRunner).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'claude-1-copy', create: true }),
+    )
+  })
+
+  it('TC-D39: lỗi 409 ⇒ hiện message i18n, 🚫 không hiện chuỗi thô của BE', async () => {
+    // Nhận diện bằng status. Message BE là chuỗi cho log/dev — i18n-hoá nó
+    // 🚫 không được làm chết nhánh này.
+    vi.mocked(saveRunner).mockRejectedValueOnce(
+      Object.assign(new Error('runner id "claude-1" đã tồn tại'), { status: 409 }),
+    )
+    mountDialog({ mode: 'create' })
+    await nameInput().setValue('Claude 1')
+
+    await clickSave()
+
+    const banner = document.body.querySelector('.err-banner')
+    expect(banner?.textContent?.trim()).toBe(runnerVi.errors.idTaken.replace('{id}', 'claude-1'))
+    expect(banner?.textContent).not.toContain('runner id')
+  })
+
+  it('TC-D39b: lỗi không phải 409 ⇒ vẫn hiện message gốc', async () => {
+    vi.mocked(saveRunner).mockRejectedValueOnce(
+      Object.assign(new Error('connectionId is required'), { status: 400 }),
+    )
+    mountDialog({ mode: 'create' })
+    await nameInput().setValue('Claude 1')
+
+    await clickSave()
+
+    expect(document.body.querySelector('.err-banner')?.textContent?.trim()).toBe(
+      'connectionId is required',
+    )
   })
 })

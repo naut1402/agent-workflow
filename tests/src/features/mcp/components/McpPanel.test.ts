@@ -6,7 +6,8 @@ import McpPanel from '@/features/mcp/components/McpPanel.vue'
 import McpServerDialog from '@/features/mcp/components/McpServerDialog.vue'
 import mcpVi from '@/features/mcp/locales/vi'
 import mcpEn from '@/features/mcp/locales/en'
-import { MCP_MASK, type McpServerConfig } from '@/features/mcp/business/types'
+import { SecretMasker } from '@/features/mcp/business/SecretMasker'
+import type { McpServerConfig } from '@/features/mcp/schemas/mcpServer'
 
 /**
  * TC-75…TC-79 (+ TC-101) — panel danh sách MCP.
@@ -22,11 +23,13 @@ vi.mock('@/features/mcp/scripts/mcpApi', () => ({
   testMcpServer: vi.fn(async () => ({ ok: true, tools: [], warnings: [], durationMs: 1 })),
 }))
 
+/** Spy canh gác: panel và dialog 🚫 tự gọi API credential của `runner` (TC-P4-05). */
 vi.mock('@/features/runner/scripts/ConnectionDialogApi', () => ({
   fetchCredentials: vi.fn(async () => ({ profiles: [] })),
 }))
 
 import { deleteMcpServer, fetchMcpServers, saveMcpServer } from '@/features/mcp/scripts/mcpApi'
+import { fetchCredentials } from '@/features/runner/scripts/ConnectionDialogApi'
 
 const PLAYWRIGHT: McpServerConfig = {
   id: 'playwright',
@@ -279,7 +282,7 @@ describe('TC-101: McpPanel — openCopy và cờ secrets-cleared', () => {
   const WITH_SECRETS: McpServerConfig = {
     ...PLAYWRIGHT,
     // Bản public từ API: giá trị thật đã bị mask, `env:NAME` giữ nguyên.
-    env: { TOKEN: MCP_MASK, PLAIN: 'env:MY_VAR' },
+    env: { TOKEN: SecretMasker.MASK, PLAIN: 'env:MY_VAR' },
   }
 
   it('TC-101 (a): copy giữ KEY `TOKEN` với value rỗng, 🚫 không đụng `PLAIN`, cờ bật', async () => {
@@ -309,7 +312,67 @@ describe('TC-101: McpPanel — openCopy và cờ secrets-cleared', () => {
     const draft = dialog.props('server') as any
     expect(dialog.props('secretsCleared')).toBe(false)
     expect(draft.id).toBe('playwright')
-    expect(draft.env.TOKEN).toBe(MCP_MASK)
+    expect(draft.env.TOKEN).toBe(SecretMasker.MASK)
     expect(document.body.textContent).not.toContain(mcpVi.dialog.copySecretsCleared)
+  })
+})
+
+/* ─── Tcebe274e-P4 · #483 — credential qua props ──────────────────────────── */
+
+describe('McpPanel — chuyển credential xuống dialog (#483)', () => {
+  const CREDENTIALS = [{ id: 'cred-1', label: 'GitHub MCP token' }]
+
+  async function mountPanelWith(props: Record<string, unknown>, servers: McpServerConfig[] = [GITHUB]) {
+    vi.mocked(fetchMcpServers).mockResolvedValue({ servers } as any)
+    const w = mount(McpPanel, {
+      props,
+      attachTo: document.body,
+      global: { plugins: [createTestI18nPlugin('vi')] },
+    })
+    await flushPromises()
+    return w
+  }
+  function addButton(): HTMLButtonElement {
+    return qa<HTMLButtonElement>('.mcp-toolbar button')[0]
+  }
+
+  beforeEach(() => {
+    vi.mocked(fetchCredentials).mockClear()
+  })
+
+  it('TC-P4-05: thêm mới, sửa, sao chép ⇒ dialog nhận đúng `credentials` của panel; 🚫 gọi API credential', async () => {
+    const w = await mountPanelWith({ credentials: CREDENTIALS })
+
+    await click(addButton())
+    expect(w.findComponent(McpServerDialog).props('credentials')).toEqual(CREDENTIALS)
+
+    await click(rows()[0])
+    expect(w.findComponent(McpServerDialog).props('credentials')).toEqual(CREDENTIALS)
+
+    await click(buttonByLabel(mcpVi.panel.copy))
+    expect(w.findComponent(McpServerDialog).props('credentials')).toEqual(CREDENTIALS)
+
+    expect(fetchCredentials).not.toHaveBeenCalled()
+  })
+
+  it('TC-P4-05 (b): `credentials` của panel đổi khi dialog đang mở ⇒ dialog nhận bản mới', async () => {
+    const w = await mountPanelWith({ credentials: [] })
+    await click(rows()[0])
+    expect(w.findComponent(McpServerDialog).props('credentials')).toEqual([])
+
+    await w.setProps({ credentials: CREDENTIALS })
+    await flushPromises()
+
+    expect(w.findComponent(McpServerDialog).props('credentials')).toEqual(CREDENTIALS)
+  })
+
+  it('TC-P4-05 (c): panel không nhận `credentials` ⇒ dialog vẫn mở được, không lỗi', async () => {
+    const w = await mountPanelWith({})
+
+    await click(addButton())
+
+    const dialog = w.findComponent(McpServerDialog)
+    expect(dialog.exists()).toBe(true)
+    expect(dialog.props('credentials') ?? []).toEqual([])
   })
 })

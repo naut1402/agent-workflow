@@ -93,7 +93,7 @@ bun run check:todo   # gate docs/todo (CI promote → main)
 
 ## Liên kết
 
-- [`docker/`](docker/) — Compose, Dockerfile, `install.sh`, [`.env.example`](docker/.env.example) · [`docs/docker.md`](docs/docker.md): biến môi trường, vận hành rtk trong container
+- [`docker/`](docker/) — Compose, Dockerfile, `install.sh`, [`.env.example`](docker/.env.example) · [`docs/docker.md`](docs/docker.md): biến môi trường
 - MCP server (`bun run mcp`) — [`docs/mcp/`](docs/mcp/README.md): mode vận hành, bảng tool, khai `mcpServers`, mã lỗi
 - Liên quan — [plugin Claude Code (bộ agent template)](docs/template/agents/) · [Issues](https://github.com/naut1402/agent-workflow/issues) · [Pull requests](https://github.com/naut1402/agent-workflow/pulls)
 - Tài liệu — [danh mục đầy đủ trong `docs/`](docs/README.md): kiến trúc, domain event, i18n, quy ước UI, template pipeline

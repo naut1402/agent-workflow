@@ -10,6 +10,8 @@ import {
   type AgenticRunResult,
   type ExtraTool,
 } from './agenticApiProvider.js'
+import type { McpJobDelivery } from '../mcpDelivery/McpJobDelivery.js'
+import type { McpToolBridge } from '../mcpDelivery/ToolBridgeMcpDelivery.js'
 
 /** Chặn vòng lặp vô hạn khi model liên tục gọi tool. */
 const MAX_AGENT_LOOP_TURNS = 8
@@ -136,8 +138,8 @@ export class AnthropicCompatibleProvider extends AgenticApiProvider {
   readonly providerId: string
   private readonly defaultBaseURL: string
 
-  constructor(providerId: string, defaultBaseURL: string) {
-    super()
+  constructor(providerId: string, defaultBaseURL: string, mcpDelivery?: McpJobDelivery<McpToolBridge>) {
+    super(mcpDelivery)
     this.providerId = providerId
     this.defaultBaseURL = defaultBaseURL
   }
@@ -161,9 +163,20 @@ export class AnthropicCompatibleProvider extends AgenticApiProvider {
       : [{ role: 'user', content: ctx.req.userPrompt }]
 
     const extraTools = this.resolveExtraTools(ctx.runnerConfig)
-    const tools = buildTools(extraTools, this.isWebSearchConfigured())
+    const baseTools = buildTools(extraTools, this.isWebSearchConfigured())
+    // `mcpBridge === null` ⇒ `bridgeTools` rỗng ⇒ `tools` và preamble
+    // byte-identical với bản trước khi có bridge.
+    const bridgeTools = ctx.mcpBridge?.tools ?? []
+    const tools: Anthropic.Messages.ToolUnion[] = [
+      ...baseTools,
+      ...bridgeTools.map((t) => ({
+        name: t.name,
+        description: t.description,
+        input_schema: t.inputSchema as Anthropic.Messages.Tool.InputSchema,
+      })),
+    ]
     const system = [
-      this.buildToolUsagePreamble(tools.map((t) => t.name)),
+      this.buildToolUsagePreamble(baseTools.map((t) => t.name), bridgeTools),
       this.buildProjectContextPreamble(ctx.req),
       ctx.req.resolvedAgent.systemPrompt || '',
     ]
@@ -239,7 +252,7 @@ export class AnthropicCompatibleProvider extends AgenticApiProvider {
       messages.push({ role: 'assistant', content: response.content })
       const resultBlocks: Anthropic.Messages.ToolResultBlockParam[] = []
       for (const block of toolUseBlocks) {
-        const outcome = await this.executeAnthropicTool(block, ctx.workspace)
+        const outcome = await this.executeAnthropicTool(block, ctx.workspace, ctx.mcpBridge)
         const entry = {
           name: block.name,
           argsSummary: summarize(block.input),
@@ -262,8 +275,15 @@ export class AnthropicCompatibleProvider extends AgenticApiProvider {
   }
 
   /** Map one `tool_use` block to a base-class sandbox op (text_editor command, list_directory, or an opt-in extra tool). */
-  private async executeAnthropicTool(block: Anthropic.Messages.ToolUseBlock, workspace: string) {
+  private async executeAnthropicTool(
+    block: Anthropic.Messages.ToolUseBlock,
+    workspace: string,
+    bridge?: McpToolBridge | null,
+  ) {
     const input = (block.input ?? {}) as Record<string, unknown>
+    // TRƯỚC `switch`: tên tool MCP có prefix `mcp__` nên không thể trùng case nào
+    // dưới đây, nhưng chặn ở đây giữ `switch` chỉ nói về tool sandbox.
+    if (bridge?.has(block.name)) return bridge.call(block.name, input)
     switch (block.name) {
       case 'list_directory':
         return this.listWorkspaceDirectory(workspace, typeof input.path === 'string' ? input.path : undefined)
@@ -330,6 +350,10 @@ export class AnthropicCompatibleProvider extends AgenticApiProvider {
   }
 }
 
-export function createAnthropicCompatibleProvider(providerId: string, defaultBaseURL: string): AnthropicCompatibleProvider {
-  return new AnthropicCompatibleProvider(providerId, defaultBaseURL)
+export function createAnthropicCompatibleProvider(
+  providerId: string,
+  defaultBaseURL: string,
+  mcpDelivery?: McpJobDelivery<McpToolBridge>,
+): AnthropicCompatibleProvider {
+  return new AnthropicCompatibleProvider(providerId, defaultBaseURL, mcpDelivery)
 }

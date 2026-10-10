@@ -24,13 +24,8 @@ export interface AgentCliCapabilities {
   sessionCapture: 'preset-uuid' | 'parse-json' | 'none'
   /** Whether this provider can supply token usage in ExecuteResult. */
   supportsTokenUsage: boolean
+  /** `kind` của `RunnerProvider.mcpDelivery` — cùng giá trị catalog trả cho UI. */
   mcpDelivery: McpDelivery
-}
-
-/** Single source of truth for both the provider and the UI. */
-export function mcpDeliveryOf(providerId: string): McpDelivery {
-  if (providerId === 'claude-code-cli') return 'config-file-flag'
-  return 'unsupported'
 }
 
 /** Agent CLI providers implement RunnerProvider plus family metadata. */
@@ -51,7 +46,7 @@ export function isAgentCliProvider(provider: RunnerProvider | null | undefined):
   return isAgentCliProviderId(provider.providerId)
 }
 
-export function providerFamilyOf(providerId: string): ProviderFamily {
+export function providerFamilyFromId(providerId: string): ProviderFamily {
   if (providerId === 'console-command') return 'console-command'
   if (providerId === 'anthropic-api' || providerId.endsWith('-api')) return 'ai-api'
   if (isAgentCliProviderId(providerId)) return 'agent-cli'

@@ -61,10 +61,17 @@ export default {
     listToolsHint: 'Bật sau khi kiểm tra kết nối thành công.',
     toolsCount: '{count} tool',
     secretLiteralWarning: 'Giá trị này trông như secret. Nên dùng credential profile hoặc «env:TEN_BIEN».',
+    savedWithWarnings: 'Đã lưu. Đọc cảnh báo bên trên rồi bấm Huỷ để đóng.',
     copySecretsCleared: 'Bản sao không mang theo giá trị secret — nhập lại trước khi dùng.',
     save: 'Lưu MCP server',
     cancel: 'Huỷ',
     saving: 'Đang lưu…',
+  },
+  warnings: {
+    argsSecretLiteral:
+      'Có tham số trông như secret literal. Nên dùng credential profile hoặc «env:TEN_BIEN» — tham số được lưu ở dạng chữ thường.',
+    argsSecretDropped:
+      'Một tham số đang mask không ghép được với giá trị đã lưu nên đã bị bỏ. Hãy nhập lại secret.',
   },
   errors: {
     labelRequired: 'Nhập tên hiển thị cho MCP server',
@@ -73,8 +80,5 @@ export default {
     loadFailed: 'Không tải được danh sách MCP server',
     saveFailed: 'Không lưu được MCP server',
     deleteFailed: 'Không xóa được MCP server',
-  },
-  a11y: {
-    close: 'Đóng',
   },
 }

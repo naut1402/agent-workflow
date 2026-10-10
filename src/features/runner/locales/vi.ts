@@ -64,9 +64,6 @@ export default {
     addTitle: 'Thêm runner',
     editTitle: 'Sửa runner',
   },
-  a11y: {
-    close: 'Đóng',
-  },
   messages: {
     saved: 'Đã lưu {id}',
     enabled: 'Đã bật {id}',
@@ -91,6 +88,20 @@ export default {
     credentialSecretRequired: 'Dán secret value, Connect via browser, hoặc điền secretRef (advanced)',
     providerConfigRequired: 'Chọn provider (hoặc cấu hình provider mới)',
     credentialRequired: 'Chọn hoặc tạo credential',
+    idTaken: 'Id "{id}" đã được dùng — đổi tên runner khác',
+    connIdTaken: 'Id "{id}" đã được dùng — đổi tên kết nối khác',
+  },
+  hints: {
+    generatedId: 'Id sẽ tạo: {id}',
+  },
+  // Khớp đúng tập `DefaultRunnerReason` của backend.
+  defaultIssue: {
+    'no-runners': 'Chưa có runner nào — job không pin runner sẽ lỗi.',
+    unset: 'Chưa đặt runner mặc định — job không pin runner sẽ lỗi.',
+    missing: 'Runner mặc định "{id}" không còn trong danh sách — chọn runner mặc định khác.',
+    disabled: 'Runner mặc định "{id}" đang tắt — job không pin runner sẽ lỗi.',
+    'no-connection': 'Runner mặc định "{id}" trỏ vào connection không còn — sửa connection hoặc chọn runner khác.',
+    'not-ai': 'Runner mặc định "{id}" không phải runner AI — chọn một runner Agent CLI hoặc AI API.',
   },
   connectionDialog: {
     title: 'Thêm connection',
@@ -144,6 +155,10 @@ export default {
     mcpServersLabel: 'MCP server',
     mcpServersHint: 'Chỉ MCP server đang bật mới hiện ở đây. Không chọn gì thì lệnh chạy runner không đổi.',
     mcpUnsupported: 'Provider này chưa nhận cấu hình MCP — lựa chọn vẫn được lưu để dùng sau.',
+    mcpToolBridge:
+      'Provider API nạp tool của các MCP server này thẳng vào vòng tool-use của nó — tên tool hiện ra với model dưới dạng «mcp__<id server>__<tên tool>».',
+    mcpWorkspaceFile:
+      'Với cursor-cli, file cấu hình MCP được ghi TRONG workspace («.cursor/mcp.json») suốt lượt chạy rồi xoá đi — file sẵn có của bạn được sao lưu và trả lại nguyên trạng. Job còn chạy với «--approve-mcps», nên các server trên được ghi vào danh sách phê duyệt cục bộ («~/.cursor») và tác dụng phụ đó tồn tại sau khi job kết thúc.',
     mcpEmpty: 'Chưa có MCP server nào đang bật. Thêm ở tab MCP.',
     mcpMissing: 'đã tắt hoặc đã xoá',
     connectViaBrowser: 'Connect via browser',

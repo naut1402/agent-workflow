@@ -5,7 +5,13 @@ import path from 'node:path'
 import { runAutomation } from '../../../../src/features/automations/business/runAction.js'
 import { listRuns } from '../../../../src/features/automations/business/runLedger.js'
 import type { AutomationRun, AutomationRuleRecord } from '../../../../src/features/automations/schemas/automation.js'
-import { loadJob, registerProvider, upsertConnection, upsertRunner } from '../../../../src/features/runner/business/index.js'
+import {
+  loadJob,
+  registerProvider,
+  setDefaultRunner,
+  upsertConnection,
+  upsertRunner,
+} from '../../../../src/features/runner/business/index.js'
 import type { ExecuteRequest, ExecuteResult, RunnerProvider } from '../../../../src/features/runner/business/types.js'
 
 // executeSequence dispatch theo `action.kind` (#233 + httpRequest/runCommand
@@ -435,6 +441,14 @@ describe('runTask action — model pin của step đầu', () => {
       cliPath: 'stub',
     })
     upsertRunner({ id: AI_RUNNER, connectionId: 'stub-automation-pin-conn', config: {} })
+    // T6fabee9b: chốt default TƯỜNG MINH. Runner console được seed trước ở
+    // `beforeAll` ngoài, nên `loadRunners()` đã tự suy `defaultRunnerId` =
+    // runner console — một runner KHÔNG chạy agent được. Ca "pin hỏng ⇒ rơi về
+    // runner mặc định" dưới đây chỉ từng xanh nhờ vế `find(isEligible)` thứ hai
+    // của `getDefaultRunner()`, tức nhờ đúng cái bug task này đi sửa: hệ thống
+    // âm thầm chạy một runner người dùng chưa bao giờ chọn. Dòng dưới đưa store
+    // về đúng tình huống mà comment của ca đó mô tả.
+    setDefaultRunner(AI_RUNNER)
   })
 
   async function runCreateAction(ruleId: string, action: Record<string, unknown>) {

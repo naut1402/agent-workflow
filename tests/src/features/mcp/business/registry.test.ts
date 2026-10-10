@@ -2,22 +2,26 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import {
-  deleteMcpServer,
-  listMcpServers,
-  loadMcpServers,
-  recordCheckResult,
-  upsertMcpServer,
-} from '../../../../../src/features/mcp/business/registry.js'
+import { mcpRegistry } from '../../../../../src/features/mcp/business/McpRegistry.js'
+import { McpServer } from '../../../../../src/features/mcp/business/McpServer.js'
+import { SecretMasker } from '../../../../../src/features/mcp/business/SecretMasker.js'
 import {
   MCP_DEFAULT_TIMEOUT_MS,
-  MCP_MASK,
   MCP_SERVERS_VERSION,
-  maskSecretValues,
-  sanitiseMcpServerId,
   type McpServerConfig,
   type McpStdioServer,
-} from '../../../../../src/features/mcp/business/types.js'
+} from '../../../../../src/features/mcp/schemas/mcpServer.js'
+import { toMcpServer } from './toMcpServer.js'
+
+/** Bản ghi đang lưu — `mcpRegistry.list()` trả entity, các ca so trên bản ghi. */
+function listConfigs(): McpServerConfig[] {
+  return mcpRegistry.list().map((s) => s.config)
+}
+
+/** Store sau đường đọc: `version` luôn là bản hiện hành vì migrate chạy ở đường đọc. */
+function loadStore(): { version: number; servers: McpServerConfig[] } {
+  return { version: MCP_SERVERS_VERSION, servers: listConfigs() }
+}
 
 /**
  * TC-01…TC-10 · TC-96 · TC-97 — store `mcp-servers.json`.
@@ -68,7 +72,7 @@ afterEach(() => {
 describe('mcp registry — đọc store', () => {
   // TC-01
   test('TC-01: chưa có file store ⇒ mảng rỗng, không ném, không tự tạo file', () => {
-    expect(listMcpServers()).toEqual([])
+    expect(listConfigs()).toEqual([])
     expect(fs.existsSync(storeFile())).toBe(false)
   })
 
@@ -77,7 +81,7 @@ describe('mcp registry — đọc store', () => {
     const variants = ['', '{', BOM + '{"version":1,"servers":[]}', 'not json']
     for (const raw of variants) {
       fs.writeFileSync(storeFile(), raw, 'utf8')
-      expect(listMcpServers()).toEqual([])
+      expect(listConfigs()).toEqual([])
       // Bytes y nguyên: registry là dữ liệu ngoài, đọc phòng thủ chứ không seed lại.
       expect(readStoreRaw()).toBe(raw)
     }
@@ -87,7 +91,7 @@ describe('mcp registry — đọc store', () => {
 describe('mcp registry — upsert / delete', () => {
   // TC-03
   test('TC-03: upsert server mới rồi đọc lại', () => {
-    const result = upsertMcpServer(
+    const result = mcpRegistry.upsert(
       stdio({
         id: 'playwright',
         label: 'Playwright MCP',
@@ -97,7 +101,7 @@ describe('mcp registry — upsert / delete', () => {
     )
     expect(result.ok).toBe(true)
 
-    const list = listMcpServers()
+    const list = listConfigs()
     expect(list).toHaveLength(1)
     expect(list[0]).toMatchObject({
       id: 'playwright',
@@ -116,10 +120,10 @@ describe('mcp registry — upsert / delete', () => {
 
   // TC-04
   test('TC-04: upsert trùng id ⇒ ghi đè, không nhân đôi', () => {
-    upsertMcpServer(stdio({ id: 'playwright', label: 'Playwright MCP', command: 'npx' }))
-    upsertMcpServer(stdio({ id: 'playwright', label: 'PW v2', enabled: false, command: 'npx' }))
+    mcpRegistry.upsert(stdio({ id: 'playwright', label: 'Playwright MCP', command: 'npx' }))
+    mcpRegistry.upsert(stdio({ id: 'playwright', label: 'PW v2', enabled: false, command: 'npx' }))
 
-    const list = listMcpServers()
+    const list = listConfigs()
     expect(list).toHaveLength(1)
     expect(list[0].label).toBe('PW v2')
     expect(list[0].enabled).toBe(false)
@@ -127,25 +131,25 @@ describe('mcp registry — upsert / delete', () => {
 
   // TC-05
   test('TC-05: xoá idempotent, id lạ không ném', () => {
-    upsertMcpServer(stdio({ id: 'playwright', command: 'npx' }))
+    mcpRegistry.upsert(stdio({ id: 'playwright', command: 'npx' }))
 
-    const first = deleteMcpServer('playwright')
+    const first = mcpRegistry.delete('playwright')
     expect(first).toMatchObject({ ok: true, deleted: true, id: 'playwright' })
-    expect(listMcpServers()).toEqual([])
+    expect(listConfigs()).toEqual([])
 
     // (b) gọi lại lần nữa — §6.6 Q1 chốt 200 idempotent, không ném.
-    expect(deleteMcpServer('playwright')).toMatchObject({ ok: true, deleted: false })
+    expect(mcpRegistry.delete('playwright')).toMatchObject({ ok: true, deleted: false })
     // (c) id chưa từng tồn tại.
-    expect(deleteMcpServer('khong-ton-tai')).toMatchObject({ ok: true, deleted: false })
-    expect(listMcpServers()).toEqual([])
+    expect(mcpRegistry.delete('khong-ton-tai')).toMatchObject({ ok: true, deleted: false })
+    expect(listConfigs()).toEqual([])
   })
 })
 
-describe('sanitiseMcpServerId', () => {
+describe('McpServer.sanitiseId', () => {
   // TC-06
   test('TC-06: id hợp lệ đi qua nguyên vẹn', () => {
     for (const id of ['playwright', 'serena-2', 'A-b_0']) {
-      expect(sanitiseMcpServerId(id)).toBe(id)
+      expect(McpServer.sanitiseId(id)).toBe(id)
     }
   })
 
@@ -153,15 +157,15 @@ describe('sanitiseMcpServerId', () => {
   test('TC-07 (A): id nguy hiểm ⇒ null', () => {
     const rejected = ['a/b', 'a\\b', 'ab\0cd', '..', '../etc/passwd', '', '   ', '.']
     for (const id of rejected) {
-      expect(sanitiseMcpServerId(id)).toBeNull()
+      expect(McpServer.sanitiseId(id)).toBeNull()
     }
   })
 
   // TC-07 (B) — chuẩn hoá
   test('TC-07 (B): id phải chuẩn hoá ⇒ chuỗi đã lọc, KHÔNG phải null', () => {
-    expect(sanitiseMcpServerId('my_server.v1')).toBe('my_serverv1')
-    expect(sanitiseMcpServerId('tên-có-dấu')).toBe('tn-c-du')
-    expect(sanitiseMcpServerId('x'.repeat(500))).toBe('x'.repeat(64))
+    expect(McpServer.sanitiseId('my_server.v1')).toBe('my_serverv1')
+    expect(McpServer.sanitiseId('tên-có-dấu')).toBe('tn-c-du')
+    expect(McpServer.sanitiseId('x'.repeat(500))).toBe('x'.repeat(64))
   })
 
   // TC-07 — bất biến chung cho cả (A) và (B)
@@ -181,7 +185,7 @@ describe('sanitiseMcpServerId', () => {
       '.',
     ]
     for (const id of inputs) {
-      const out = sanitiseMcpServerId(id)
+      const out = McpServer.sanitiseId(id)
       if (out === null) continue
       expect(out).not.toContain('/')
       expect(out).not.toContain('\\')
@@ -191,32 +195,32 @@ describe('sanitiseMcpServerId', () => {
   })
 })
 
-describe('recordCheckResult', () => {
+describe('McpRegistry.recordCheck', () => {
   // TC-08
   test('TC-08: id không có trong store ⇒ no-op, không tạo entry', () => {
     expect(() =>
-      recordCheckResult('khong-ton-tai', {
+      mcpRegistry.recordCheck('khong-ton-tai', {
         at: new Date().toISOString(),
         ok: true,
         toolCount: 3,
         toolNames: ['a'],
       }),
     ).not.toThrow()
-    expect(listMcpServers()).toEqual([])
+    expect(listConfigs()).toEqual([])
   })
 
   // TC-09
   test('TC-09: giới hạn dữ liệu tóm tắt — count là số thật, tên bị cắt', () => {
-    upsertMcpServer(stdio({ id: 'big', command: 'node' }))
+    mcpRegistry.upsert(stdio({ id: 'big', command: 'node' }))
     const names = Array.from({ length: 300 }, (_, i) => `t${i}-${'n'.repeat(500)}`)
-    recordCheckResult('big', {
+    mcpRegistry.recordCheck('big', {
       at: new Date().toISOString(),
       ok: true,
       toolCount: names.length,
       toolNames: names,
     })
 
-    const saved = listMcpServers()[0]
+    const saved = listConfigs()[0]
     expect(saved.lastCheck?.toolCount).toBe(300)
     expect(saved.lastCheck!.toolNames.length).toBeLessThanOrEqual(50)
     for (const n of saved.lastCheck!.toolNames) {
@@ -234,11 +238,11 @@ describe('mcp registry — env đã tước', () => {
     process.env.HOME = ''
     process.env.DEV_TEAM_DASHBOARD_HOME = missing
     try {
-      expect(listMcpServers()).toEqual([])
+      expect(listConfigs()).toEqual([])
 
       let threw: Error | null = null
       try {
-        upsertMcpServer(stdio({ id: 'probe', command: 'node' }))
+        mcpRegistry.upsert(stdio({ id: 'probe', command: 'node' }))
       } catch (err) {
         threw = err as Error
       }
@@ -248,7 +252,7 @@ describe('mcp registry — env đã tước', () => {
         expect(String(threw.message)).toContain(missing)
       } else {
         // Nhánh hợp lệ thứ nhất: tạo được cây thư mục và lưu thật — đọc lại phải thấy.
-        expect(listMcpServers().map((s) => s.id)).toEqual(['probe'])
+        expect(listConfigs().map((s) => s.id)).toEqual(['probe'])
       }
     } finally {
       if (prevRealHome === undefined) delete process.env.HOME
@@ -259,8 +263,8 @@ describe('mcp registry — env đã tước', () => {
 
 describe('mcp registry — sentinel `***` (chống ghi đè secret thật)', () => {
   function seedWithCanary(): McpServerConfig {
-    upsertMcpServer(stdio({ id: 'probe', command: 'node', env: { TOKEN: CANARY } }))
-    return listMcpServers()[0]
+    mcpRegistry.upsert(stdio({ id: 'probe', command: 'node', env: { TOKEN: CANARY } }))
+    return listConfigs()[0]
   }
 
   function storedEnv(id = 'probe'): Record<string, string> {
@@ -270,57 +274,57 @@ describe('mcp registry — sentinel `***` (chống ghi đè secret thật)', () 
 
   // TC-96
   test('TC-96 (a): bật/tắt bằng bản đã mask ⇒ secret thật giữ nguyên', () => {
-    const masked = maskSecretValues(seedWithCanary()) as McpStdioServer
-    expect(masked.env.TOKEN).toBe(MCP_MASK)
+    const masked = toMcpServer(seedWithCanary()).masked() as McpStdioServer
+    expect(masked.env.TOKEN).toBe(SecretMasker.MASK)
 
-    upsertMcpServer({ ...masked, enabled: false })
+    mcpRegistry.upsert({ ...masked, enabled: false })
 
     expect(storedEnv().TOKEN).toBe(CANARY)
-    expect(readStoreRaw()).not.toContain(MCP_MASK)
-    expect(listMcpServers()[0].enabled).toBe(false)
+    expect(readStoreRaw()).not.toContain(SecretMasker.MASK)
+    expect(listConfigs()[0].enabled).toBe(false)
   })
 
   // TC-96
   test('TC-96 (b): chỉ sửa nhãn ⇒ secret thật giữ nguyên', () => {
-    const masked = maskSecretValues(seedWithCanary()) as McpStdioServer
+    const masked = toMcpServer(seedWithCanary()).masked() as McpStdioServer
 
-    upsertMcpServer({ ...masked, label: 'renamed' })
+    mcpRegistry.upsert({ ...masked, label: 'renamed' })
 
     expect(storedEnv().TOKEN).toBe(CANARY)
-    expect(readStoreRaw()).not.toContain(MCP_MASK)
-    expect(listMcpServers()[0].label).toBe('renamed')
+    expect(readStoreRaw()).not.toContain(SecretMasker.MASK)
+    expect(listConfigs()[0].label).toBe('renamed')
   })
 
   // TC-96 — ca dễ hỏng nhất khi ai đó viết lại `mergeMaskedSecrets`.
   test('TC-96 (c): thêm khoá mới cạnh khoá đã mask ⇒ giữ cũ, nhận mới', () => {
-    const masked = maskSecretValues(seedWithCanary()) as McpStdioServer
+    const masked = toMcpServer(seedWithCanary()).masked() as McpStdioServer
 
-    upsertMcpServer({ ...masked, env: { ...masked.env, EXTRA: 'plain-value' } })
+    mcpRegistry.upsert({ ...masked, env: { ...masked.env, EXTRA: 'plain-value' } })
 
     const env = storedEnv()
     expect(env.TOKEN).toBe(CANARY)
     expect(env.EXTRA).toBe('plain-value')
-    expect(readStoreRaw()).not.toContain(MCP_MASK)
+    expect(readStoreRaw()).not.toContain(SecretMasker.MASK)
   })
 
   // TC-97
   test('TC-97 (a): id mới hoàn toàn mang `***` ⇒ bỏ khoá, 🚫 không ghi literal', () => {
-    upsertMcpServer(stdio({ id: 'copy', command: 'node', env: { TOKEN: MCP_MASK } }))
+    mcpRegistry.upsert(stdio({ id: 'copy', command: 'node', env: { TOKEN: SecretMasker.MASK } }))
 
     expect(storedEnv('copy')).toEqual({})
-    expect(readStoreRaw()).not.toContain(MCP_MASK)
+    expect(readStoreRaw()).not.toContain(SecretMasker.MASK)
   })
 
   // TC-97
   test('TC-97 (b): thêm khoá mới mang `***` vào server đã có ⇒ bỏ khoá đó, giữ khoá cũ', () => {
-    const masked = maskSecretValues(seedWithCanary()) as McpStdioServer
+    const masked = toMcpServer(seedWithCanary()).masked() as McpStdioServer
 
-    upsertMcpServer({ ...masked, env: { ...masked.env, NEW: MCP_MASK } })
+    mcpRegistry.upsert({ ...masked, env: { ...masked.env, NEW: SecretMasker.MASK } })
 
     const env = storedEnv()
     expect(env.TOKEN).toBe(CANARY)
     expect(env).not.toHaveProperty('NEW')
-    expect(readStoreRaw()).not.toContain(MCP_MASK)
+    expect(readStoreRaw()).not.toContain(SecretMasker.MASK)
   })
 })
 
@@ -358,7 +362,7 @@ describe('mcp registry — migrate v1 → v2 (nhóm E)', () => {
   test('TC-E01: v1 giữ mặc định cũ 15000 ⇒ BỎ trường, phiên bản store báo 2', () => {
     writeStore({ version: 1, servers: [v1Server({ timeoutMs: 15_000 })] })
 
-    const store = loadMcpServers()
+    const store = loadStore()
     expect(store.version).toBe(MCP_SERVERS_VERSION)
     expect(MCP_SERVERS_VERSION).toBe(2)
     expect(store.servers[0]).not.toHaveProperty('timeoutMs')
@@ -373,7 +377,7 @@ describe('mcp registry — migrate v1 → v2 (nhóm E)', () => {
   test('TC-E02: mọi giá trị v1 dưới mặc định mới ⇒ BỎ trường', () => {
     for (const timeoutMs of [1, 1000, 15_000, 30_000, 60_000, MCP_DEFAULT_TIMEOUT_MS - 1]) {
       writeStore({ version: 1, servers: [v1Server({ timeoutMs })] })
-      expect(loadMcpServers().servers[0]).not.toHaveProperty('timeoutMs')
+      expect(loadStore().servers[0]).not.toHaveProperty('timeoutMs')
     }
   })
 
@@ -387,7 +391,7 @@ describe('mcp registry — migrate v1 → v2 (nhóm E)', () => {
   test('TC-E02b: v1 với 120000 / 300000 ⇒ GIỮ nguyên', () => {
     for (const timeoutMs of [MCP_DEFAULT_TIMEOUT_MS, 300_000]) {
       writeStore({ version: 1, servers: [v1Server({ timeoutMs })] })
-      expect(loadMcpServers().servers[0].timeoutMs).toBe(timeoutMs)
+      expect(loadStore().servers[0].timeoutMs).toBe(timeoutMs)
     }
   })
 
@@ -395,14 +399,14 @@ describe('mcp registry — migrate v1 → v2 (nhóm E)', () => {
   test('TC-E03: ở v2, 15000 là lựa chọn có chủ ý ⇒ GIỮ nguyên', () => {
     writeStore({ version: MCP_SERVERS_VERSION, servers: [v1Server({ timeoutMs: 15_000 })] })
 
-    expect(loadMcpServers().servers[0].timeoutMs).toBe(15_000)
+    expect(loadStore().servers[0].timeoutMs).toBe(15_000)
   })
 
   // TC-E04
   test('TC-E04: v1 🚫 không khai timeout ⇒ 🚫 không mất gì, phiên bản báo 2', () => {
     writeStore({ version: 1, servers: [v1Server()] })
 
-    const store = loadMcpServers()
+    const store = loadStore()
     expect(store.version).toBe(MCP_SERVERS_VERSION)
     expect(store.servers).toHaveLength(1)
     expect(store.servers[0]).toMatchObject({ id: 'playwright', command: 'npx', enabled: true })
@@ -419,7 +423,7 @@ describe('mcp registry — migrate v1 → v2 (nhóm E)', () => {
     ]
     for (const data of variants) {
       writeStore(data)
-      const store = loadMcpServers()
+      const store = loadStore()
       expect(store.version).toBe(MCP_SERVERS_VERSION)
       expect(store.servers[0]).not.toHaveProperty('timeoutMs')
     }
@@ -432,7 +436,7 @@ describe('mcp registry — migrate v1 → v2 (nhóm E)', () => {
       servers: [v1Server({ timeoutMs: 15_000 }), v1Server({ id: 'serena', label: 'Serena', command: 'uvx' })],
     })
 
-    upsertMcpServer(stdio({ id: 'them-moi', command: 'node' }))
+    mcpRegistry.upsert(stdio({ id: 'them-moi', command: 'node' }))
 
     const parsed = JSON.parse(readStoreRaw())
     expect(parsed.version).toBe(MCP_SERVERS_VERSION)
@@ -449,7 +453,7 @@ describe('mcp registry — migrate v1 → v2 (nhóm E)', () => {
     const raw = JSON.stringify({ version: 1, servers: [v1Server({ timeoutMs: 15_000 })] })
     writeStore(raw)
 
-    const reads = [loadMcpServers(), loadMcpServers(), loadMcpServers()]
+    const reads = [loadStore(), loadStore(), loadStore()]
     expect(reads[1]).toEqual(reads[0])
     expect(reads[2]).toEqual(reads[0])
     expect(readStoreRaw()).toBe(raw)
@@ -477,7 +481,7 @@ describe('mcp registry — migrate v1 → v2 (nhóm E)', () => {
       ],
     })
 
-    const [pw, gh] = loadMcpServers().servers as any[]
+    const [pw, gh] = loadStore().servers as any[]
     expect(pw).toEqual({
       id: 'playwright',
       label: 'Playwright MCP',
@@ -505,12 +509,12 @@ describe('mcp registry — migrate v1 → v2 (nhóm E)', () => {
 
   // TC-E10 — hành vi phòng thủ giữ nguyên (TC-01 / TC-02 khoá phần chung); ở đây chốt cờ version 🚫 không làm nó đổi.
   test('TC-E10: file rỗng / JSON hỏng / chưa có file ⇒ store rỗng ở v2, 🚫 không crash, 🚫 không ghi đè', () => {
-    expect(loadMcpServers()).toEqual({ version: MCP_SERVERS_VERSION, servers: [] })
+    expect(loadStore()).toEqual({ version: MCP_SERVERS_VERSION, servers: [] })
     expect(fs.existsSync(storeFile())).toBe(false)
 
     for (const raw of ['', '{', 'not json', '{"version":1}']) {
       writeStore(raw)
-      expect(loadMcpServers()).toEqual({ version: MCP_SERVERS_VERSION, servers: [] })
+      expect(loadStore()).toEqual({ version: MCP_SERVERS_VERSION, servers: [] })
       expect(readStoreRaw()).toBe(raw)
     }
   })
@@ -529,7 +533,7 @@ describe('mcp registry — migrate v1 → v2 (nhóm E)', () => {
       ],
     })
 
-    const servers = loadMcpServers().servers
+    const servers = loadStore().servers
     expect(servers.map((s) => s.id)).toEqual(['playwright', 'giu-lai'])
     expect(servers[0]).not.toHaveProperty('timeoutMs')
     expect(servers[1].timeoutMs).toBe(300_000)
@@ -546,23 +550,23 @@ describe('mcp registry — migrate v1 → v2 (nhóm E)', () => {
  * cũng nằm **ở đây** chứ 🚫 gộp lên khối import đầu file: thêm một dòng trên đó
  * là dời số dòng của mọi ca phía dưới.
  */
-import { normaliseMcpServer } from '../../../../../src/features/mcp/business/registry.js'
+import { McpRegistry } from '../../../../../src/features/mcp/business/McpRegistry.js'
 import { NORMALISE_FIXTURES } from './normaliseFixtures.mjs'
 
 describe('#386 — normaliseMcpServer sau khi tách hàm con', () => {
   // TC-CX-02
   test('TC-CX-02: stdio thiếu `command` (3 biến thể) ⇒ null', () => {
-    expect(normaliseMcpServer({ id: 'a', transport: 'stdio' })).toBeNull()
-    expect(normaliseMcpServer({ id: 'a', transport: 'stdio', command: '' })).toBeNull()
-    expect(normaliseMcpServer({ id: 'a', transport: 'stdio', command: '   ' })).toBeNull()
+    expect(McpRegistry.normalise({ id: 'a', transport: 'stdio' })).toBeNull()
+    expect(McpRegistry.normalise({ id: 'a', transport: 'stdio', command: '' })).toBeNull()
+    expect(McpRegistry.normalise({ id: 'a', transport: 'stdio', command: '   ' })).toBeNull()
   })
 
   // TC-CX-03
   test('TC-CX-03: http/sse thiếu `url` ⇒ null', () => {
     for (const transport of ['http', 'sse']) {
-      expect(normaliseMcpServer({ id: 'a', transport })).toBeNull()
-      expect(normaliseMcpServer({ id: 'a', transport, url: '' })).toBeNull()
-      expect(normaliseMcpServer({ id: 'a', transport, url: '  ' })).toBeNull()
+      expect(McpRegistry.normalise({ id: 'a', transport })).toBeNull()
+      expect(McpRegistry.normalise({ id: 'a', transport, url: '' })).toBeNull()
+      expect(McpRegistry.normalise({ id: 'a', transport, url: '  ' })).toBeNull()
     }
   })
 
@@ -572,17 +576,17 @@ describe('#386 — normaliseMcpServer sau khi tách hàm con', () => {
    * này giữ nguyên sau khi tách.
    */
   test('TC-CX-04: `id` không hợp lệ VÀ thiếu `command` cùng lúc ⇒ null, 🚫 ném', () => {
-    expect(() => normaliseMcpServer({ id: '///', transport: 'stdio' })).not.toThrow()
-    expect(normaliseMcpServer({ id: '///', transport: 'stdio' })).toBeNull()
+    expect(() => McpRegistry.normalise({ id: '///', transport: 'stdio' })).not.toThrow()
+    expect(McpRegistry.normalise({ id: '///', transport: 'stdio' })).toBeNull()
     // `id` sai một mình cũng đủ ⇒ null, dù transport và field của nó đều hợp lệ.
-    expect(normaliseMcpServer({ id: '///', transport: 'http', url: 'https://a.example' })).toBeNull()
-    expect(normaliseMcpServer({ transport: 'stdio', command: 'npx' })).toBeNull()
+    expect(McpRegistry.normalise({ id: '///', transport: 'http', url: 'https://a.example' })).toBeNull()
+    expect(McpRegistry.normalise({ transport: 'stdio', command: 'npx' })).toBeNull()
   })
 
   // TC-CX-05
   test('TC-CX-05: transport lạ ⇒ null', () => {
     for (const transport of ['ws', '', undefined, 3, null, {}]) {
-      expect(normaliseMcpServer({ id: 'a', transport, command: 'npx', url: 'https://a.example' })).toBeNull()
+      expect(McpRegistry.normalise({ id: 'a', transport, command: 'npx', url: 'https://a.example' })).toBeNull()
     }
   })
 
@@ -609,7 +613,7 @@ describe('#386 — normaliseMcpServer sau khi tách hàm con', () => {
 
     const actual = (NORMALISE_FIXTURES as { name: string; raw: unknown }[]).map(({ name, raw }) => ({
       name,
-      result: normaliseMcpServer(raw),
+      result: McpRegistry.normalise(raw)?.config ?? null,
     }))
 
     // So từng fixture trước để thông điệp đỏ chỉ đúng ca lệch…

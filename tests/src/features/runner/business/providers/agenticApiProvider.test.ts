@@ -1042,8 +1042,15 @@ describe('AgenticApiProvider — webSearch() / fetchUrl()', () => {
 // `beforeEach` 🚫 có trong khối import đầu file — khai thêm ở ĐÂY thay vì sửa
 // dòng đó, để diff của khối này 🚫 chạm phần trên.
 import { beforeEach } from 'bun:test'
-import { upsertMcpServer } from '../../../../../../src/features/mcp/business/registry.js'
-import type { McpBridgeTool } from '../../../../../../src/features/runner/business/providers/mcpToolBridge.js'
+import { mcpRegistry } from '../../../../../../src/features/mcp/business/McpRegistry.js'
+import {
+  ToolBridgeMcpDelivery,
+  type McpBridgeTool,
+} from '../../../../../../src/features/runner/business/mcpDelivery/ToolBridgeMcpDelivery.js'
+import { RunnerCredentialResolver } from '../../../../../../src/features/runner/business/RunnerCredentialResolver.js'
+
+/** Bridge y hệt bản `registry.ts` lắp cho họ `ai-api` — `FakeAgenticProvider` dựng tay mặc định `NoMcpDelivery`. */
+const mcpToolBridge = new ToolBridgeMcpDelivery(new RunnerCredentialResolver())
 
 /**
  * TC-P6-06 (vế đơn vị) · TC-P6-07 · TC-P6-18 · TC-P6-19.
@@ -1119,7 +1126,7 @@ describe('AgenticApiProvider — vòng đời bridge theo job (#379)', () => {
   })
 
   function seedMcp(id: string, env: Record<string, string> = {}) {
-    upsertMcpServer({
+    mcpRegistry.upsert({
       id,
       label: id,
       enabled: true,
@@ -1151,7 +1158,7 @@ describe('AgenticApiProvider — vòng đời bridge theo job (#379)', () => {
     const pidFile = path.join(mcpHome, 'child.pid')
     seedMcp('srv', { FAKE_MCP_PID_FILE: pidFile })
 
-    const p = new FakeAgenticProvider()
+    const p = new FakeAgenticProvider(mcpToolBridge)
     let seenBridgeTools = -1
     let pidDuringRun = 0
     p.runConversationImpl = async (ctx) => {
@@ -1177,7 +1184,7 @@ describe('AgenticApiProvider — vòng đời bridge theo job (#379)', () => {
     const pidFile = path.join(mcpHome, 'child.pid')
     seedMcp('srv', { FAKE_MCP_PID_FILE: pidFile })
 
-    const p = new FakeAgenticProvider()
+    const p = new FakeAgenticProvider(mcpToolBridge)
     let pidDuringRun = 0
     p.runConversationImpl = async () => {
       pidDuringRun = Number(fs.readFileSync(pidFile, 'utf8'))
@@ -1201,7 +1208,7 @@ describe('AgenticApiProvider — vòng đời bridge theo job (#379)', () => {
   test('TC-P6-07: server 🚫 khai tool nào ⇒ bridge vẫn mở, tools rỗng, job vẫn ok', async () => {
     seedMcp('rong', { FAKE_MCP_TOOLS: ' ' })
 
-    const p = new FakeAgenticProvider()
+    const p = new FakeAgenticProvider(mcpToolBridge)
     let bridgeToolCount = -1
     p.runConversationImpl = async (ctx) => {
       bridgeToolCount = ctx.mcpBridge?.tools.length ?? -1
@@ -1221,7 +1228,7 @@ describe('AgenticApiProvider — vòng đời bridge theo job (#379)', () => {
   /** TC-P6-01 (vế base class) — 🚫 khai `mcpServers` ⇒ `ctx.mcpBridge` là `null`. */
   test('TC-P6-01: 🚫 `mcpServers` ⇒ `ctx.mcpBridge === null`, 🚫 tiến trình con nào', async () => {
     seedMcp('srv')
-    const p = new FakeAgenticProvider()
+    const p = new FakeAgenticProvider(mcpToolBridge)
     let bridge: unknown = 'chua-gan'
     p.runConversationImpl = async (ctx) => {
       bridge = ctx.mcpBridge

@@ -534,7 +534,12 @@ describe('AnthropicCompatibleProvider — job log: system prompt + tool-call out
 // `beforeEach` 🚫 có trong khối import đầu file — khai thêm ở ĐÂY thay vì sửa
 // dòng đó, để diff của khối này 🚫 chạm phần trên.
 import { beforeEach } from 'bun:test'
-import { upsertMcpServer } from '../../../../../../src/features/mcp/business/registry.js'
+import { mcpRegistry } from '../../../../../../src/features/mcp/business/McpRegistry.js'
+import { ToolBridgeMcpDelivery } from '../../../../../../src/features/runner/business/mcpDelivery/ToolBridgeMcpDelivery.js'
+import { RunnerCredentialResolver } from '../../../../../../src/features/runner/business/RunnerCredentialResolver.js'
+
+/** Bridge y hệt bản `registry.ts` lắp cho họ `ai-api` — provider dựng tay mặc định `NoMcpDelivery`. */
+const mcpToolBridge = new ToolBridgeMcpDelivery(new RunnerCredentialResolver())
 
 /**
  * TC-P6-01 · TC-P6-03 · TC-P6-04 · TC-P6-06 · TC-P6-10 (vế "built-in vẫn thắng").
@@ -575,7 +580,7 @@ describe('AnthropicCompatibleProvider — tool MCP (#379)', () => {
   })
 
   function seedMcp(id: string, env: Record<string, string> = {}) {
-    upsertMcpServer({
+    mcpRegistry.upsert({
       id,
       label: id,
       enabled: true,
@@ -603,7 +608,7 @@ describe('AnthropicCompatibleProvider — tool MCP (#379)', () => {
       bodies.push(JSON.parse(String(init?.body ?? '{}')))
       return jsonResponse(anthropicMessage([{ type: 'text', text: 'xong' }], { input_tokens: 1, output_tokens: 1 }))
     }) as unknown as typeof fetch
-    const provider = new AnthropicCompatibleProvider('anthropic-api', 'https://api.anthropic.test')
+    const provider = new AnthropicCompatibleProvider('anthropic-api', 'https://api.anthropic.test', mcpToolBridge)
     const result = await provider.execute(req, { model: 'm', ...runnerConfig }, credential)
     return { bodies, result }
   }
@@ -693,7 +698,7 @@ describe('AnthropicCompatibleProvider — tool MCP (#379)', () => {
       return jsonResponse(anthropicMessage([{ type: 'text', text: 'xong' }]))
     }) as unknown as typeof fetch
 
-    const provider = new AnthropicCompatibleProvider('anthropic-api', 'https://api.anthropic.test')
+    const provider = new AnthropicCompatibleProvider('anthropic-api', 'https://api.anthropic.test', mcpToolBridge)
     const result = await provider.execute(
       baselineRequest(),
       { model: 'm', mcpServers: ['srv'] },
@@ -734,7 +739,7 @@ describe('AnthropicCompatibleProvider — tool MCP (#379)', () => {
       return jsonResponse(anthropicMessage([{ type: 'text', text: 'xong' }]))
     }) as unknown as typeof fetch
 
-    const provider = new AnthropicCompatibleProvider('anthropic-api', 'https://api.anthropic.test')
+    const provider = new AnthropicCompatibleProvider('anthropic-api', 'https://api.anthropic.test', mcpToolBridge)
     const result = await provider.execute(
       { ...baselineRequest(), metadata: { logPath } },
       { model: 'm', mcpServers: ['srv'] },

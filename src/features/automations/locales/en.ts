@@ -156,7 +156,6 @@ export default {
     description: 'Description (optional)',
     enabled: 'Enable right after saving',
     cancel: 'Cancel',
-    close: 'Close',
     save: 'Save',
     saving: 'Saving…',
     nameRequired: 'Name is required',

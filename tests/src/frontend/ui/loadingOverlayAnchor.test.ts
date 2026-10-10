@@ -8,6 +8,8 @@ import ProfileSwitchDialog from '@/features/monitor/components/ProfileSwitchDial
 import CreateTaskDialog from '@/features/monitor/components/CreateTaskDialog.vue'
 import KnowledgeCollectionDialog from '@/features/knowledge/components/KnowledgeCollectionDialog.vue'
 import KnowledgeTagDialog from '@/features/knowledge/components/KnowledgeTagDialog.vue'
+import KnowledgeUploadDialog from '@/features/knowledge/components/KnowledgeUploadDialog.vue'
+import SettingsDialog from '@/features/settings/components/SettingsDialog.vue'
 import McpServerDialog from '@/features/mcp/components/McpServerDialog.vue'
 import AgentFormDialog from '@/features/agent-editor/components/AgentFormDialog.vue'
 import AutomationFormDialog from '@/features/automations/components/AutomationFormDialog.vue'
@@ -61,6 +63,22 @@ vi.mock('@/features/knowledge/scripts/KnowledgePanelApi', () => ({
   saveKnowledgeCollection: vi.fn(async () => ({ collection: { id: 'c1' } })),
   saveKnowledgeTag: vi.fn(async () => ({ tag: 't1' })),
   renameKnowledgeTag: vi.fn(async () => ({ count: 0, metaError: '' })),
+  uploadKnowledgeFile: vi.fn(async () => ({ entry: { id: 'e1' } })),
+}))
+vi.mock('@/features/settings/scripts/SettingsDialogApi', () => ({
+  fetchAutoscanConfig: vi.fn(async () => ({ config: {} })),
+  saveAutoscanConfig: vi.fn(async (c: object) => ({ config: c })),
+  runAutoscan: vi.fn(async () => ({ report: {} })),
+  fetchGithubTokensConfig: vi.fn(async () => ({ config: { repos: [] } })),
+  saveGithubTokensConfig: vi.fn(async (c: object) => ({ config: c })),
+  fetchLoggingConfig: vi.fn(async () => ({ config: {} })),
+  saveLoggingConfig: vi.fn(async (c: object) => ({ config: c })),
+  fetchModesConfig: vi.fn(async () => ({ config: { enabled: {} } })),
+  saveModesConfig: vi.fn(async (c: object) => ({ config: c })),
+  fetchRecoveryConfig: vi.fn(async () => ({ config: {} })),
+  saveRecoveryConfig: vi.fn(async (c: object) => ({ config: c })),
+  fetchScanPatternsConfig: vi.fn(async () => ({ config: {} })),
+  saveScanPatternsConfig: vi.fn(async (c: object) => ({ config: c })),
 }))
 vi.mock('@/features/agent-editor/scripts/agentEditorApi', () => ({
   fetchCustomAgent: vi.fn(async () => ({ agent: null })),
@@ -170,6 +188,14 @@ describe('TC-29 · overlay phải neo NGOÀI vùng cuộn', () => {
 
   it('KnowledgeTagDialog', async () => {
     await mountAndAssert(KnowledgeTagDialog, { tag: null, projectId: 'p1' }, 'KnowledgeTagDialog')
+  })
+
+  it('KnowledgeUploadDialog', async () => {
+    await mountAndAssert(KnowledgeUploadDialog, { projectId: 'p1' }, 'KnowledgeUploadDialog')
+  })
+
+  it('SettingsDialog', async () => {
+    await mountAndAssert(SettingsDialog, {}, 'SettingsDialog')
   })
 
   it('McpServerDialog', async () => {
