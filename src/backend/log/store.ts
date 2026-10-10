@@ -1,5 +1,6 @@
 import { nowStamp } from '../lib/dateUtils.js'
-import { getLogDriver } from './driver.js'
+import { logQueryTypes, type LogQuery } from './driver.js'
+import { getLogDriver } from './driverInit.js'
 import { isLogTypeEnabled } from './loggingPrefsIo.js'
 import {
   levelFromHttpStatus,
@@ -7,6 +8,7 @@ import {
   type AuditOp,
   type LogEntry,
   type LogLevel,
+  type LogType,
   type UsageLogEntry,
 } from '../../shared/log/schema.js'
 import { getTraceId } from './traceContext.js'
@@ -103,4 +105,34 @@ export function emitAudit(p: {
     projectId: p.projectId,
     ...(p.detail ? { detail: p.detail } : {}),
   }).catch(() => {})
+}
+
+/**
+ * Read entries newest-first via the active log driver — the single place on the read
+ * path that drops disabled types (settings). Every type disabled → `[]` without touching
+ * the driver. Never throws: a failing driver reads as "no logs".
+ */
+export async function queryLogs(q: LogQuery): Promise<LogEntry[]> {
+  const types = logQueryTypes(q).filter((t) => isLogTypeEnabled(t))
+  if (!types.length) return []
+  try {
+    return await getLogDriver().query({ ...q, type: types })
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Store revision of `type` on the active driver, for read-side caching. `null` = do not
+ * cache: type disabled, driver has no `revision` hook, or the hook failed.
+ */
+export async function logRevision(type: LogType): Promise<string | null> {
+  if (!isLogTypeEnabled(type)) return null
+  const driver = getLogDriver()
+  if (!driver.revision) return null
+  try {
+    return await driver.revision(type)
+  } catch {
+    return null
+  }
 }
