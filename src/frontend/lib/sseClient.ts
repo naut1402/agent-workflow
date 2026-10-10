@@ -72,7 +72,7 @@ export function openSseStream(path: string, query: ApiQuery, handlers: SseStream
     if (!stopped) {
       await delay(backoffMs)
       backoffMs = Math.min(backoffMs * 2, MAX_BACKOFF_MS)
-      void loop()
+      if (!stopped) void loop()
     }
   }
 

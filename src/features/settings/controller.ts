@@ -8,6 +8,7 @@ import { mergeScanPatternsConfig } from './schemas/scanPatterns.js'
 import { parseSecurityConfig } from './schemas/security.js'
 import { emitAudit } from '../../backend/log/store.js'
 import { hasJwtSecret } from '../../backend/http/security/jwtGuard.js'
+import { getDashboardTransport } from '../../backend/http/transportConfig.js'
 import * as settingsBusiness from './business/index.js'
 
 export class SettingsController extends AbstractController {
@@ -153,7 +154,11 @@ export class SettingsController extends AbstractController {
   }
 
   getSecurity() {
-    return this.ok({ config: settingsBusiness.loadSecurityConfig(), jwtEnabled: hasJwtSecret() })
+    return this.ok({
+      config: settingsBusiness.loadSecurityConfig(),
+      jwtEnabled: hasJwtSecret(),
+      transport: getDashboardTransport(),
+    })
   }
 
   async updateSecurity() {
@@ -166,6 +171,6 @@ export class SettingsController extends AbstractController {
     })
     const saved = settingsBusiness.saveSecurityConfig(next)
     emitAudit({ op: 'update', entity: 'security', identifier: 'config', projectId: null })
-    return this.ok({ config: saved, jwtEnabled: hasJwtSecret() })
+    return this.ok({ config: saved, jwtEnabled: hasJwtSecret(), transport: getDashboardTransport() })
   }
 }

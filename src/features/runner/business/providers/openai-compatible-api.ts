@@ -10,6 +10,8 @@ import {
   type AgenticRunResult,
   type ExtraTool,
 } from './agenticApiProvider.js'
+import type { McpJobDelivery } from '../mcpDelivery/McpJobDelivery.js'
+import type { McpToolBridge } from '../mcpDelivery/ToolBridgeMcpDelivery.js'
 
 /** Chặn vòng lặp vô hạn khi model liên tục gọi tool — mirror anthropic-compatible-api. */
 const MAX_AGENT_LOOP_TURNS = 8
@@ -192,8 +194,8 @@ export class OpenAiCompatibleProvider extends AgenticApiProvider {
   readonly providerId: string
   private readonly defaultBaseURL: string
 
-  constructor(providerId: string, defaultBaseURL: string) {
-    super()
+  constructor(providerId: string, defaultBaseURL: string, mcpDelivery?: McpJobDelivery<McpToolBridge>) {
+    super(mcpDelivery)
     this.providerId = providerId
     this.defaultBaseURL = defaultBaseURL
   }
@@ -214,9 +216,23 @@ export class OpenAiCompatibleProvider extends AgenticApiProvider {
     const client = new OpenAI({ baseURL: ctx.runnerConfig.baseURL || this.defaultBaseURL, apiKey: ctx.apiKey, timeout: timeoutMs })
 
     const extraTools = this.resolveExtraTools(ctx.runnerConfig)
-    const tools = buildTools(extraTools, this.isWebSearchConfigured())
+    const baseTools = buildTools(extraTools, this.isWebSearchConfigured())
+    // `mcpBridge === null` ⇒ `bridgeTools` rỗng ⇒ `tools` và preamble
+    // byte-identical với bản trước khi có bridge.
+    const bridgeTools = ctx.mcpBridge?.tools ?? []
+    const tools: OpenAI.Chat.Completions.ChatCompletionFunctionTool[] = [
+      ...baseTools,
+      ...bridgeTools.map((t) => ({
+        type: 'function' as const,
+        function: {
+          name: t.name,
+          description: t.description,
+          parameters: t.inputSchema as Record<string, unknown>,
+        },
+      })),
+    ]
     const systemContent = [
-      this.buildToolUsagePreamble(tools.map((t) => t.function.name)),
+      this.buildToolUsagePreamble(baseTools.map((t) => t.function.name), bridgeTools),
       this.buildProjectContextPreamble(ctx.req),
       ctx.req.resolvedAgent.systemPrompt || '',
     ]
@@ -323,7 +339,7 @@ export class OpenAiCompatibleProvider extends AgenticApiProvider {
         })),
       })
       for (const call of calls) {
-        const outcome = await this.executeTool(call, ctx.workspace)
+        const outcome = await this.executeTool(call, ctx.workspace, ctx.mcpBridge)
         const entry = {
           name: call.function.name,
           argsSummary: summarizeArgs(call.function.arguments),
@@ -339,13 +355,19 @@ export class OpenAiCompatibleProvider extends AgenticApiProvider {
   }
 
   /** Map one chat-completions function tool call onto a base-class sandbox op. */
-  private async executeTool(call: OpenAI.Chat.Completions.ChatCompletionMessageFunctionToolCall, workspace: string) {
+  private async executeTool(
+    call: OpenAI.Chat.Completions.ChatCompletionMessageFunctionToolCall,
+    workspace: string,
+    bridge?: McpToolBridge | null,
+  ) {
     let args: Record<string, unknown> = {}
     try {
       args = JSON.parse(call.function.arguments || '{}')
     } catch {
       return { ok: false, error: 'invalid tool arguments JSON' }
     }
+    // TRƯỚC `switch`: xem chú thích tương ứng ở `anthropic-compatible-api.ts`.
+    if (bridge?.has(call.function.name)) return bridge.call(call.function.name, args)
     const path = typeof args.path === 'string' ? args.path : ''
     switch (call.function.name) {
       case 'read_file':
@@ -384,6 +406,10 @@ export class OpenAiCompatibleProvider extends AgenticApiProvider {
   }
 }
 
-export function createOpenAiCompatibleProvider(providerId: string, defaultBaseURL: string): OpenAiCompatibleProvider {
-  return new OpenAiCompatibleProvider(providerId, defaultBaseURL)
+export function createOpenAiCompatibleProvider(
+  providerId: string,
+  defaultBaseURL: string,
+  mcpDelivery?: McpJobDelivery<McpToolBridge>,
+): OpenAiCompatibleProvider {
+  return new OpenAiCompatibleProvider(providerId, defaultBaseURL, mcpDelivery)
 }

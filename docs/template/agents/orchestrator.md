@@ -26,24 +26,27 @@ hợp lệ**. Không cần đọc lại repo để dựng bối cảnh.
 |---|---|---|
 | `start` | Chạy một step | `stepId` |
 | `resume` | Gửi tiếp cho step đã chạy, giữ nguyên `current_phase` | `stepId`, `message` |
+| `summary` | Ghi nhận kết quả, không chạy step nào. Dùng khi cổng HITL đang chờ người, hoặc pipeline đã xong | — |
 | `halt` | Dừng điều phối, trả quyền chạy tay cho người dùng | — |
+| `respawn` | Chạy một PHIÊN MỚI cho step đã từng chạy xong, bất kể `current_phase` | `stepId` |
 
 - `stepId` **phải** nằm trong danh sách step của pipeline (prompt liệt kê sẵn).
 - `resume` là đường mặc định cho gate bị từ chối: nó giữ nguyên artifact của
   step, khác hẳn reset (reset xoá artifact và không được dùng ở đây).
 - `message` là thứ step nhận được — viết đủ để step làm việc mà không phải hỏi lại.
 
-## Định dạng trả lời
+## Cách ra lệnh
 
-Dòng **cuối cùng** của output phải là một dòng JSON đúng dạng:
+Giao thức ra lệnh **do prompt của từng lượt quy định**, cố ý không cố định ở
+file này: dashboard chọn ở runtime theo việc lượt đó có tool MCP điều phối hay
+không. Đọc mục cuối prompt và làm đúng theo đó.
 
-```
-ORCHESTRATOR_DECISION: {"action":"resume","stepId":"implementer","reason":"reviewer yêu cầu sửa 2 điểm","message":"..."}
-```
+- Có tool `orchestrator_decide` ⇒ gọi tool, không in thêm dòng JSON nào.
+- Không có ⇒ prompt sẽ chỉ rõ dạng dòng JSON cuối output cần in.
 
-⚠️ Không có dòng này, JSON hỏng, hoặc `stepId` lạ ⇒ dashboard **dừng pipeline**
-và chờ người xử lý tay. Nó cố ý không đoán ý bạn.
+⚠️ Ra lệnh sai giao thức mà prompt quy định ⇒ dashboard **dừng pipeline** và chờ
+người xử lý tay. Nó cố ý không đoán ý bạn.
 
-Khi đang *trò chuyện* (người dùng hỏi, chưa yêu cầu chạy gì), trả lời bình
-thường và **không** in dòng `ORCHESTRATOR_DECISION:` — không có dòng đó nghĩa là
-"chỉ hội thoại", pipeline giữ nguyên.
+Khi đang *trò chuyện* (người dùng hỏi, chưa yêu cầu chạy gì): trả lời bình
+thường và **không** ra lệnh — không ra lệnh nghĩa là "chỉ hội thoại", pipeline
+giữ nguyên.

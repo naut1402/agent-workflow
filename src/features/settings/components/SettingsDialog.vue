@@ -2,10 +2,13 @@
 import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { computed, inject, onMounted, onUnmounted, ref, type Ref } from 'vue'
 import { onClickOutside } from '@vueuse/core'
+import { useApiAction } from '../../../frontend/composables/useApiAction'
 import { useAppSettings } from '../../../frontend/composables/useAppSettings'
 import { useLocale } from '../../../frontend/composables/useLocale'
 import { reloadProjectsKey } from '../../../frontend/shell/keys'
 import {
+  readArtifactSectionDefault,
+  resolveArtifactSectionAccordion,
   resolveArtifactViewMode,
   resolveChatFeedbackMode,
   resolveChatEnterToSend,
@@ -19,6 +22,7 @@ import {
   resolveNotificationUiPlacement,
   resolveNotifySoundEnabled,
   resolveThemePreference,
+  type ArtifactSectionDefault,
   type ChatFeedbackMode,
   type NotificationUiPlacement,
   type ThemePreference,
@@ -34,6 +38,7 @@ import {
   sanitiseScanPattern,
   type ScanPatternKind,
 } from '../schemas/scanPatterns'
+import CLoadingOverlay from '../../../frontend/ui/CLoadingOverlay.vue'
 import FolderPickerDialog from '../../../frontend/ui/FolderPickerDialog.vue'
 import CSelect from '../../../frontend/ui/CSelect.vue'
 
@@ -89,6 +94,20 @@ const collapseMonitorSubSidebarOnOutside = computed(() =>
 function setArtifactViewMode(mode: 'block' | 'full') {
   if (artifactViewMode.value === mode) return
   update({ artifactViewMode: mode })
+}
+
+// Radio bind theo giá trị ĐÃ LƯU, không phải giá trị đã resolve — tắt accordion là
+// thấy lại đúng lựa chọn cũ.
+const artifactSectionDefault = computed(() => readArtifactSectionDefault(settings.value))
+const artifactSectionAccordion = computed(() => resolveArtifactSectionAccordion(settings.value))
+
+function setArtifactSectionDefault(mode: ArtifactSectionDefault) {
+  if (artifactSectionDefault.value === mode) return
+  update({ artifactSectionDefault: mode })
+}
+
+function toggleArtifactSectionAccordion() {
+  update({ artifactSectionAccordion: !artifactSectionAccordion.value })
 }
 
 const chatFeedbackMode = computed(() => resolveChatFeedbackMode(settings.value))
@@ -182,7 +201,7 @@ function onNotificationUiPlacementUpdate(value: string) {
 
 const modeCatalog = computed(() => props.modeCatalog ?? [])
 const modesEnabled = ref<Record<string, boolean>>({})
-const modesBusy = ref(false)
+const { pending: modesBusy, run: runModes } = useApiAction()
 const modesMsg = ref('')
 const modesErr = ref('')
 /** Nạp lỗi thì các toggle đang hiện mặc định của catalog, không phải giá trị thật → khoá thao tác. */
@@ -217,29 +236,28 @@ async function loadModes() {
 
 /** Gửi delta 1 key — controller merge theo key, nên settings.json chỉ chứa mode đã đụng tới. */
 async function persistMode(key: string, prev: Record<string, boolean>) {
-  modesBusy.value = true
-  modesMsg.value = ''
-  modesErr.value = ''
-  try {
-    const data = await saveModesConfig({ enabled: { [key]: modesEnabled.value[key] } })
-    syncModesFromConfig(data.config)
-    modesMsg.value = t('settings.modes.saved')
-    // Không có store dùng chung giữa dialog và shell — phát tán như logging-changed.
-    // Phát `data.config` (bản đã merge ở server), không phải map cục bộ 1 key.
-    window.dispatchEvent(
-      new CustomEvent('dev-dashboard:modes-changed', { detail: data.config }),
-    )
-  } catch (e) {
-    // Ghi hỏng thì không để checkbox nói một đằng, server và sidebar nói một nẻo.
-    modesEnabled.value = prev
-    modesErr.value = String((e as Error).message || e)
-  } finally {
-    modesBusy.value = false
-  }
+  await runModes(async () => {
+    modesMsg.value = ''
+    modesErr.value = ''
+    try {
+      const data = await saveModesConfig({ enabled: { [key]: modesEnabled.value[key] } })
+      syncModesFromConfig(data.config)
+      modesMsg.value = t('settings.modes.saved')
+      // Không có store dùng chung giữa dialog và shell — phát tán như logging-changed.
+      // Phát `data.config` (bản đã merge ở server), không phải map cục bộ 1 key.
+      window.dispatchEvent(
+        new CustomEvent('dev-dashboard:modes-changed', { detail: data.config }),
+      )
+    } catch (e) {
+      // Ghi hỏng thì không để checkbox nói một đằng, server và sidebar nói một nẻo.
+      modesEnabled.value = prev
+      modesErr.value = String((e as Error).message || e)
+    }
+  })
 }
 
 function toggleMode(m: ModeEntry) {
-  if (m.alwaysOn) return
+  if (m.alwaysOn || modesBusy.value) return
   const prev = modesEnabled.value
   modesEnabled.value = { ...prev, [m.key]: !prev[m.key] }
   void persistMode(m.key, prev)
@@ -253,7 +271,7 @@ const logTypeRequest = ref(true)
 const logTypeJobs = ref(true)
 const logTypeEvents = ref(false)
 const logTypeUsage = ref(true)
-const loggingBusy = ref(false)
+const { pending: loggingBusy, run: runLogging } = useApiAction()
 const loggingMsg = ref('')
 const loggingErr = ref('')
 
@@ -274,75 +292,80 @@ async function loadLogging() {
 }
 
 async function persistLogging() {
-  loggingBusy.value = true
-  loggingMsg.value = ''
-  loggingErr.value = ''
-  try {
-    const data = await saveLoggingConfig({
-      showLogsTab: showLogsTab.value,
-      types: {
-        audit: logTypeAudit.value,
-        request: logTypeRequest.value,
-        jobs: logTypeJobs.value,
-        events: logTypeEvents.value,
-        usage: logTypeUsage.value,
-      },
-    })
-    const cfg = data.config || {}
-    showLogsTab.value = cfg.showLogsTab !== false
-    logTypeAudit.value = cfg.types?.audit !== false
-    logTypeRequest.value = cfg.types?.request !== false
-    logTypeJobs.value = cfg.types?.jobs !== false
-    logTypeEvents.value = cfg.types?.events === true
-    logTypeUsage.value = cfg.types?.usage !== false
-    loggingMsg.value = t('settings.logging.saved')
-    window.dispatchEvent(
-      new CustomEvent('dev-dashboard:logging-changed', {
-        detail: {
-          showLogsTab: showLogsTab.value,
-          types: {
-            audit: logTypeAudit.value,
-            request: logTypeRequest.value,
-            jobs: logTypeJobs.value,
-            events: logTypeEvents.value,
-            usage: logTypeUsage.value,
-          },
+  await runLogging(async () => {
+    loggingMsg.value = ''
+    loggingErr.value = ''
+    try {
+      const data = await saveLoggingConfig({
+        showLogsTab: showLogsTab.value,
+        types: {
+          audit: logTypeAudit.value,
+          request: logTypeRequest.value,
+          jobs: logTypeJobs.value,
+          events: logTypeEvents.value,
+          usage: logTypeUsage.value,
         },
-      }),
-    )
-  } catch (e) {
-    loggingErr.value = String((e as Error).message || e)
-  } finally {
-    loggingBusy.value = false
-  }
+      })
+      const cfg = data.config || {}
+      showLogsTab.value = cfg.showLogsTab !== false
+      logTypeAudit.value = cfg.types?.audit !== false
+      logTypeRequest.value = cfg.types?.request !== false
+      logTypeJobs.value = cfg.types?.jobs !== false
+      logTypeEvents.value = cfg.types?.events === true
+      logTypeUsage.value = cfg.types?.usage !== false
+      loggingMsg.value = t('settings.logging.saved')
+      window.dispatchEvent(
+        new CustomEvent('dev-dashboard:logging-changed', {
+          detail: {
+            showLogsTab: showLogsTab.value,
+            types: {
+              audit: logTypeAudit.value,
+              request: logTypeRequest.value,
+              jobs: logTypeJobs.value,
+              events: logTypeEvents.value,
+              usage: logTypeUsage.value,
+            },
+          },
+        }),
+      )
+    } catch (e) {
+      loggingErr.value = String((e as Error).message || e)
+    }
+  })
 }
 
 function toggleShowLogsTab() {
+  if (loggingBusy.value) return
   showLogsTab.value = !showLogsTab.value
   void persistLogging()
 }
 
 function toggleLogTypeAudit() {
+  if (loggingBusy.value) return
   logTypeAudit.value = !logTypeAudit.value
   void persistLogging()
 }
 
 function toggleLogTypeRequest() {
+  if (loggingBusy.value) return
   logTypeRequest.value = !logTypeRequest.value
   void persistLogging()
 }
 
 function toggleLogTypeJobs() {
+  if (loggingBusy.value) return
   logTypeJobs.value = !logTypeJobs.value
   void persistLogging()
 }
 
 function toggleLogTypeEvents() {
+  if (loggingBusy.value) return
   logTypeEvents.value = !logTypeEvents.value
   void persistLogging()
 }
 
 function toggleLogTypeUsage() {
+  if (loggingBusy.value) return
   logTypeUsage.value = !logTypeUsage.value
   void persistLogging()
 }
@@ -351,7 +374,7 @@ function toggleLogTypeUsage() {
 
 const recoveryEnabled = ref(true)
 const recoveryMaxAttempts = ref(3)
-const recoveryBusy = ref(false)
+const { pending: recoveryBusy, run: runRecovery } = useApiAction()
 const recoveryMsg = ref('')
 const recoveryErr = ref('')
 
@@ -368,26 +391,26 @@ async function loadRecovery() {
 }
 
 async function persistRecovery() {
-  recoveryBusy.value = true
-  recoveryMsg.value = ''
-  recoveryErr.value = ''
-  try {
-    const data = await saveRecoveryConfig({
-      enabled: recoveryEnabled.value,
-      maxAttempts: recoveryMaxAttempts.value,
-    })
-    const cfg = data.config || {}
-    recoveryEnabled.value = cfg.enabled !== false
-    recoveryMaxAttempts.value = Number.isFinite(cfg.maxAttempts) ? cfg.maxAttempts : 3
-    recoveryMsg.value = t('settings.recovery.saved')
-  } catch (e) {
-    recoveryErr.value = String((e as Error).message || e)
-  } finally {
-    recoveryBusy.value = false
-  }
+  await runRecovery(async () => {
+    recoveryMsg.value = ''
+    recoveryErr.value = ''
+    try {
+      const data = await saveRecoveryConfig({
+        enabled: recoveryEnabled.value,
+        maxAttempts: recoveryMaxAttempts.value,
+      })
+      const cfg = data.config || {}
+      recoveryEnabled.value = cfg.enabled !== false
+      recoveryMaxAttempts.value = Number.isFinite(cfg.maxAttempts) ? cfg.maxAttempts : 3
+      recoveryMsg.value = t('settings.recovery.saved')
+    } catch (e) {
+      recoveryErr.value = String((e as Error).message || e)
+    }
+  })
 }
 
 function toggleRecoveryEnabled() {
+  if (recoveryBusy.value) return
   recoveryEnabled.value = !recoveryEnabled.value
   void persistRecovery()
 }
@@ -398,7 +421,7 @@ const autoscanEnabled = ref(false)
 const whitelist: Ref<string[]> = ref([])
 const draftPath = ref('')
 const pickerOpen = ref(false)
-const autoscanBusy = ref(false)
+const { pending: autoscanBusy, run: runAutoscanAction } = useApiAction()
 const autoscanMsg = ref('')
 const autoscanErr = ref('')
 
@@ -415,32 +438,33 @@ async function loadAutoscan() {
 }
 
 async function persistAutoscan() {
-  autoscanBusy.value = true
-  autoscanMsg.value = ''
-  autoscanErr.value = ''
-  try {
-    const data = await saveAutoscanConfig({
-      enabled: autoscanEnabled.value,
-      whitelist: whitelist.value,
-    })
-    const cfg = data.config || {}
-    autoscanEnabled.value = Boolean(cfg.enabled)
-    whitelist.value = Array.isArray(cfg.whitelist) ? [...cfg.whitelist] : []
-    autoscanMsg.value = t('settings.autoscan.saved')
-    window.dispatchEvent(new CustomEvent('dev-dashboard:autoscan-changed'))
-  } catch (e) {
-    autoscanErr.value = String((e as Error).message || e)
-  } finally {
-    autoscanBusy.value = false
-  }
+  await runAutoscanAction(async () => {
+    autoscanMsg.value = ''
+    autoscanErr.value = ''
+    try {
+      const data = await saveAutoscanConfig({
+        enabled: autoscanEnabled.value,
+        whitelist: whitelist.value,
+      })
+      const cfg = data.config || {}
+      autoscanEnabled.value = Boolean(cfg.enabled)
+      whitelist.value = Array.isArray(cfg.whitelist) ? [...cfg.whitelist] : []
+      autoscanMsg.value = t('settings.autoscan.saved')
+      window.dispatchEvent(new CustomEvent('dev-dashboard:autoscan-changed'))
+    } catch (e) {
+      autoscanErr.value = String((e as Error).message || e)
+    }
+  })
 }
 
 function toggleAutoscanEnabled() {
+  if (autoscanBusy.value) return
   autoscanEnabled.value = !autoscanEnabled.value
   void persistAutoscan()
 }
 
 function addWhitelistPath(path?: string) {
+  if (autoscanBusy.value) return
   const p = (path ?? draftPath.value).trim()
   if (!p) {
     autoscanErr.value = t('settings.autoscan.pathRequired')
@@ -453,6 +477,7 @@ function addWhitelistPath(path?: string) {
 }
 
 function removeWhitelistPath(path: string) {
+  if (autoscanBusy.value) return
   whitelist.value = whitelist.value.filter((x) => x !== path)
   void persistAutoscan()
 }
@@ -463,40 +488,39 @@ function onWhitelistPicked(path: string) {
 }
 
 async function scanNow() {
-  autoscanBusy.value = true
-  autoscanMsg.value = ''
-  autoscanErr.value = ''
-  try {
-    // Persist first so server whitelist matches UI.
-    await saveAutoscanConfig({
-      enabled: autoscanEnabled.value,
-      whitelist: whitelist.value,
-    })
-    const data = await runAutoscan(whitelist.value)
-    const report = data.report || {}
-    const added = Array.isArray(report.added) ? report.added.length : 0
-    const existing = Array.isArray(report.existing) ? report.existing.length : 0
-    if (added > 0) {
-      autoscanMsg.value = t('settings.autoscan.resultAdded', { count: added })
-    } else if (existing > 0) {
-      autoscanMsg.value = t('settings.autoscan.resultExisting', { count: existing })
-    } else {
-      autoscanMsg.value = t('settings.autoscan.resultNone')
+  await runAutoscanAction(async () => {
+    autoscanMsg.value = ''
+    autoscanErr.value = ''
+    try {
+      // Persist first so server whitelist matches UI.
+      await saveAutoscanConfig({
+        enabled: autoscanEnabled.value,
+        whitelist: whitelist.value,
+      })
+      const data = await runAutoscan(whitelist.value)
+      const report = data.report || {}
+      const added = Array.isArray(report.added) ? report.added.length : 0
+      const existing = Array.isArray(report.existing) ? report.existing.length : 0
+      if (added > 0) {
+        autoscanMsg.value = t('settings.autoscan.resultAdded', { count: added })
+      } else if (existing > 0) {
+        autoscanMsg.value = t('settings.autoscan.resultExisting', { count: existing })
+      } else {
+        autoscanMsg.value = t('settings.autoscan.resultNone')
+      }
+      await reloadProjects?.()
+      window.dispatchEvent(new CustomEvent('dev-dashboard:projects-changed'))
+    } catch (e) {
+      autoscanErr.value = String((e as Error).message || e)
     }
-    await reloadProjects?.()
-    window.dispatchEvent(new CustomEvent('dev-dashboard:projects-changed'))
-  } catch (e) {
-    autoscanErr.value = String((e as Error).message || e)
-  } finally {
-    autoscanBusy.value = false
-  }
+  })
 }
 
 // ── Scan patterns (server-backed)
 
 const scanPatterns = ref<Record<ScanPatternKind, string[]>>({ agents: [], skills: [], rules: [] })
 const scanPatternDraft = ref<Record<ScanPatternKind, string>>({ agents: '', skills: '', rules: '' })
-const scanPatternsBusy = ref(false)
+const { pending: scanPatternsBusy, run: runScanPatterns } = useApiAction()
 const scanPatternsMsg = ref('')
 const scanPatternsErr = ref('')
 
@@ -518,21 +542,21 @@ async function loadScanPatterns() {
 }
 
 async function persistScanPatterns() {
-  scanPatternsBusy.value = true
-  scanPatternsMsg.value = ''
-  scanPatternsErr.value = ''
-  try {
-    const data = await saveScanPatternsConfig({ ...scanPatterns.value })
-    applyScanPatternsConfig(data.config || {})
-    scanPatternsMsg.value = t('settings.scanPatterns.saved')
-  } catch (e) {
-    scanPatternsErr.value = String((e as Error).message || e)
-  } finally {
-    scanPatternsBusy.value = false
-  }
+  await runScanPatterns(async () => {
+    scanPatternsMsg.value = ''
+    scanPatternsErr.value = ''
+    try {
+      const data = await saveScanPatternsConfig({ ...scanPatterns.value })
+      applyScanPatternsConfig(data.config || {})
+      scanPatternsMsg.value = t('settings.scanPatterns.saved')
+    } catch (e) {
+      scanPatternsErr.value = String((e as Error).message || e)
+    }
+  })
 }
 
 function addScanPattern(kind: ScanPatternKind) {
+  if (scanPatternsBusy.value) return
   const p = sanitiseScanPattern(scanPatternDraft.value[kind])
   if (!p) {
     scanPatternsErr.value = t('settings.scanPatterns.invalid')
@@ -550,6 +574,7 @@ function addScanPattern(kind: ScanPatternKind) {
 }
 
 function removeScanPattern(kind: ScanPatternKind, pattern: string) {
+  if (scanPatternsBusy.value) return
   scanPatterns.value[kind] = scanPatterns.value[kind].filter((x) => x !== pattern)
   void persistScanPatterns()
 }
@@ -563,7 +588,7 @@ const draftRepo = ref('')
 const draftToken = ref('')
 /** When set, the add form updates this existing slug instead of only appending. */
 const editingRepo = ref<string | null>(null)
-const githubTokensBusy = ref(false)
+const { pending: githubTokensBusy, run: runGithubTokens } = useApiAction()
 const githubTokensMsg = ref('')
 const githubTokensErr = ref('')
 
@@ -584,24 +609,23 @@ async function loadGithubTokens() {
 }
 
 async function persistGithubTokens() {
-  githubTokensBusy.value = true
-  githubTokensMsg.value = ''
-  githubTokensErr.value = ''
-  try {
-    const data = await saveGithubTokensConfig({ repos: githubTokenRows.value })
-    const cfg = data.config || {}
-    githubTokenRows.value = Array.isArray(cfg.repos)
-      ? cfg.repos.map((e: GithubTokenRow) => ({
-          repo: String(e.repo ?? ''),
-          token: String(e.token ?? ''),
-        }))
-      : []
-    githubTokensMsg.value = t('settings.githubTokens.saved')
-  } catch (e) {
-    githubTokensErr.value = String((e as Error).message || e)
-  } finally {
-    githubTokensBusy.value = false
-  }
+  await runGithubTokens(async () => {
+    githubTokensMsg.value = ''
+    githubTokensErr.value = ''
+    try {
+      const data = await saveGithubTokensConfig({ repos: githubTokenRows.value })
+      const cfg = data.config || {}
+      githubTokenRows.value = Array.isArray(cfg.repos)
+        ? cfg.repos.map((e: GithubTokenRow) => ({
+            repo: String(e.repo ?? ''),
+            token: String(e.token ?? ''),
+          }))
+        : []
+      githubTokensMsg.value = t('settings.githubTokens.saved')
+    } catch (e) {
+      githubTokensErr.value = String((e as Error).message || e)
+    }
+  })
 }
 
 function clearGithubTokenDraft() {
@@ -620,6 +644,7 @@ function beginEditGithubToken(row: GithubTokenRow) {
 }
 
 function saveGithubTokenDraft() {
+  if (githubTokensBusy.value) return
   const rawRepo = draftRepo.value.trim()
   const token = draftToken.value.trim()
   if (!rawRepo) {
@@ -645,10 +670,21 @@ function saveGithubTokenDraft() {
 }
 
 function removeGithubToken(repo: string) {
+  if (githubTokensBusy.value) return
   if (editingRepo.value === repo) clearGithubTokenDraft()
   githubTokenRows.value = githubTokenRows.value.filter((r) => r.repo !== repo)
   void persistGithubTokens()
 }
+
+const settingsBusy = computed(
+  () =>
+    modesBusy.value ||
+    loggingBusy.value ||
+    recoveryBusy.value ||
+    autoscanBusy.value ||
+    scanPatternsBusy.value ||
+    githubTokensBusy.value,
+)
 
 function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape') {
@@ -700,7 +736,8 @@ onUnmounted(() => {
             ✕
           </button>
         </div>
-        <div class="settings-layout">
+        <div class="settings-layout c-loading-host">
+          <CLoadingOverlay :active="settingsBusy" />
           <nav class="settings-nav" :aria-label="t('settings.title')">
             <button
               v-for="g in GROUPS"
@@ -816,6 +853,47 @@ onUnmounted(() => {
                     {{ t('settings.artifact.full') }}
                   </label>
                 </div>
+                <label class="settings-checkbox">
+                  <input
+                    type="checkbox"
+                    :checked="artifactSectionAccordion"
+                    @change="toggleArtifactSectionAccordion"
+                  />
+                  {{ t('settings.artifact.accordion') }}
+                </label>
+                <p class="settings-section-desc">{{ t('settings.artifact.sectionDesc') }}</p>
+                <div
+                  class="settings-radio-group"
+                  role="radiogroup"
+                  :aria-label="t('settings.artifact.sectionGroupLabel')"
+                  :aria-disabled="artifactSectionAccordion"
+                >
+                  <label class="settings-radio">
+                    <input
+                      type="radio"
+                      name="artifactSectionDefault"
+                      value="expanded"
+                      :checked="artifactSectionDefault === 'expanded'"
+                      :disabled="artifactSectionAccordion"
+                      @change="setArtifactSectionDefault('expanded')"
+                    />
+                    {{ t('settings.artifact.sectionExpanded') }}
+                  </label>
+                  <label class="settings-radio">
+                    <input
+                      type="radio"
+                      name="artifactSectionDefault"
+                      value="collapsed"
+                      :checked="artifactSectionDefault === 'collapsed'"
+                      :disabled="artifactSectionAccordion"
+                      @change="setArtifactSectionDefault('collapsed')"
+                    />
+                    {{ t('settings.artifact.sectionCollapsed') }}
+                  </label>
+                </div>
+                <p v-if="artifactSectionAccordion" class="settings-section-desc">
+                  ⓘ {{ t('settings.artifact.sectionForcedHint') }}
+                </p>
               </section>
               <section class="settings-section">
                 <h3 class="settings-section-title">{{ t('settings.chatFeedback.title') }}</h3>
@@ -1390,6 +1468,7 @@ onUnmounted(() => {
 
 .settings-layout {
   display: flex;
+  flex-direction: row;
   flex: 1;
   min-height: 0;
 }
@@ -1494,6 +1573,14 @@ onUnmounted(() => {
 .settings-checkbox input[type='checkbox'] {
   margin: 0;
   accent-color: var(--accent);
+}
+
+/* Control bị khoá (vd radio trạng thái section khi accordion bật) — dùng chung cho
+   mọi nhóm setting, không tạo class riêng. */
+.settings-radio:has(input:disabled),
+.settings-checkbox:has(input:disabled) {
+  opacity: 0.55;
+  cursor: default;
 }
 
 .settings-mode-row {

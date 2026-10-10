@@ -14,7 +14,7 @@ Subagent chuyên trách implement code theo design đã được approve. Phase 
 - Đọc `design.md`, `test-spec.md` và coding rules
 - Implement thay đổi trực tiếp lên codebase, code (và test) phải thoả từng TC trong `test-spec.md`
 - Commit với message `wip: implement <task-id>`
-- Nếu gặp câu hỏi blocking → tạo `qa.md` và dừng
+- Nếu gặp câu hỏi blocking → gọi MCP tool `create_qa` và dừng
 
 ## Đầu vào
 
@@ -30,11 +30,11 @@ Subagent chuyên trách implement code theo design đã được approve. Phase 
 Đọc `.dev-team-agent/tasks/<task-id>/design.md` toàn bộ, đặc biệt §4 Implementation Details.
 
 Đọc `.dev-team-agent/tasks/<task-id>/test-spec.md` (bắt buộc). Nếu file không tồn tại:
-- Tạo `.dev-team-agent/tasks/<task-id>/qa.md` hỏi xác nhận cách xử lý trước khi code
+- Gọi MCP tool `create_qa` hỏi xác nhận cách xử lý trước khi code
 - Dừng — không tự đặt case thay thế
 
 Nếu có điểm mơ hồ trong `design.md §4` cần xác nhận trước khi code:
-- Tạo `.dev-team-agent/tasks/<task-id>/qa.md` với câu hỏi cụ thể
+- Gọi MCP tool `create_qa` với câu hỏi cụ thể
 - Dừng — không implement phần chưa rõ
 
 ### Bước 2: Viết code
@@ -46,7 +46,7 @@ Tuân theo rule coding (project rule ưu tiên, `coding-rules` fallback):
 - Không refactor code ngoài scope
 - Security: prepared statements, htmlspecialchars, CSRF
 - Code (và test do implementer viết) phải thoả từng TC trong `test-spec.md`; có thể viết thêm test bổ sung cho chi tiết kỹ thuật nội bộ nhưng không thay thế TC đã định
-- Nếu một TC trong `test-spec.md` mâu thuẫn với cách implement ở `design.md §4` hoặc nằm ngoài `§6 Out of scope`: tạo `qa.md`, dừng — không tự sửa `test-spec.md`, không tự nới case về phía dễ code hơn
+- Nếu một TC trong `test-spec.md` mâu thuẫn với cách implement ở `design.md §4` hoặc nằm ngoài `§6 Out of scope`: gọi MCP tool `create_qa`, dừng — không tự sửa `test-spec.md`, không tự nới case về phía dễ code hơn
 
 **Khi pipeline có bước `test-implementer` sau `reviewer`**: viết test **không** thuộc bước này.
 
@@ -69,7 +69,7 @@ git commit -m "wip: implement <task-id>"
    - Không có mục → bỏ qua.
 4. Khi hạng mục **NG**:
    - Không phải blocking → **tự healing** trong scope phase rồi mới báo DONE.
-   - Blocking (cần người quyết) → tạo `qa.md` và báo `BLOCKED` — **chỉ** trường hợp này mới tạo QA vì checklist.
+   - Blocking (cần người quyết) → gọi MCP tool `create_qa` và báo `BLOCKED` — **chỉ** trường hợp này mới tạo QA vì checklist.
 5. Không nhúng checklist đặc thù repo vào agent.
 
 ## Kết quả trả về

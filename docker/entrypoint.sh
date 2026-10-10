@@ -276,6 +276,46 @@ sync_cursor_cli_auth() {
   fi
 }
 
+# Phải chạy sau sync_claude_auth: bước đó cp đè settings.json từ /mnt/host-claude.
+setup_rtk() {
+  if [ "${RTK_HOOK_ENABLED:-1}" != "1" ]; then
+    echo "[dev-team-dashboard] rtk hook disabled (RTK_HOOK_ENABLED=${RTK_HOOK_ENABLED})"
+    return 0
+  fi
+  if ! command -v rtk >/dev/null 2>&1; then
+    echo "[dev-team-dashboard] WARNING: rtk not found in PATH — skip token compression hook" >&2
+    return 0
+  fi
+
+  # Volume rtk-data do Docker tạo thuộc root:root — chown trước khi drop privileges.
+  # Guard mkdir: `set -e` đang bật, không để tính năng phụ trợ chặn container start.
+  if ! mkdir -p /home/dashboard/.local/share/rtk 2>/dev/null; then
+    echo "[dev-team-dashboard] WARNING: cannot create rtk data dir — skip token compression hook" >&2
+    return 0
+  fi
+  own /home/dashboard/.local/share/rtk
+
+  if runuser -u "$RUN_NAME" -- env \
+      HOME=/home/dashboard \
+      CLAUDE_CONFIG_DIR="${CLAUDE_CONFIG_DIR:-/home/dashboard/.claude}" \
+      PATH="$PATH" \
+      RTK_TELEMETRY_DISABLED="${RTK_TELEMETRY_DISABLED:-1}" \
+      rtk init --global --hook-only --auto-patch >/dev/null 2>&1
+  then
+    rtk_ver=$(runuser -u "$RUN_NAME" -- env HOME=/home/dashboard PATH="$PATH" \
+      rtk --version 2>/dev/null || true)
+    if grep -q 'rtk hook claude' \
+      "${CLAUDE_CONFIG_DIR:-/home/dashboard/.claude}/settings.json" 2>/dev/null
+    then
+      echo "[dev-team-dashboard] rtk hook registered (${rtk_ver:-unknown})"
+    else
+      echo "[dev-team-dashboard] WARNING: rtk init exit 0 but no 'rtk hook claude' in settings.json" >&2
+    fi
+  else
+    echo "[dev-team-dashboard] WARNING: rtk init failed — continuing without token compression" >&2
+  fi
+}
+
 if [ -d /mnt/host-claude ]; then
   sync_claude_auth
 else
@@ -293,6 +333,13 @@ export HOME=/home/dashboard
 export USER="$RUN_NAME"
 export CLAUDE_CONFIG_DIR=/home/dashboard/.claude
 export PATH="/home/dashboard/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+# sync_cursor_cli_auth tạo ~/.config dưới root ở nhánh không có Cursor auth, và `own` đầu file
+# chạy trước nó. Không gắn vào công tắc rtk.
+own /home/dashboard/.config /home/dashboard/.cache
+
+# `|| true`: fail-open — hook là tính năng phụ trợ, không được chặn `exec` ở cuối file.
+setup_rtk || true
 
 if command -v git >/dev/null 2>&1; then
   # Only trust the mounted project — never wildcard every repo.

@@ -5,11 +5,22 @@ import os from 'node:os'
 import path from 'node:path'
 import { createApiHandler } from '../../../../src/backend/devTeamApi.js'
 import { createRegistryContext } from '../../../../src/backend/registry.js'
+import {
+  setDefaultRunner,
+  upsertConnection,
+  upsertRunner,
+} from '../../../../src/features/runner/business/index.js'
 
 // Route-level contract for the artifact quick-actions endpoints, booted the same
 // way as the golden test (real node:http around createApiHandler + a throwaway
 // `.dev-team-agent/` fixture). Kept separate from api.golden.test.ts so it can
 // seed its own artifact-actions.yaml without disturbing the golden fixture.
+//
+// T6fabee9b: đường artifact-action nay đi qua `resolveStepRunnerId` như 6 đường
+// start job còn lại, nên một `runner_id` trỏ runner không tồn tại bị LOẠI thay
+// vì được mang nguyên vào job record. Vì vậy suite này phải seed runner thật —
+// trước đây nó cố ý chạy trên một registry rỗng và lấy chính id rác làm bằng
+// chứng rằng `action.runner_id` được truyền qua (test-spec §5.2).
 
 let server: http.Server
 let base: string
@@ -47,6 +58,20 @@ beforeAll(async () => {
   process.env.DEV_TEAM_DASHBOARD_HOME = home
   delete process.env.DEV_TEAM_API_TOKEN
   delete process.env.DEV_TEAM_ROOT
+
+  // Registry thật cho suite: một default dùng được + hai runner mà fixture
+  // artifact-action trỏ tới. Provider hậu tố `-api` ⇒ họ `ai-api` ⇒ đủ điều
+  // kiện làm default (`providerFamilyOf`).
+  upsertConnection({
+    id: 'aa-conn',
+    kind: 'local-console',
+    providerId: 'stub-artifact-actions-api',
+    cliPath: 'stub',
+  })
+  for (const id of ['aa-default-runner', 'runner-from-action', 'runner-from-request']) {
+    upsertRunner({ id, connectionId: 'aa-conn', config: {} })
+  }
+  setDefaultRunner('aa-default-runner')
 
   fs.mkdirSync(path.join(root, 'tasks', 'T1'), { recursive: true })
   fs.writeFileSync(path.join(root, 'tasks', 'T1', 'design.md'), '# Design T1\n')
@@ -397,12 +422,47 @@ describe('POST /api/artifact-actions/run', () => {
       expect(r.status).toBe(201)
       const { job } = await r.json()
       expect(job.userPrompt).toBe('Giải thích: đoạn bôi đen')
-      // Neither fixture runner id exists in the registry, so `getRunner` returns
-      // null — `submitJob` then falls back to the *requested* id verbatim,
-      // which is enough to prove `action.runner_id` was threaded through.
+      // `runner-from-action` tồn tại thật và dùng được, nên pin thắng — vẫn
+      // chứng minh `action.runner_id` được truyền qua, nhưng 🚫 không còn dựa
+      // vào việc `submitJob` giữ nguyên một id rác.
       expect(job.runnerId).toBe('runner-from-action')
     })
 
+    test('TC-D19: action.runner_id trỏ runner đã xoá ⇒ job rơi về default, 🚫 không mang id rác', async () => {
+      await req('PUT', '/api/artifact-actions', {
+        body: JSON.stringify({
+          version: 1,
+          actions: [
+            {
+              id: 'explain-selection',
+              label: 'Giải thích đoạn chọn',
+              artifact_patterns: ['design.md'],
+              agent_ref: 'dev-agent-teams:doc-reviewer',
+              prompt_template: 'Giải thích: {{selection}}',
+              attach_points: ['artifact-selection'],
+              runner_id: 'runner-da-bi-xoa',
+            },
+          ],
+        }),
+      })
+
+      const r = await req('POST', '/api/artifact-actions/run', {
+        body: JSON.stringify({
+          taskId: 'T1',
+          actionId: 'explain-selection',
+          artifactName: 'design.md',
+          selectedText: 'x',
+        }),
+      })
+      expect(r.status).toBe(201)
+      const { job } = await r.json()
+      // Trước fix, chỗ này là `'runner-da-bi-xoa'` — một id không trỏ vào đâu cả,
+      // nằm trong job record rồi lan tiếp sang vòng chat kế thừa (G5).
+      expect(job.runnerId).toBe('aa-default-runner')
+      expect(job.runnerId).not.toBe('runner-da-bi-xoa')
+    })
+
+    // `runner-from-request` cũng phải tồn tại thật, cùng lý do với ca trên.
     test('request runnerId still wins over the action default', async () => {
       const r = await req('POST', '/api/artifact-actions/run', {
         body: JSON.stringify({

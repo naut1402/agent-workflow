@@ -8,9 +8,11 @@ import {
   handleEvent,
   identifyTask,
   readTaskPhase,
+  stepResultOf,
 } from '../../../../src/features/orchestrator/business/decisionLoop.js'
 import { DECISION_SENTINEL } from '../../../../src/features/orchestrator/schemas/orchestrator.js'
 import { listJobs } from '../../../../src/features/runner/business/index.js'
+import { createFileDriver } from '../../../../src/features/knowledge/business/fileDriver.js'
 
 // Bảng quyết định §4.2.4 + các bất biến chống vòng lặp. Chấm bằng event phát ra
 // (`orchestrator.dispatched` / `orchestrator.halted`) — đúng bề mặt mà
@@ -680,5 +682,351 @@ describe('lượt agent hỏng ⇒ pipeline KHÔNG kẹt (TC-35)', () => {
     )
     await handleEvent(ev('job.finished', { jobId: id, taskId: 'V3', devTeamRoot: root }))
     expect(dispatched()).toHaveLength(0)
+  })
+})
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * T8eb14482 — cấu hình `orchestrator.system_prompt`/`knowledge_inputs`.
+ *
+ * `writePipeline()` của file này chỉ nhận `enabled` + agent cố định, nên các
+ * case dưới đây ghi `pipeline.yaml` riêng thay vì mở rộng hàm chung.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+function writePipelineWithOrchConfig(extra: string) {
+  fs.writeFileSync(
+    path.join(root, 'pipeline.yaml'),
+    [
+      'version: 1',
+      `orchestrator: { enabled: true, agent: "a:orch", ${extra} }`,
+      'steps:',
+      '  - { id: implementer, name: Implement, agent: "a:impl" }',
+      '  - { id: reviewer, name: Review, agent: "a:rev", hitl: { mode: manual, gate_id: hitl-review } }',
+    ].join('\n'),
+    'utf8',
+  )
+}
+
+describe('cấu hình orchestrator (system_prompt/knowledge_inputs) — T8eb14482', () => {
+  test('TC-CFG-01: system_prompt trong pipeline.yaml ⇒ userPrompt của lượt mới chứa đúng nội dung', async () => {
+    writePipelineWithOrchConfig(
+      'system_prompt: "Review có PO thì tự quay lại implementer để xử lý tiếp, không dừng chờ người."',
+    )
+    seedTask('CFG1', { current_phase: 'reviewer' })
+    await handleEvent(ev('orchestrator.start_requested', { taskId: 'CFG1', devTeamRoot: root }))
+
+    const turns = turnsOf('CFG1')
+    expect(turns).toHaveLength(1)
+    expect(turns[0].userPrompt).toContain(
+      'Review có PO thì tự quay lại implementer để xử lý tiếp, không dừng chờ người.',
+    )
+  })
+
+  test('TC-CFG-02: pipeline.yaml không khai 2 field mới ⇒ prompt không có phần hướng dẫn/knowledge bổ sung', async () => {
+    writePipeline(true) // pipeline chuẩn của suite — không có system_prompt/knowledge_inputs
+    seedTask('CFG2', { current_phase: 'reviewer' })
+    await handleEvent(ev('orchestrator.start_requested', { taskId: 'CFG2', devTeamRoot: root }))
+
+    const turns = turnsOf('CFG2')
+    expect(turns).toHaveLength(1)
+    expect(turns[0].userPrompt).not.toContain('Hướng dẫn bổ sung')
+    expect(turns[0].userPrompt).not.toContain('## Knowledge')
+  })
+
+  test('TC-CFG-03: knowledge_inputs trộn id hợp lệ + không tồn tại ⇒ không crash, cả hai phần đều thấy được', async () => {
+    await createFileDriver(root).write({
+      slug: 'huong-dan-po',
+      scope: 'project',
+      content: 'Nội dung knowledge hợp lệ về xử lý PO.',
+    })
+    writePipelineWithOrchConfig('knowledge_inputs: ["project/huong-dan-po", "project/khong-ton-tai"]')
+    seedTask('CFG3', { current_phase: 'reviewer' })
+    await handleEvent(ev('orchestrator.start_requested', { taskId: 'CFG3', devTeamRoot: root }))
+
+    const turns = turnsOf('CFG3')
+    expect(turns).toHaveLength(1)
+    expect(turns[0].userPrompt).toContain('Nội dung knowledge hợp lệ về xử lý PO.')
+    expect(turns[0].userPrompt).toContain('not found')
+  })
+})
+
+// TC-AUTO-01/02 — khi orchestrator có system_prompt hướng dẫn xử lý case lặp,
+// một quyết định hợp lệ ở gate_rejected/job_failed phải dispatch bình thường,
+// KHÔNG bị coi là bất thường hay bị chặn bởi việc mới thêm config. Đây là cơ
+// chế MÀ auto-navigate dựa vào (agent đọc guidance rồi trả quyết định) —
+// output thật của LLM không tất định nên không mô phỏng được trong unit test;
+// phần "agent có tuân theo guidance hay không" ghi ở test-result.md mục kiểm
+// chứng thủ công.
+describe('TC-AUTO-01/02 — quyết định hợp lệ ở gate_rejected/job_failed vẫn dispatch bình thường khi có guidance', () => {
+  test('TC-AUTO-01: review có PO (gate_rejected) + system_prompt cấu hình ⇒ quyết định resume implementer được dispatch, không halt', async () => {
+    writePipelineWithOrchConfig('system_prompt: "Review có PO thì quay lại implementer."')
+    seedTask('AUTO1')
+    const id = writeJob(
+      'auto1',
+      { taskId: 'AUTO1', orchestratorJob: true, orchestratorTrigger: 'gate_rejected' },
+      {
+        status: 'succeeded',
+        stdout: `${DECISION_SENTINEL} {"action":"start","stepId":"implementer","reason":"review có PO, quay lại xử lý"}`,
+      },
+    )
+    await handleEvent(ev('job.finished', { jobId: id, taskId: 'AUTO1', devTeamRoot: root }))
+    expect(haltReasons()).toHaveLength(0)
+    expect(dispatched().filter((e) => e.payload.stepId === 'implementer')).toHaveLength(1)
+  })
+
+  test('TC-AUTO-02: test phát hiện bug (job_failed) + system_prompt cấu hình ⇒ quyết định resume implementer được dispatch, không halt', async () => {
+    writePipelineWithOrchConfig('system_prompt: "Test phát hiện bug thì quay lại implementer để sửa."')
+    seedTask('AUTO2')
+    const id = writeJob(
+      'auto2',
+      { taskId: 'AUTO2', orchestratorJob: true, orchestratorTrigger: 'job_failed' },
+      {
+        status: 'succeeded',
+        stdout: `${DECISION_SENTINEL} {"action":"start","stepId":"implementer","reason":"test phát hiện bug, quay lại sửa"}`,
+      },
+    )
+    await handleEvent(ev('job.finished', { jobId: id, taskId: 'AUTO2', devTeamRoot: root }))
+    expect(haltReasons()).toHaveLength(0)
+    expect(dispatched().filter((e) => e.payload.stepId === 'implementer')).toHaveLength(1)
+  })
+
+  // Edge case của TC-AUTO-01/02: không cấu hình system_prompt ⇒ giữ hành vi cũ
+  // (không phải hồi quy) — đã phủ bởi describe TC-SAFE ngay dưới đây và bởi
+  // "lượt agent hỏng ⇒ pipeline KHÔNG kẹt (TC-35)" phía trên (không có config
+  // orchestrator mới nào trong các case đó).
+})
+
+// TC-SAFE-01/02 — bất biến an toàn: dù orchestrator ĐÃ có system_prompt/
+// knowledge_inputs cấu hình cho đúng case gate_rejected/job_failed, output
+// hỏng/rỗng của agent quyết định vẫn phải halt — cấu hình mới không được che
+// mất guard này (giữ nguyên `FALLBACK_TRIGGERS`/`recoverFromBadTurn`, D1).
+describe('TC-SAFE-01/02 — guard halt KHÔNG bị cấu hình orchestrator mới che mất', () => {
+  test('TC-SAFE-01: gate_rejected, có system_prompt, JSON hỏng ⇒ vẫn halt', async () => {
+    writePipelineWithOrchConfig('system_prompt: "Review có PO thì quay lại implementer."')
+    seedTask('SAFE1', { current_phase: 'reviewer' })
+    const id = writeJob(
+      'safe1',
+      { taskId: 'SAFE1', orchestratorJob: true, orchestratorTrigger: 'gate_rejected' },
+      { status: 'succeeded', stdout: `${DECISION_SENTINEL} {khong-phai-json` },
+    )
+    await handleEvent(ev('job.finished', { jobId: id, taskId: 'SAFE1', devTeamRoot: root }))
+    expect(haltReasons().some((r) => r.includes('invalid decision'))).toBe(true)
+    expect(dispatched().filter((e) => e.payload.action === 'start')).toHaveLength(0)
+  })
+
+  test('TC-SAFE-02: job_failed, có system_prompt, output rỗng ⇒ vẫn halt', async () => {
+    writePipelineWithOrchConfig('system_prompt: "Test phát hiện bug thì quay lại implementer."')
+    seedTask('SAFE2')
+    const id = writeJob(
+      'safe2',
+      { taskId: 'SAFE2', orchestratorJob: true, orchestratorTrigger: 'job_failed' },
+      { status: 'succeeded' },
+    )
+    await handleEvent(ev('job.finished', { jobId: id, taskId: 'SAFE2', devTeamRoot: root }))
+    expect(haltReasons()).toContain('decision output unavailable')
+    expect(dispatched()).toHaveLength(0)
+  })
+})
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * T6427b18c — nhóm D: giao thức `STEP_SUMMARY` (con → cha).
+ *
+ * `stepResultOf` là hợp đồng giữa hai node: nút con viết một dòng cuối, nút cha
+ * đọc đúng dòng đó. Chấm thuần trên (job record) → (StepResult), không cần bus.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+function jobWith(stdout: string | undefined, extra: Record<string, unknown> = {}): any {
+  return { id: 'j', status: 'succeeded', ...(stdout === undefined ? {} : { stdout }), ...extra }
+}
+
+describe('T6427b18c nhóm D — stepResultOf đọc STEP_SUMMARY', () => {
+  test('TC-36: lấy dòng STEP_SUMMARY làm kết quả, bỏ log làm việc', () => {
+    const stdout = [
+      'Đang đọc file…',
+      'Chỉnh sửa 3 file…',
+      'STEP_SUMMARY: Đã sửa sessionLedger, ghi design.md, còn chờ review.',
+    ].join('\n')
+    expect(stepResultOf(jobWith(stdout), 'designer', 'succeeded')).toEqual({
+      stepId: 'designer',
+      status: 'succeeded',
+      artifacts: [],
+      result: 'Đã sửa sessionLedger, ghi design.md, còn chờ review.',
+      fromTail: false,
+    })
+  })
+
+  test('TC-37: nhiều dòng STEP_SUMMARY ⇒ lấy dòng CUỐI có nội dung', () => {
+    const a = stepResultOf(
+      jobWith(['STEP_SUMMARY: bản nháp', 'nghĩ lại…', 'STEP_SUMMARY:', 'STEP_SUMMARY: bản chốt'].join('\n')),
+      'designer',
+      'succeeded',
+    )
+    expect(a).toMatchObject({ result: 'bản chốt', fromTail: false })
+
+    // Dòng cuối rỗng ⇒ bỏ qua, lùi lên dòng trước, KHÔNG rơi về fromTail.
+    const b = stepResultOf(
+      jobWith(['STEP_SUMMARY: bản nháp', 'STEP_SUMMARY:'].join('\n')),
+      'designer',
+      'succeeded',
+    )
+    expect(b).toMatchObject({ result: 'bản nháp', fromTail: false })
+  })
+
+  test('TC-38: dòng bọc backtick / có khoảng trắng thừa vẫn nhận', () => {
+    expect(stepResultOf(jobWith('log\n  `STEP_SUMMARY: nội dung`  '), 's', 'succeeded')).toMatchObject({
+      result: 'nội dung',
+      fromTail: false,
+    })
+    expect(stepResultOf(jobWith('log\n```STEP_SUMMARY: nội dung```'), 's', 'succeeded')).toMatchObject({
+      result: 'nội dung',
+      fromTail: false,
+    })
+  })
+
+  test('TC-39: không có STEP_SUMMARY ⇒ fallback đuôi output', () => {
+    const stdout = `${'log dài '.repeat(500)}\nkết luận ở cuối`
+    const r = stepResultOf(jobWith(stdout), 'implementer', 'succeeded')
+    expect(r.fromTail).toBe(true)
+    // Cắt theo ngân sách là việc của `renderStepResult` (TC-28), không phải ở đây.
+    expect(r.result).toBe(stdout)
+  })
+
+  test('TC-40: STEP_SUMMARY nằm GIỮA một dòng khác KHÔNG được nhận', () => {
+    const line = 'Agent được dặn phải in STEP_SUMMARY: ở cuối'
+    const r = stepResultOf(jobWith(line), 'implementer', 'succeeded')
+    expect(r.fromTail).toBe(true)
+    expect(r.result).toBe(line)
+  })
+
+  test('TC-42: artifacts lấy từ job, mảng rỗng khi job không ghi gì', () => {
+    expect(stepResultOf(jobWith('x', { artifactsFound: ['design.md', 'qa.md'] }), 's', 'succeeded').artifacts).toEqual([
+      'design.md',
+      'qa.md',
+    ])
+    expect(stepResultOf(jobWith('x'), 's', 'succeeded').artifacts).toEqual([])
+    expect(stepResultOf(null, 's', 'failed').artifacts).toEqual([])
+  })
+})
+
+/*
+ * §6.1 + §6.4 của test-spec — bổ sung sau review.
+ *
+ * `job.stdout` của provider `sessionCapture: 'parse-json'` ĐÃ được provider bóc
+ * khỏi khung JSON (`providers/claude-code-cli.ts`, `if (parsed.result != null)
+ * stdout = parsed.result`), nên giá trị persist ở `jobQueue` luôn là text thuần.
+ * Bóc lần thứ hai ở `stepResultOf` không giúp gì và có thể nuốt mất chính dòng
+ * `STEP_SUMMARY` mà task này sinh ra.
+ */
+describe('T6427b18c nhóm D — job.stdout là TEXT THUẦN, không bóc lần hai', () => {
+  test("TC-41': stdout text thuần của provider parse-json đọc đúng STEP_SUMMARY", () => {
+    expect(stepResultOf(jobWith('đã sửa 3 file\nSTEP_SUMMARY: xong rồi'), 's', 'succeeded')).toMatchObject({
+      result: 'xong rồi',
+      fromTail: false,
+    })
+  })
+
+  test('TC-41″: văn bản có chứa object JSON mang khoá `result` KHÔNG được bóc', () => {
+    const stdout = 'Here is the config:\n{"result": "something else"}\nSTEP_SUMMARY: thật sự xong'
+    const r = stepResultOf(jobWith(stdout), 's', 'succeeded')
+    expect(r.result).toBe('thật sự xong')
+    expect(r.fromTail).toBe(false)
+    expect(r.result).not.toContain('something else')
+  })
+
+  test('TC-41‴: văn bản nhiều khối ngoặc không làm hỏng việc đọc STEP_SUMMARY', () => {
+    expect(stepResultOf(jobWith('tôi sửa {a:1} và {b:2}\nSTEP_SUMMARY: ok'), 's', 'succeeded')).toMatchObject({
+      result: 'ok',
+      fromTail: false,
+    })
+  })
+
+  test('TC-D-X2: STEP_SUMMARY kết câu bằng code span không bị ăn backtick', () => {
+    const r = stepResultOf(jobWith('log\nSTEP_SUMMARY: đã ghi `design.md`'), 's', 'succeeded')
+    expect(r.result).toBe('đã ghi `design.md`')
+  })
+
+  /*
+   * TC-D-X1 — hai ca "nút con không in STEP_SUMMARY" và "không đọc được
+   * stdout" hiện KHÔNG phân biệt được từ phía nút cha: `shouldPersistStdout`
+   * chỉ persist stdout cho provider agent-CLI, nên connection `*-api` /
+   * `console-command` không có `job.stdout` và cả hai ca đều ra `fromTail: true`.
+   *
+   * Cách phân biệt (`source: 'unavailable'`, hoặc đọc `STEP_SUMMARY` ngay trong
+   * `runJob` rồi ghi vào `job.metadata.stepSummary`) CHƯA được chốt ở
+   * `design.md` §4.4, nên ở đây chỉ khoá hành vi HIỆN TẠI — để lần chốt sau
+   * phải sửa test một cách tường minh chứ không trôi im lặng.
+   */
+  test('TC-D-X1 (characterization): stdout vắng mặt và stdout không có tóm tắt hiện ra cùng một hình dạng', () => {
+    const noStdout = stepResultOf(jobWith(undefined), 's', 'succeeded')
+    const noSummary = stepResultOf(jobWith('log dài\nkhông có tóm tắt'), 's', 'succeeded')
+    expect(noStdout).toMatchObject({ result: '', fromTail: true })
+    expect(noSummary).toMatchObject({ fromTail: true })
+    // Cùng một cờ cho hai nguyên nhân khác hẳn nhau — đây là điểm còn nợ.
+    expect(noStdout.fromTail).toBe(noSummary.fromTail)
+  })
+})
+
+/*
+ * TC-43 / §4.2-C — lượt điều phối LUÔN submit với `sessionMode: 'resume'`.
+ * Quyết định new/resume do LEDGER đưa ra (entry khoá theo `stepId`), không do
+ * guard `hasOwnSession` ở orchestrator như trước.
+ */
+describe('T6427b18c — job điều phối luôn submit sessionMode resume (TC-43)', () => {
+  test('lượt điều phối mang sessionMode resume + stepId của chính nó, không bị guard chặn', async () => {
+    seedTask('SM1', { current_phase: 'reviewer' })
+    const id = finishedStepJob('sm1', 'SM1')
+    await handleEvent(ev('job.finished', { jobId: id, taskId: 'SM1', devTeamRoot: root }))
+
+    const turns = turnsOf('SM1')
+    expect(turns).toHaveLength(1)
+    // `resume` kể cả ở lượt ĐẦU: guard `hasOwnSession` cũ đã bị bỏ, việc chọn
+    // new/resume là của `resolveSessionPlan` dựa trên `stepId` (TC-03/TC-04).
+    expect(turns[0].metadata.inputSessionMode).toBe('resume')
+    expect(turns[0].metadata.stepId).toBe('__orchestrator__')
+  })
+
+  test('lượt thứ hai của cùng task vẫn resume — không lượt nào ép new', async () => {
+    seedTask('SM2', { current_phase: 'reviewer' })
+    await handleEvent(ev('job.finished', { jobId: finishedStepJob('sm2a', 'SM2'), taskId: 'SM2', devTeamRoot: root }))
+    await handleEvent(ev('job.finished', { jobId: finishedStepJob('sm2b', 'SM2'), taskId: 'SM2', devTeamRoot: root }))
+
+    const turns = turnsOf('SM2')
+    expect(turns.length).toBeGreaterThanOrEqual(2)
+    expect(turns.every((t) => t.metadata.inputSessionMode === 'resume')).toBe(true)
+    expect(turns.every((t) => t.metadata.stepId === '__orchestrator__')).toBe(true)
+  })
+})
+
+/*
+ * TC-R6 — tập field của domain event không đổi. Task này chỉ đổi NỘI DUNG
+ * prompt và cách ly ledger; event là hợp đồng với UI/automation nên phải đứng yên.
+ */
+describe('T6427b18c — domain event giữ nguyên payload (TC-R6)', () => {
+  test('orchestrator.dispatched giữ đúng tập field (taskId, projectId, devTeamRoot, action, reason)', async () => {
+    seedTask('EV1', { current_phase: 'reviewer', hitl_pending: 'hitl-review' })
+    const id = writeJob(
+      'ev1',
+      { taskId: 'EV1', orchestratorJob: true, orchestratorTrigger: 'step_finished' },
+      { status: 'succeeded', stdout: `${DECISION_SENTINEL} {"action":"summary","summary":"xong","reason":"chờ người"}` },
+    )
+    await handleEvent(ev('job.finished', { jobId: id, taskId: 'EV1', devTeamRoot: root }))
+
+    const d = dispatched()
+    expect(d).toHaveLength(1)
+    expect(Object.keys(d[0].payload).sort()).toEqual(['action', 'devTeamRoot', 'projectId', 'reason', 'taskId'])
+    expect(d[0].payload).toMatchObject({ taskId: 'EV1', devTeamRoot: root, action: 'summary', reason: 'chờ người' })
+  })
+
+  test('orchestrator.halted giữ đúng tập field', async () => {
+    seedTask('EV2', { current_phase: 'reviewer' })
+    const id = writeJob(
+      'ev2',
+      { taskId: 'EV2', orchestratorJob: true, orchestratorTrigger: 'step_finished' },
+      { status: 'succeeded', stdout: `${DECISION_SENTINEL} {"action":"halt","reason":"bó tay"}` },
+    )
+    await handleEvent(ev('job.finished', { jobId: id, taskId: 'EV2', devTeamRoot: root }))
+
+    const h = seen.filter((e) => e.type === 'orchestrator.halted')
+    expect(h).toHaveLength(1)
+    expect(Object.keys(h[0].payload).sort()).toEqual(['devTeamRoot', 'projectId', 'reason', 'taskId'])
   })
 })

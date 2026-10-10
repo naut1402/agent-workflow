@@ -1,6 +1,7 @@
 // Shared types for the runner execution plane (U0005).
 
 import type { UsageSnapshot } from '../../../shared/log/schema.js'
+import type { McpJobDelivery } from './mcpDelivery/McpJobDelivery.js'
 
 export interface CredentialProfile {
   id: string
@@ -60,7 +61,10 @@ export interface ProviderCatalogEntry {
   label: string
   /** agent-cli may be set as default AI runner; console-command may not. */
   family: ProviderFamily
-  /** How this provider receives MCP config — `listProviderCatalog` fills it in. */
+  /**
+   * How this provider receives MCP config — `listProviderCatalog` (registry.ts)
+   * fills it in from `RunnerProvider.mcpDelivery.kind`.
+   */
   mcpDelivery?: McpDelivery
 }
 
@@ -142,6 +146,18 @@ export interface ExecuteResult {
    * a reviewable change. See jobQueue.ts runJob.
    */
   stdout?: string
+  /**
+   * Bản `stdout` đã mask secret MCP — DÀNH RIÊNG cho biên persist/API
+   * (`JobRecord.stdout`, `metadata.stepSummary`, `GET /api/jobs`).
+   *
+   * 🚫 Không dùng cho đường chức năng: `foldProposalIntoScratch` và
+   * `parseOrchestratorDecision` đọc `stdout` THÔ — mask là split/join mù, nó cắt
+   * giữa artifact và giữa dòng `ORCHESTRATOR_DECISION`.
+   *
+   * Không set khi job không bật MCP server nào ⇒ caller rơi về `stdout`, hành vi
+   * cũ không đổi một byte.
+   */
+  maskedStdout?: string
   /** Captured CLI session id (preset-uuid or parse-json providers). */
   sessionId?: string | null
   /** True when runProcess() killed the child after timeoutMs elapsed (SIGTERM).
@@ -232,6 +248,26 @@ export interface RunnersStore {
   runners: RunnerConfig[]
 }
 
+/** Vì sao runner mặc định đã ghi nhận không dùng được; `ok` = dùng được. */
+export type DefaultRunnerReason =
+  | 'ok'
+  | 'no-runners'
+  | 'unset'
+  | 'missing'
+  | 'disabled'
+  | 'no-connection'
+  | 'not-ai'
+
+/**
+ * Kết quả giải runner mặc định. `runnerId` giữ id **đã ghi nhận** kể cả khi runner
+ * đó không dùng được, để log và UI nêu đúng runner nào đang hỏng.
+ */
+export interface DefaultRunnerResolution {
+  runner: RunnerConfig | null
+  runnerId: string | null
+  reason: DefaultRunnerReason
+}
+
 export interface CredentialsStore {
   version: number
   profiles: CredentialProfile[]
@@ -267,6 +303,12 @@ export interface RunnerProvider {
   providerId: string
   /** Defaults inferred from providerId when omitted (legacy providers). */
   family?: ProviderFamily
+  /**
+   * How this provider receives the job's MCP servers. Omitted ⇒ the provider
+   * takes no MCP (catalog reports `'unsupported'`) — console-command and test
+   * stubs registered via `registerProvider`. Assembled in `registry.ts`.
+   */
+  mcpDelivery?: McpJobDelivery<unknown>
   validateRunnerConfig(config: Record<string, unknown> | undefined): { ok: boolean; errors: string[] }
   validateCredential(profile: CredentialProfile | undefined): { ok: boolean; errors: string[] }
   capabilities(): { supportsAgentFile: boolean; supportsStreaming: boolean; maxConcurrency: number }

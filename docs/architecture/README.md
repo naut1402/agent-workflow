@@ -3,7 +3,7 @@
 > **Tóm tắt trong 30 giây:** `dev-team-dashboard` là một **SPA quan sát** (đọc là chính) cho một orchestrator agent chạy ngoài, xoay quanh 3 trụ cột:
 > 1. **Observability** — đọc state/artifact từ `.dev-team-agent/` (filesystem ngoài, sở hữu bởi orchestrator).
 > 2. **Management** — quản lý project registry + config qua `~/.dev-team-dashboard/` (SQLite + JSON, dashboard tự sở hữu).
-> 3. **Integration** — expose MCP server (stdio) cho Claude Code CLI, REST + SSE cho Web UI.
+> 3. **Integration** — expose MCP server (stdio, có mode `readonly` / `full`) cho Claude Code CLI, REST + SSE cho Web UI.
 
 Kiến trúc viết theo mô hình **C4** (Simon Brown): 4 cấp trừu tượng, thô → mịn — gộp chung cả 4 cấp trong tài liệu này. Riêng mục lục domain event tách sang [`events/`](events/README.md) vì tra cứu độc lập với cấp.
 
@@ -25,13 +25,13 @@ C4Context
   System_Ext(orchestrator, "Orchestrator agent", "Tiến trình chạy ngoài repo này, sở hữu vòng đời task")
   System_Ext(claude, "Claude Code / AI provider", "Sinh nội dung NL: agent draft, chat, review")
   System_Ext(github, "GitHub", "Issue/PR liên kết task")
-  System_Ext(claudeCli, "Claude Code (CLI/IDE)", "Gọi MCP server để CRUD project registry")
+  System_Ext(claudeCli, "Claude Code (CLI/IDE)", "Gọi MCP server để đọc task/artifact/knowledge và CRUD project registry")
 
   Rel(user, dashboard, "Theo dõi, cấu hình", "HTTPS")
   BiRel(dashboard, orchestrator, "Đọc/ghi state", "Filesystem")
   Rel(dashboard, claude, "Sinh nội dung", "HTTPS")
   BiRel(dashboard, github, "Đọc/ghi issue", "REST API")
-  Rel(claudeCli, dashboard, "CRUD project", "MCP stdio")
+  Rel(claudeCli, dashboard, "Đọc task/artifact · CRUD project", "MCP stdio")
 ```
 
 ### Vai trò của từng actor
@@ -42,7 +42,7 @@ C4Context
 | **Orchestrator agent** | Ghi trạng thái + artifact khi chạy pipeline; dashboard đọc để hiển thị | Ngoại lệ: pipeline bật tuỳ chọn điều phối thì dashboard tự giữ quyền điều khiển bước chạy |
 | **Claude Code / AI provider** | Sinh nội dung khi người dùng yêu cầu (agent draft, NL chat) | Không cấu hình provider → fallback heuristic, không chặn luồng |
 | **GitHub** | Liên kết issue với task, đọc/ghi qua REST API | Token cấu hình theo từng project |
-| **Claude Code (CLI/IDE)** | Gọi MCP server để CRUD project registry | Không cần HTTP server chạy — chi tiết ở §2 Container |
+| **Claude Code (CLI/IDE)** | Gọi MCP server để đọc task / artifact / knowledge và CRUD project registry | Không cần HTTP server chạy — chi tiết ở §2 Container |
 
 ---
 
@@ -55,7 +55,7 @@ C4Container
   System_Boundary(dashboard, "dev-team-dashboard") {
     Container(spa, "Frontend SPA", "Vue 3 + Vite", "Nhiều mode qua ModeRegistry — chi tiết ở §3 Component")
     Container(backend, "Backend app", "Hono trên Bun/Node", "1 app, nhiều transport — chi tiết ở §3 Component")
-    Container(mcp, "MCP server", "Bun stdio", "CRUD project registry cho Claude Code")
+    Container(mcp, "MCP server", "Bun stdio", "Đọc task/artifact/knowledge + CRUD project registry cho Claude Code")
     ContainerDb(sqlite, "dashboard.sqlite", "SQLite + Drizzle", "Lưu trữ có cấu trúc dùng chung")
     ContainerDb(registryFile, "projects.json", "JSON file", "Registry danh sách project")
   }
@@ -66,7 +66,7 @@ C4Container
   Rel(backend, dataRoot, "Đọc/ghi state")
   Rel(backend, sqlite, "Đọc/ghi", "Drizzle ORM")
   Rel(backend, registryFile, "Đọc/ghi")
-  Rel(mcp, registryFile, "CRUD project")
+  Rel(mcp, registryFile, "CRUD project (mode full)")
 ```
 
 ### Vai trò từng container
@@ -75,7 +75,7 @@ C4Container
 |---|---|
 | **Frontend SPA** | UI người dùng, nhiều mode — chi tiết §3 Component |
 | **Backend app** | Xử lý mọi route API — chi tiết §3 Component |
-| **MCP server** | Expose project registry cho Claude Code qua stdio |
+| **MCP server** | Expose project registry + nhóm tool đọc task/artifact/knowledge cho Claude Code qua stdio. Mode vận hành (`DEVTEAM_MCP_MODE`, mặc định `readonly`) quyết định tool nào được đăng ký — tool ghi chỉ có ở `full`. Chi tiết tool ở [`docs/mcp/server.md`](../mcp/server.md) |
 | **`dashboard.sqlite`** | DB có cấu trúc, dùng chung nhiều subsystem |
 | **`projects.json`** | Registry project, dùng chung bởi backend và MCP |
 | **`.dev-team-agent/`** *(external)* | Data root của orchestrator ngoài — dashboard chủ yếu quan sát; ngoại lệ node điều phối (`orchestrator.enabled`) — xem §3 Component |
@@ -126,7 +126,7 @@ Domain nằm trong `src/features/<name>/business/`. Coupling xuống: `backend/c
 **Cấu hình / biên soạn (người dùng chỉnh sửa config, nội dung):**
 
 - **Registry** (`src/backend/registry.ts`) — nguồn sự thật cho project registry, dùng chung bởi REST và MCP server.
-- **MCP (vai client)** (`src/features/mcp/`) — store `mcp-servers.json` dưới `registryHome()`, chốt URL riêng qua `assertMcpEndpoint` (`https` mọi host · `http` chỉ loopback/private — cố ý không dùng `fetchUrlSafe`, xem `AGENTS.md` §4 Review); tiêu thụ qua `runner/business/providers/mcpJobConfig.ts` → `claude-code-cli.ts` (`--mcp-config` + `--strict-mcp-config`).
+- **MCP (vai client)** (`src/features/mcp/`) — thực thể `McpServer` «abstract» với hai hiện thực `StdioMcpServer` · `RemoteMcpServer`; `McpRegistry` giữ store `mcp-servers.json` dưới `registryHome()` và là chỗ lắp ráp duy nhất biết hai hiện thực; `McpClient` kết nối (probe / phiên theo job); `SecretMasker` che secret (Node-free, FE dùng chung); kiểu + hằng một nguồn ở `schemas/mcpServer.ts`. `SelfMcpServer` (`extends StdioMcpServer`) là entry trỏ vào chính dashboard cho job điều phối và nguồn hằng hợp đồng với tiến trình `mcp/stdio.ts`. Credential đi qua cổng `CredentialResolver` mà `runner` đăng ký lúc nạp (`useCredentialResolver`), nên `mcp` 🚫 import `runner`; `isPrivateHostname` ở `src/backend/lib/netUtils.ts`. Chốt URL riêng qua `RemoteMcpServer.assertEndpoint` (`https` mọi host · `http` chỉ loopback/private — cố ý không dùng `fetchUrlSafe`, xem `AGENTS.md` §4 Review); tiêu thụ qua `RunnerProvider.mcpDelivery` (`runner/business/mcpDelivery/`, lắp ráp ở `runner/business/registry.ts`): claude nhận file `--mcp-config` + `--strict-mcp-config`, cursor nhận `<workspace>/.cursor/mcp.json` + `--approve-mcps`, họ `ai-api` nhận tool MCP thẳng vào vòng tool-use. Chi tiết: [`docs/mcp/client.md`](../mcp/client.md).
 - **Pipeline / Catalog / Rules** (feature pipeline-editor) — pipeline config layered + merge; catalog agent/skill và rule project đọc theo convention, cộng thêm path khớp `settings.scanPatterns`.
 - **Knowledge** — entry lưu qua file driver đa root; **collection + tag** lưu ở `dashboard.sqlite` (khác driver với entry).
 
@@ -181,6 +181,8 @@ Chi tiết implementation cụ thể — tên file, hàm, bảng schema. Đây l
 | [4.4 DB (SQLite)](#44-db-sqlite) | Trước khi bật `logging.driver: sqlite` hoặc thêm bảng mới |
 | [4.5 Config shell](#45-config-shell) | Không chắc 1 setting nên đặt ở preference shell hay schema business |
 | [4.6 Styling](#46-styling) | Thêm style mới xuyên feature |
+| [`code/runner.md`](code/runner.md) | Sửa id runner/connection, runner mặc định, hoặc cách phân loại family của provider |
+| [`code/monitor.md`](code/monitor.md) | Sửa validate task id ở business `monitor` (`createQa`), hoặc pattern task id của MCP |
 | [`events/`](events/README.md) | Viết subscriber, thêm emit mới, tra cứu 1 domain event cụ thể |
 
 ### 4.1 Frontend
@@ -272,7 +274,7 @@ Preference/version shell tách theo scope chạy: `src/frontend/configs/` cho pr
 | File / thư mục | Vai trò |
 |---|---|
 | `src/frontend/configs/appSettings.ts` | Preference shell (theme/locale/notifications UI); core/plugins dùng. **Không** nhầm với schema business của feature `settings` (`autoscan`, `dashboardSettings`, `githubTokens`, `scanPatterns` ở `features/settings/schemas/`). |
-| `src/backend/configs/appVersion.ts` | Semver từ `package.json`. |
+| `src/backend/configs/appVersion.ts` | Semver đọc thẳng `package.json` (chỉ chạy trên Bun/Node — MCP server dùng). **Không gộp** với `src/frontend/lib/appVersion.ts`: bản FE đọc `__APP_VERSION__` do Vite `define` bơm vào lúc build, vì browser không có `package.json`. Nguồn chân lý của cả hai là `package.json` → `version`. |
 | `src/features/<feature>/schemas/` | Schema domain (task, log, autoscan, …) — Zod + `z.infer`, validate biên I/O của feature đó. |
 | `src/backend/lib/` | Helper Node-only: `fileHelper` (`resolvePathUnder`), `processHelper`, `yamlLib`, `dirModuleLoader`, `arrayUtils`, `dateUtils`. |
 | `src/frontend/lib/` | Helper thuần browser: `theme`, `markdownLib`, `diffLib`, `authToken`, `workflowSteps`, `pipelineArtifactGraph`, `appVersion`. |

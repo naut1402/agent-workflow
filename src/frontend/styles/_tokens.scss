@@ -22,6 +22,10 @@
   --scrollbar-thumb: rgba(215, 221, 228, 0.18);
   --scrollbar-thumb-hover: rgba(215, 221, 228, 0.34);
 
+  /* Scrim của `CLoadingOverlay`. Khai hai giá trị theo `[data-theme]` như các
+     token màu khác: một giá trị dùng chung thì ở light nó thành vệt tối đục. */
+  --overlay-scrim: rgba(15, 20, 25, 0.55);
+
   /* Palette màu tag knowledge — mỗi token khai hai giá trị theo `[data-theme]`
      nên chip đọc được ở cả hai theme. DB chỉ lưu TÊN token (`TAG_COLORS`),
      không lưu hex: đổi bảng màu sau này không phải migrate dữ liệu.
@@ -67,6 +71,8 @@
   --input-surface: #eef1f6;
   --scrollbar-thumb: rgba(26, 35, 50, 0.2);
   --scrollbar-thumb-hover: rgba(26, 35, 50, 0.36);
+
+  --overlay-scrim: rgba(244, 246, 249, 0.62);
 
   /* Cùng 8 token, giá trị tối hơn: bản dark trên nền sáng không đủ tương phản. */
   --tag-slate: #5c6b7a;

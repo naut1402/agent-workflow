@@ -132,3 +132,52 @@ test('sub-sidebar keeps every open list usable at a low viewport', async ({ page
   await expect(skillList).toBeVisible()
   expect(await skillList.evaluate((el) => el.clientHeight)).toBeGreaterThanOrEqual(FLOOR)
 })
+
+// Tbfb52394 · TC-I01 của test-spec — control "Model" trên dialog cấu hình step
+// chỉ hiện khi hệ có > 1 runner chạy-AI-được (AC-3).
+//
+// Hai runner được seed qua API ngay trong spec: `DEV_TEAM_DASHBOARD_HOME` của
+// e2e là thư mục runtime (`test-e2e/.runtime/home`), không phải fixture checked-in,
+// nên không có chỗ nào khác để khai chúng. Editor nạp danh mục runner lúc mount
+// ⇒ phải seed TRƯỚC khi mở mode Pipeline Editor.
+test('step config: chọn model cho step khi có nhiều hơn 1 runner (capture)', async ({ page }, testInfo) => {
+  await page.goto('/')
+
+  const runners = [
+    { id: 'e2e-model-a', name: 'E2E Model A', model: 'claude-sonnet-5' },
+    { id: 'e2e-model-b', name: 'E2E Model B', model: 'claude-opus-5' },
+  ]
+  for (const r of runners) {
+    // `claude-code-cli` ⇒ family `agent-cli` ⇒ đủ điều kiện chạy agent.
+    const conn = await page.request.post('/api/connections', {
+      data: {
+        id: `${r.id}-conn`,
+        label: r.name,
+        kind: 'local-console',
+        providerId: 'claude-code-cli',
+        cliPath: 'stub',
+        config: { model: r.model },
+      },
+    })
+    expect(conn.ok()).toBe(true)
+    const runner = await page.request.post('/api/runners', {
+      data: { id: r.id, name: r.name, connectionId: `${r.id}-conn`, enabled: true, config: {} },
+    })
+    expect(runner.ok()).toBe(true)
+  }
+
+  await openEditor(page)
+
+  await page.locator('.node-editor .node-btn[title="Configure"]').first().click()
+  const dialog = page.locator('.step-config-dialog')
+  await expect(dialog).toBeVisible()
+
+  // Control chỉ tồn tại khi > 1 runner — chính là điều kiện vừa seed ở trên.
+  const modelSelect = dialog.locator('#step-config-runner')
+  await expect(modelSelect).toBeVisible()
+  await modelSelect.locator('.c-select-trigger').click()
+  await expect(dialog.getByRole('option', { name: 'claude-sonnet-5' })).toBeVisible()
+  await expect(dialog.getByRole('option', { name: 'claude-opus-5' })).toBeVisible()
+
+  await capturePage(page, testInfo, 'pipeline-editor-step-model')
+})

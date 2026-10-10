@@ -1,0 +1,628 @@
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import { mcpRegistry } from '../../../../../src/features/mcp/business/McpRegistry.js'
+import { McpServer } from '../../../../../src/features/mcp/business/McpServer.js'
+import { SecretMasker } from '../../../../../src/features/mcp/business/SecretMasker.js'
+import {
+  MCP_DEFAULT_TIMEOUT_MS,
+  MCP_SERVERS_VERSION,
+  type McpServerConfig,
+  type McpStdioServer,
+} from '../../../../../src/features/mcp/schemas/mcpServer.js'
+import { toMcpServer } from './toMcpServer.js'
+
+/** Bản ghi đang lưu — `mcpRegistry.list()` trả entity, các ca so trên bản ghi. */
+function listConfigs(): McpServerConfig[] {
+  return mcpRegistry.list().map((s) => s.config)
+}
+
+/** Store sau đường đọc: `version` luôn là bản hiện hành vì migrate chạy ở đường đọc. */
+function loadStore(): { version: number; servers: McpServerConfig[] } {
+  return { version: MCP_SERVERS_VERSION, servers: listConfigs() }
+}
+
+/**
+ * TC-01…TC-10 · TC-96 · TC-97 — store `mcp-servers.json`.
+ *
+ * Mỗi ca trỏ `DEV_TEAM_DASHBOARD_HOME` vào một thư mục tạm riêng (test-spec §1.4:
+ * 🚫 không ca nào được ghi vào workspace người dùng). Registry đọc lại đĩa mỗi
+ * lần gọi nên không cần reset cache (§6.6 Q3 — đã đối chứng với `loadMcpServers`).
+ */
+
+const CANARY = 'sk-CANARY-do-not-log-0123456789'
+/** BOM viết bằng escape: ký tự thật trong source vi phạm `no-irregular-whitespace`. */
+const BOM = String.fromCharCode(0xfeff)
+
+let home: string
+const prevHome = process.env.DEV_TEAM_DASHBOARD_HOME
+
+function storeFile(): string {
+  return path.join(home, 'mcp-servers.json')
+}
+
+function readStoreRaw(): string {
+  return fs.readFileSync(storeFile(), 'utf8')
+}
+
+function stdio(over: Partial<McpStdioServer> & { id: string }): McpStdioServer {
+  return {
+    label: over.id,
+    enabled: true,
+    transport: 'stdio',
+    command: 'node',
+    args: [],
+    env: {},
+    ...over,
+  } as McpStdioServer
+}
+
+beforeEach(() => {
+  home = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-mcp-registry-'))
+  process.env.DEV_TEAM_DASHBOARD_HOME = home
+})
+
+afterEach(() => {
+  if (prevHome === undefined) delete process.env.DEV_TEAM_DASHBOARD_HOME
+  else process.env.DEV_TEAM_DASHBOARD_HOME = prevHome
+  fs.rmSync(home, { recursive: true, force: true })
+})
+
+describe('mcp registry — đọc store', () => {
+  // TC-01
+  test('TC-01: chưa có file store ⇒ mảng rỗng, không ném, không tự tạo file', () => {
+    expect(listConfigs()).toEqual([])
+    expect(fs.existsSync(storeFile())).toBe(false)
+  })
+
+  // TC-02
+  test('TC-02: file hỏng / BOM / không phải JSON ⇒ rỗng, 🚫 không ghi đè file gốc', () => {
+    const variants = ['', '{', BOM + '{"version":1,"servers":[]}', 'not json']
+    for (const raw of variants) {
+      fs.writeFileSync(storeFile(), raw, 'utf8')
+      expect(listConfigs()).toEqual([])
+      // Bytes y nguyên: registry là dữ liệu ngoài, đọc phòng thủ chứ không seed lại.
+      expect(readStoreRaw()).toBe(raw)
+    }
+  })
+})
+
+describe('mcp registry — upsert / delete', () => {
+  // TC-03
+  test('TC-03: upsert server mới rồi đọc lại', () => {
+    const result = mcpRegistry.upsert(
+      stdio({
+        id: 'playwright',
+        label: 'Playwright MCP',
+        command: 'npx',
+        args: ['-y', '@playwright/mcp@latest'],
+      }),
+    )
+    expect(result.ok).toBe(true)
+
+    const list = listConfigs()
+    expect(list).toHaveLength(1)
+    expect(list[0]).toMatchObject({
+      id: 'playwright',
+      label: 'Playwright MCP',
+      enabled: true,
+      transport: 'stdio',
+      command: 'npx',
+      args: ['-y', '@playwright/mcp@latest'],
+      env: {},
+    })
+
+    const parsed = JSON.parse(readStoreRaw())
+    expect(parsed.version).toBeTruthy()
+    expect(parsed.servers).toHaveLength(1)
+  })
+
+  // TC-04
+  test('TC-04: upsert trùng id ⇒ ghi đè, không nhân đôi', () => {
+    mcpRegistry.upsert(stdio({ id: 'playwright', label: 'Playwright MCP', command: 'npx' }))
+    mcpRegistry.upsert(stdio({ id: 'playwright', label: 'PW v2', enabled: false, command: 'npx' }))
+
+    const list = listConfigs()
+    expect(list).toHaveLength(1)
+    expect(list[0].label).toBe('PW v2')
+    expect(list[0].enabled).toBe(false)
+  })
+
+  // TC-05
+  test('TC-05: xoá idempotent, id lạ không ném', () => {
+    mcpRegistry.upsert(stdio({ id: 'playwright', command: 'npx' }))
+
+    const first = mcpRegistry.delete('playwright')
+    expect(first).toMatchObject({ ok: true, deleted: true, id: 'playwright' })
+    expect(listConfigs()).toEqual([])
+
+    // (b) gọi lại lần nữa — §6.6 Q1 chốt 200 idempotent, không ném.
+    expect(mcpRegistry.delete('playwright')).toMatchObject({ ok: true, deleted: false })
+    // (c) id chưa từng tồn tại.
+    expect(mcpRegistry.delete('khong-ton-tai')).toMatchObject({ ok: true, deleted: false })
+    expect(listConfigs()).toEqual([])
+  })
+})
+
+describe('McpServer.sanitiseId', () => {
+  // TC-06
+  test('TC-06: id hợp lệ đi qua nguyên vẹn', () => {
+    for (const id of ['playwright', 'serena-2', 'A-b_0']) {
+      expect(McpServer.sanitiseId(id)).toBe(id)
+    }
+  })
+
+  // TC-07 (A) — từ chối
+  test('TC-07 (A): id nguy hiểm ⇒ null', () => {
+    const rejected = ['a/b', 'a\\b', 'ab\0cd', '..', '../etc/passwd', '', '   ', '.']
+    for (const id of rejected) {
+      expect(McpServer.sanitiseId(id)).toBeNull()
+    }
+  })
+
+  // TC-07 (B) — chuẩn hoá
+  test('TC-07 (B): id phải chuẩn hoá ⇒ chuỗi đã lọc, KHÔNG phải null', () => {
+    expect(McpServer.sanitiseId('my_server.v1')).toBe('my_serverv1')
+    expect(McpServer.sanitiseId('tên-có-dấu')).toBe('tn-c-du')
+    expect(McpServer.sanitiseId('x'.repeat(500))).toBe('x'.repeat(64))
+  })
+
+  // TC-07 — bất biến chung cho cả (A) và (B)
+  test('TC-07: giá trị trả về không bao giờ chứa `/`, `\\`, NUL hay `..`', () => {
+    const inputs = [
+      'playwright',
+      'my_server.v1',
+      'tên-có-dấu',
+      'x'.repeat(500),
+      'a/b',
+      'a\\b',
+      'ab\0cd',
+      '..',
+      '../etc/passwd',
+      '',
+      '   ',
+      '.',
+    ]
+    for (const id of inputs) {
+      const out = McpServer.sanitiseId(id)
+      if (out === null) continue
+      expect(out).not.toContain('/')
+      expect(out).not.toContain('\\')
+      expect(out).not.toContain('\0')
+      expect(out).not.toContain('..')
+    }
+  })
+})
+
+describe('McpRegistry.recordCheck', () => {
+  // TC-08
+  test('TC-08: id không có trong store ⇒ no-op, không tạo entry', () => {
+    expect(() =>
+      mcpRegistry.recordCheck('khong-ton-tai', {
+        at: new Date().toISOString(),
+        ok: true,
+        toolCount: 3,
+        toolNames: ['a'],
+      }),
+    ).not.toThrow()
+    expect(listConfigs()).toEqual([])
+  })
+
+  // TC-09
+  test('TC-09: giới hạn dữ liệu tóm tắt — count là số thật, tên bị cắt', () => {
+    mcpRegistry.upsert(stdio({ id: 'big', command: 'node' }))
+    const names = Array.from({ length: 300 }, (_, i) => `t${i}-${'n'.repeat(500)}`)
+    mcpRegistry.recordCheck('big', {
+      at: new Date().toISOString(),
+      ok: true,
+      toolCount: names.length,
+      toolNames: names,
+    })
+
+    const saved = listConfigs()[0]
+    expect(saved.lastCheck?.toolCount).toBe(300)
+    expect(saved.lastCheck!.toolNames.length).toBeLessThanOrEqual(50)
+    for (const n of saved.lastCheck!.toolNames) {
+      expect(n.length).toBeLessThanOrEqual(120)
+    }
+    expect(Number.isNaN(Date.parse(saved.lastCheck!.at))).toBe(false)
+  })
+})
+
+describe('mcp registry — env đã tước', () => {
+  // TC-10
+  test('TC-10: HOME rỗng + home trỏ path chưa tồn tại ⇒ đọc rỗng, ghi không thất bại im lặng', () => {
+    const prevRealHome = process.env.HOME
+    const missing = path.join(home, 'khong-ton-tai', 'nested', 'dev-team-home')
+    process.env.HOME = ''
+    process.env.DEV_TEAM_DASHBOARD_HOME = missing
+    try {
+      expect(listConfigs()).toEqual([])
+
+      let threw: Error | null = null
+      try {
+        mcpRegistry.upsert(stdio({ id: 'probe', command: 'node' }))
+      } catch (err) {
+        threw = err as Error
+      }
+
+      if (threw) {
+        // Nhánh hợp lệ thứ hai: ném lỗi có thông điệp nêu đường dẫn.
+        expect(String(threw.message)).toContain(missing)
+      } else {
+        // Nhánh hợp lệ thứ nhất: tạo được cây thư mục và lưu thật — đọc lại phải thấy.
+        expect(listConfigs().map((s) => s.id)).toEqual(['probe'])
+      }
+    } finally {
+      if (prevRealHome === undefined) delete process.env.HOME
+      else process.env.HOME = prevRealHome
+    }
+  })
+})
+
+describe('mcp registry — sentinel `***` (chống ghi đè secret thật)', () => {
+  function seedWithCanary(): McpServerConfig {
+    mcpRegistry.upsert(stdio({ id: 'probe', command: 'node', env: { TOKEN: CANARY } }))
+    return listConfigs()[0]
+  }
+
+  function storedEnv(id = 'probe'): Record<string, string> {
+    const parsed = JSON.parse(readStoreRaw())
+    return parsed.servers.find((s: any) => s.id === id).env
+  }
+
+  // TC-96
+  test('TC-96 (a): bật/tắt bằng bản đã mask ⇒ secret thật giữ nguyên', () => {
+    const masked = toMcpServer(seedWithCanary()).masked() as McpStdioServer
+    expect(masked.env.TOKEN).toBe(SecretMasker.MASK)
+
+    mcpRegistry.upsert({ ...masked, enabled: false })
+
+    expect(storedEnv().TOKEN).toBe(CANARY)
+    expect(readStoreRaw()).not.toContain(SecretMasker.MASK)
+    expect(listConfigs()[0].enabled).toBe(false)
+  })
+
+  // TC-96
+  test('TC-96 (b): chỉ sửa nhãn ⇒ secret thật giữ nguyên', () => {
+    const masked = toMcpServer(seedWithCanary()).masked() as McpStdioServer
+
+    mcpRegistry.upsert({ ...masked, label: 'renamed' })
+
+    expect(storedEnv().TOKEN).toBe(CANARY)
+    expect(readStoreRaw()).not.toContain(SecretMasker.MASK)
+    expect(listConfigs()[0].label).toBe('renamed')
+  })
+
+  // TC-96 — ca dễ hỏng nhất khi ai đó viết lại `mergeMaskedSecrets`.
+  test('TC-96 (c): thêm khoá mới cạnh khoá đã mask ⇒ giữ cũ, nhận mới', () => {
+    const masked = toMcpServer(seedWithCanary()).masked() as McpStdioServer
+
+    mcpRegistry.upsert({ ...masked, env: { ...masked.env, EXTRA: 'plain-value' } })
+
+    const env = storedEnv()
+    expect(env.TOKEN).toBe(CANARY)
+    expect(env.EXTRA).toBe('plain-value')
+    expect(readStoreRaw()).not.toContain(SecretMasker.MASK)
+  })
+
+  // TC-97
+  test('TC-97 (a): id mới hoàn toàn mang `***` ⇒ bỏ khoá, 🚫 không ghi literal', () => {
+    mcpRegistry.upsert(stdio({ id: 'copy', command: 'node', env: { TOKEN: SecretMasker.MASK } }))
+
+    expect(storedEnv('copy')).toEqual({})
+    expect(readStoreRaw()).not.toContain(SecretMasker.MASK)
+  })
+
+  // TC-97
+  test('TC-97 (b): thêm khoá mới mang `***` vào server đã có ⇒ bỏ khoá đó, giữ khoá cũ', () => {
+    const masked = toMcpServer(seedWithCanary()).masked() as McpStdioServer
+
+    mcpRegistry.upsert({ ...masked, env: { ...masked.env, NEW: SecretMasker.MASK } })
+
+    const env = storedEnv()
+    expect(env.TOKEN).toBe(CANARY)
+    expect(env).not.toHaveProperty('NEW')
+    expect(readStoreRaw()).not.toContain(SecretMasker.MASK)
+  })
+})
+
+/* ─── Tdad47b2b · nhóm E — nâng phiên bản store + migrate `timeoutMs` ─────── */
+
+/**
+ * TC-E01…TC-E11 — ngữ nghĩa `timeoutMs` ĐỔI ở v2.
+ *
+ * v1: con số chỉ tác động nút Kiểm tra kết nối. v2: nó còn được ghi xuống
+ * `startupTimeoutSec` của file config, nên nó tác động cả lúc job chạy server.
+ * Vì thế migrate **bỏ trường ở MỌI bản ghi v1 có giá trị < mặc định mới** —
+ * người đặt `30000` ở v1 đang chọn «probe chờ 30s», họ chưa từng chọn «job cho
+ * server 30s để khởi động». Giá trị ≥ mặc định mới được GIỮ: nó chỉ làm job chờ
+ * lâu hơn, 🚫 không thuộc lớp hồi quy mà migrate này chặn.
+ */
+function writeStore(raw: unknown) {
+  fs.writeFileSync(storeFile(), typeof raw === 'string' ? raw : JSON.stringify(raw), 'utf8')
+}
+
+function v1Server(over: Record<string, unknown> = {}) {
+  return {
+    id: 'playwright',
+    label: 'Playwright MCP',
+    enabled: true,
+    transport: 'stdio',
+    command: 'npx',
+    args: ['-y', '@playwright/mcp@latest'],
+    env: {},
+    ...over,
+  }
+}
+
+describe('mcp registry — migrate v1 → v2 (nhóm E)', () => {
+  // TC-E01
+  test('TC-E01: v1 giữ mặc định cũ 15000 ⇒ BỎ trường, phiên bản store báo 2', () => {
+    writeStore({ version: 1, servers: [v1Server({ timeoutMs: 15_000 })] })
+
+    const store = loadStore()
+    expect(store.version).toBe(MCP_SERVERS_VERSION)
+    expect(MCP_SERVERS_VERSION).toBe(2)
+    expect(store.servers[0]).not.toHaveProperty('timeoutMs')
+  })
+
+  /**
+   * TC-E02 — bản ghi v1 do người dùng tự đặt cũng bị bỏ trường.
+   *
+   * ⚠️ Áp dụng cho MỌI giá trị v1 < mặc định mới, không riêng `15000`: giữ lại
+   * `30000` là im lặng rút thời gian khởi động của job từ 120s xuống 30s.
+   */
+  test('TC-E02: mọi giá trị v1 dưới mặc định mới ⇒ BỎ trường', () => {
+    for (const timeoutMs of [1, 1000, 15_000, 30_000, 60_000, MCP_DEFAULT_TIMEOUT_MS - 1]) {
+      writeStore({ version: 1, servers: [v1Server({ timeoutMs })] })
+      expect(loadStore().servers[0]).not.toHaveProperty('timeoutMs')
+    }
+  })
+
+  /**
+   * TC-E02b — giá trị v1 ≥ mặc định mới được GIỮ.
+   *
+   * Chỉ tới được bằng sửa tay file: trần của endpoint ở v1 là 60000. Đường ĐỌC
+   * file 🚫 không kẹp gì, nên con số như vậy vẫn vào tới đây — và xoá nó là vứt
+   * một giá trị người dùng cố ý ghi.
+   */
+  test('TC-E02b: v1 với 120000 / 300000 ⇒ GIỮ nguyên', () => {
+    for (const timeoutMs of [MCP_DEFAULT_TIMEOUT_MS, 300_000]) {
+      writeStore({ version: 1, servers: [v1Server({ timeoutMs })] })
+      expect(loadStore().servers[0].timeoutMs).toBe(timeoutMs)
+    }
+  })
+
+  // TC-E03
+  test('TC-E03: ở v2, 15000 là lựa chọn có chủ ý ⇒ GIỮ nguyên', () => {
+    writeStore({ version: MCP_SERVERS_VERSION, servers: [v1Server({ timeoutMs: 15_000 })] })
+
+    expect(loadStore().servers[0].timeoutMs).toBe(15_000)
+  })
+
+  // TC-E04
+  test('TC-E04: v1 🚫 không khai timeout ⇒ 🚫 không mất gì, phiên bản báo 2', () => {
+    writeStore({ version: 1, servers: [v1Server()] })
+
+    const store = loadStore()
+    expect(store.version).toBe(MCP_SERVERS_VERSION)
+    expect(store.servers).toHaveLength(1)
+    expect(store.servers[0]).toMatchObject({ id: 'playwright', command: 'npx', enabled: true })
+    expect(store.servers[0]).not.toHaveProperty('timeoutMs')
+  })
+
+  // TC-E05 — thiếu / sai kiểu / `0` đều coi như v1; bỏ qua migrate ở đó là để lọt đúng ca đang chặn.
+  test('TC-E05: trường phiên bản thiếu hoặc không hợp lệ ⇒ coi như v1 và VẪN migrate', () => {
+    const variants: Record<string, unknown>[] = [
+      { servers: [v1Server({ timeoutMs: 15_000 })] },
+      { version: 'abc', servers: [v1Server({ timeoutMs: 15_000 })] },
+      { version: 0, servers: [v1Server({ timeoutMs: 15_000 })] },
+      { version: null, servers: [v1Server({ timeoutMs: 15_000 })] },
+    ]
+    for (const data of variants) {
+      writeStore(data)
+      const store = loadStore()
+      expect(store.version).toBe(MCP_SERVERS_VERSION)
+      expect(store.servers[0]).not.toHaveProperty('timeoutMs')
+    }
+  })
+
+  // TC-E07
+  test('TC-E07: file v1 → một thao tác lưu ⇒ file lên `version: 2`, quyền 0600, 🚫 không mất bản ghi', () => {
+    writeStore({
+      version: 1,
+      servers: [v1Server({ timeoutMs: 15_000 }), v1Server({ id: 'serena', label: 'Serena', command: 'uvx' })],
+    })
+
+    mcpRegistry.upsert(stdio({ id: 'them-moi', command: 'node' }))
+
+    const parsed = JSON.parse(readStoreRaw())
+    expect(parsed.version).toBe(MCP_SERVERS_VERSION)
+    expect(parsed.servers.map((s: any) => s.id).sort()).toEqual(['playwright', 'serena', 'them-moi'])
+    // Bản ghi đã migrate 🚫 không được ghi ngược `timeoutMs` xuống đĩa.
+    expect(parsed.servers.find((s: any) => s.id === 'playwright')).not.toHaveProperty('timeoutMs')
+    if (process.platform !== 'win32') {
+      expect(fs.statSync(storeFile()).mode & 0o777).toBe(0o600)
+    }
+  })
+
+  // TC-E08 — migrate chạy ở đường ĐỌC nên phải idempotent và 🚫 không đụng đĩa.
+  test('TC-E08: đọc file v1 ba lần liên tiếp ⇒ cùng kết quả, file trên đĩa 🚫 không đổi', () => {
+    const raw = JSON.stringify({ version: 1, servers: [v1Server({ timeoutMs: 15_000 })] })
+    writeStore(raw)
+
+    const reads = [loadStore(), loadStore(), loadStore()]
+    expect(reads[1]).toEqual(reads[0])
+    expect(reads[2]).toEqual(reads[0])
+    expect(readStoreRaw()).toBe(raw)
+  })
+
+  // TC-E09
+  test('TC-E09: migrate 🚫 không đụng trường nào ngoài `timeoutMs`', () => {
+    const lastCheck = { at: '2026-09-18T00:00:00.000Z', ok: true, toolCount: 21, toolNames: ['echo'] }
+    writeStore({
+      version: 1,
+      servers: [
+        v1Server({ timeoutMs: 15_000, env: { FOO: 'bar' }, cwd: '/srv/work', enabled: false, lastCheck }),
+        {
+          id: 'gh',
+          label: 'GitHub MCP',
+          enabled: true,
+          transport: 'http',
+          url: 'https://api.example.com/mcp',
+          headers: { 'X-Trace': 'abc' },
+          credentialId: 'cred-1',
+          authHeader: 'Authorization',
+          authScheme: 'Bearer',
+          timeoutMs: 15_000,
+        },
+      ],
+    })
+
+    const [pw, gh] = loadStore().servers as any[]
+    expect(pw).toEqual({
+      id: 'playwright',
+      label: 'Playwright MCP',
+      enabled: false,
+      lastCheck,
+      transport: 'stdio',
+      command: 'npx',
+      args: ['-y', '@playwright/mcp@latest'],
+      env: { FOO: 'bar' },
+      cwd: '/srv/work',
+    })
+    expect(gh).toEqual({
+      id: 'gh',
+      label: 'GitHub MCP',
+      enabled: true,
+      lastCheck: null,
+      transport: 'http',
+      url: 'https://api.example.com/mcp',
+      credentialId: 'cred-1',
+      authHeader: 'Authorization',
+      authScheme: 'Bearer',
+      headers: { 'X-Trace': 'abc' },
+    })
+  })
+
+  // TC-E10 — hành vi phòng thủ giữ nguyên (TC-01 / TC-02 khoá phần chung); ở đây chốt cờ version 🚫 không làm nó đổi.
+  test('TC-E10: file rỗng / JSON hỏng / chưa có file ⇒ store rỗng ở v2, 🚫 không crash, 🚫 không ghi đè', () => {
+    expect(loadStore()).toEqual({ version: MCP_SERVERS_VERSION, servers: [] })
+    expect(fs.existsSync(storeFile())).toBe(false)
+
+    for (const raw of ['', '{', 'not json', '{"version":1}']) {
+      writeStore(raw)
+      expect(loadStore()).toEqual({ version: MCP_SERVERS_VERSION, servers: [] })
+      expect(readStoreRaw()).toBe(raw)
+    }
+  })
+
+  // TC-E11
+  test('TC-E11: `servers` lẫn rác ⇒ phần tử hỏng bị loại, phần tử hợp lệ vẫn migrate đúng', () => {
+    writeStore({
+      version: 1,
+      servers: [
+        null,
+        'khong-phai-object',
+        { label: 'thiếu id', transport: 'stdio', command: 'npx' },
+        { id: 'thieu-command', transport: 'stdio' },
+        v1Server({ timeoutMs: 15_000 }),
+        v1Server({ id: 'giu-lai', timeoutMs: 300_000 }),
+      ],
+    })
+
+    const servers = loadStore().servers
+    expect(servers.map((s) => s.id)).toEqual(['playwright', 'giu-lai'])
+    expect(servers[0]).not.toHaveProperty('timeoutMs')
+    expect(servers[1].timeoutMs).toBe(300_000)
+  })
+})
+
+/* ═══ #386 · Tdf943817 — tách `normaliseMcpServer` là HÀNH VI-TRUNG TÍNH ═══════
+ *
+ * TC-CX-01 … TC-CX-06.
+ *
+ * ⚠️ Khối này **CHỈ ĐƯỢC THÊM VÀO CUỐI FILE**. TC-01…TC-10, TC-96, TC-97 ở trên
+ * phải có diff **RỖNG** — đó chính là bằng chứng của CX-2, và sửa dù chỉ một
+ * dòng format của chúng là làm hỏng bằng chứng. Vì vậy `import` của khối này
+ * cũng nằm **ở đây** chứ 🚫 gộp lên khối import đầu file: thêm một dòng trên đó
+ * là dời số dòng của mọi ca phía dưới.
+ */
+import { McpRegistry } from '../../../../../src/features/mcp/business/McpRegistry.js'
+import { NORMALISE_FIXTURES } from './normaliseFixtures.mjs'
+
+describe('#386 — normaliseMcpServer sau khi tách hàm con', () => {
+  // TC-CX-02
+  test('TC-CX-02: stdio thiếu `command` (3 biến thể) ⇒ null', () => {
+    expect(McpRegistry.normalise({ id: 'a', transport: 'stdio' })).toBeNull()
+    expect(McpRegistry.normalise({ id: 'a', transport: 'stdio', command: '' })).toBeNull()
+    expect(McpRegistry.normalise({ id: 'a', transport: 'stdio', command: '   ' })).toBeNull()
+  })
+
+  // TC-CX-03
+  test('TC-CX-03: http/sse thiếu `url` ⇒ null', () => {
+    for (const transport of ['http', 'sse']) {
+      expect(McpRegistry.normalise({ id: 'a', transport })).toBeNull()
+      expect(McpRegistry.normalise({ id: 'a', transport, url: '' })).toBeNull()
+      expect(McpRegistry.normalise({ id: 'a', transport, url: '  ' })).toBeNull()
+    }
+  })
+
+  /**
+   * TC-CX-04 — thứ tự kiểm 🚫 được đổi: `id` sai ⇒ `null` NGAY, 🚫 phụ thuộc
+   * field của transport. Hai guard `null` nằm TRONG hàm con chính là để thứ tự
+   * này giữ nguyên sau khi tách.
+   */
+  test('TC-CX-04: `id` không hợp lệ VÀ thiếu `command` cùng lúc ⇒ null, 🚫 ném', () => {
+    expect(() => McpRegistry.normalise({ id: '///', transport: 'stdio' })).not.toThrow()
+    expect(McpRegistry.normalise({ id: '///', transport: 'stdio' })).toBeNull()
+    // `id` sai một mình cũng đủ ⇒ null, dù transport và field của nó đều hợp lệ.
+    expect(McpRegistry.normalise({ id: '///', transport: 'http', url: 'https://a.example' })).toBeNull()
+    expect(McpRegistry.normalise({ transport: 'stdio', command: 'npx' })).toBeNull()
+  })
+
+  // TC-CX-05
+  test('TC-CX-05: transport lạ ⇒ null', () => {
+    for (const transport of ['ws', '', undefined, 3, null, {}]) {
+      expect(McpRegistry.normalise({ id: 'a', transport, command: 'npx', url: 'https://a.example' })).toBeNull()
+    }
+  })
+
+  /**
+   * TC-CX-06 ⭐ — **Golden**. Snapshot chụp trên base `4c58b44` TRƯỚC khi sửa code
+   * (`test-spec.md` A-6) và đi kèm PR test; ca này chỉ so, 🚫 sinh lại. Snapshot
+   * sinh sau khi refactor 🚫 chứng minh được gì.
+   *
+   * So bằng `JSON.stringify` chứ 🚫 `toEqual`: nó bắt luôn **thứ tự khoá**, mà
+   * thứ tự khoá chính là hình dạng `mcp-servers.json` ghi xuống đĩa.
+   */
+  test('TC-CX-06: golden ≥15 fixture khớp TUYỆT ĐỐI snapshot của base 4c58b44', () => {
+    const snapshotPath = path.join(import.meta.dir, 'normaliseMcpServer.base-4c58b44.json')
+    const snapshot = JSON.parse(fs.readFileSync(snapshotPath, 'utf8')) as {
+      baseSha: string
+      entries: { name: string; result: unknown }[]
+    }
+
+    expect(snapshot.baseSha).toBe('4c58b44')
+    expect(snapshot.entries.length).toBeGreaterThanOrEqual(15)
+    expect(snapshot.entries.map((e) => e.name)).toEqual(
+      (NORMALISE_FIXTURES as { name: string }[]).map((f) => f.name),
+    )
+
+    const actual = (NORMALISE_FIXTURES as { name: string; raw: unknown }[]).map(({ name, raw }) => ({
+      name,
+      result: McpRegistry.normalise(raw)?.config ?? null,
+    }))
+
+    // So từng fixture trước để thông điệp đỏ chỉ đúng ca lệch…
+    for (let i = 0; i < actual.length; i++) {
+      expect(JSON.stringify(actual[i].result), `fixture «${actual[i].name}»`).toBe(
+        JSON.stringify(snapshot.entries[i].result),
+      )
+    }
+    // …rồi so nguyên bộ, để 🚫 lọt ca thừa/thiếu.
+    expect(JSON.stringify(actual)).toBe(JSON.stringify(snapshot.entries))
+  })
+})

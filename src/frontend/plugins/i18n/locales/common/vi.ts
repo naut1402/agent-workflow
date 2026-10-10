@@ -69,6 +69,15 @@ export default {
     select: 'Chọn thư mục này',
     selectDirRequired: 'Hãy mở một thư mục trước khi chọn.',
   },
+  // Overlay chặn thao tác lúc một action API đang chạy (`CLoadingOverlay`).
+  // "Đang xử lý" chứ không phải "Đang tải": overlay này phủ luồng GHI.
+  loadingOverlay: {
+    label: 'Đang xử lý…',
+  },
+  // Khung dialog dùng chung (`CDialog`).
+  dialog: {
+    close: 'Đóng',
+  },
   // Viewer markdown dùng chung (`CMarkdownView`) — agent editor + knowledge.
   markdownView: {
     metadata: 'Metadata',

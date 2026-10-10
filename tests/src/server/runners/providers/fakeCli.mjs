@@ -1,6 +1,124 @@
 // Cross-platform fake CLI for provider spawn tests (node echo-args | ok | fail).
+// Các mode `mcp-*` được THÊM cho suite MCP (T8b1aa18e) — 🚫 không sửa mode sẵn có.
+import fs from 'node:fs'
+
 const mode = process.argv[2] || 'echo-args'
 const rest = process.argv.slice(3)
+
+/** Đường dẫn ngay sau cờ `--mcp-config` trong argv, hoặc null. */
+function mcpConfigPath() {
+  const i = rest.indexOf('--mcp-config')
+  return i >= 0 ? rest[i + 1] ?? null : null
+}
+
+/** Mọi giá trị `env`/`headers` trong file config — thứ một MCP server có thể in ra. */
+function mcpConfigValues(file) {
+  try {
+    const json = JSON.parse(fs.readFileSync(file, 'utf8'))
+    return Object.values(json.mcpServers ?? {}).flatMap((entry) =>
+      Object.values(entry.env ?? entry.headers ?? {}),
+    )
+  } catch {
+    return []
+  }
+}
+
+if (mode === 'mcp-echo') {
+  // Argv thật mà provider truyền cho tiến trình con + file config có tồn tại
+  // LÚC CHẠY hay không (bất biến "sinh khi chạy, xoá sau khi xong").
+  for (const a of rest) console.log(a)
+  const file = mcpConfigPath()
+  console.log(`mcp-config-exists=${file ? fs.existsSync(file) : 'none'}`)
+  process.exit(0)
+}
+
+if (mode === 'mcp-dump') {
+  // Tf2f484e2: chép NGUYÊN VĂN file `--mcp-config` ra `MCP_CONFIG_DUMP` (env kế
+  // thừa từ tiến trình cha) rồi echo argv. File bị dọn ở `finally` của job nên
+  // đây là cách duy nhất đọc được nội dung nó LÚC CHẠY; 🚫 không in ra stdout vì
+  // file chứa token đã giải.
+  for (const a of rest) console.log(a)
+  const file = mcpConfigPath()
+  const dump = process.env.MCP_CONFIG_DUMP
+  if (file && dump) {
+    try {
+      fs.writeFileSync(dump, fs.readFileSync(file, 'utf8'))
+    } catch {
+      /* ca âm: không có file thì dump cũng không tồn tại */
+    }
+  }
+  console.log(`mcp-config-exists=${file ? fs.existsSync(file) : 'none'}`)
+  process.exit(0)
+}
+
+if (mode === 'mcp-leak') {
+  // MCP server (hoặc chính CLI) in token ra stderr rồi hỏng — đúng hình dạng
+  // `401 Unauthorized: Bearer sk-…` mà bộ lọc log phải chặn.
+  const file = mcpConfigPath()
+  for (const value of mcpConfigValues(file)) {
+    process.stderr.write(`401 Unauthorized: Bearer ${value}\n`)
+  }
+  process.exit(7)
+}
+if (mode === 'mcp-split-leak') {
+  // #385 TC-SEC-49: secret bị xuất làm HAI chunk rồi tiến trình thoát mã khác 0.
+  // Bộ lọc mask có trạng thái giữ lại `max(len)-1` ký tự, nên phần ĐUÔI chỉ ra
+  // được nếu `flushStream()` chạy ở nhánh lỗi — đó chính là thứ ca này đo.
+  const file = mcpConfigPath()
+  const secret = mcpConfigValues(file)[0] ?? ''
+  const half = Math.ceil(secret.length / 2)
+  process.stderr.write(`401 Unauthorized: Bearer ${secret.slice(0, half)}`)
+  await new Promise((r) => setTimeout(r, 80))
+  process.stderr.write(`${secret.slice(half)}\nDUOI-LOG-CUOI-CUNG\n`)
+  await new Promise((r) => setTimeout(r, 80))
+  process.exit(7)
+}
+
+if (mode === 'two-chunks') {
+  // #385 TC-SEC-50: hai lần ghi tách biệt về thời gian ⇒ hai chunk `onLog` riêng.
+  // Dùng để chứng minh job KHÔNG bật MCP 🚫 bị bộ lọc giữ lại/ghép lại ký tự nào.
+  process.stdout.write('CHUNK-MOT\n')
+  await new Promise((r) => setTimeout(r, 120))
+  process.stdout.write('CHUNK-HAI\n')
+  await new Promise((r) => setTimeout(r, 80))
+  process.exit(0)
+}
+
+if (mode === 'cursor-mcp-json') {
+  // #378: cursor đọc `<cwd>/.cursor/mcp.json` chứ 🚫 nhận cờ nào trỏ vào file.
+  // In argv THẬT + sự tồn tại + nội dung file NGAY LÚC CHẠY (file bị dọn ở
+  // `finally` nên đây là cách duy nhất quan sát được nó).
+  const cfg = `${process.cwd()}/.cursor/mcp.json`
+  const exists = fs.existsSync(cfg)
+  process.stdout.write(`ARGV:${JSON.stringify(rest)}\n`)
+  process.stdout.write(`cursor-config-exists=${exists}\n`)
+  const dump = process.env.CURSOR_CONFIG_DUMP
+  if (exists && dump) {
+    try {
+      fs.writeFileSync(dump, fs.readFileSync(cfg, 'utf8'))
+    } catch {
+      /* ca âm: không có file thì dump cũng không tồn tại */
+    }
+  }
+  // Top-level await: chặn hẳn phần còn lại của file, nếu không mode này rơi
+  // xuống nhánh `else` cuối và thoát mã 2. 🚫 Sửa mode sẵn có.
+  await new Promise((resolve) => {
+    process.stdin.setEncoding('utf8')
+    process.stdin.on('data', () => {})
+    process.stdin.on('end', resolve)
+  })
+  process.stdout.write(
+    `${JSON.stringify({
+      type: 'result',
+      subtype: 'success',
+      is_error: false,
+      result: 'xong',
+      session_id: 'cursor-sess-1',
+    })}\n`,
+  )
+  process.exit(0)
+}
+
 if (mode === 'ok') {
   console.log('ok')
   process.exit(0)

@@ -7,6 +7,7 @@ import path from 'node:path'
 // Defer access to call sites.
 import * as nodeUrl from 'node:url'
 import * as nodeCrypto from 'node:crypto'
+import * as nodeUtil from 'node:util'
 import type {
   Dirent,
   PathLike,
@@ -135,8 +136,27 @@ export async function stat(p: string): Promise<Stats> {
   return fsPromises.stat(p)
 }
 
-export async function readTextFile(p: string): Promise<string> {
-  return fsPromises.readFile(p, 'utf8')
+/** With maxChars, read only the UTF-8 prefix needed for that many characters. */
+export async function readTextFile(p: string, maxChars?: number): Promise<string> {
+  if (maxChars === undefined) return fsPromises.readFile(p, 'utf8')
+  if (!Number.isSafeInteger(maxChars) || maxChars < 0) throw new RangeError('invalid text limit')
+  const file = await fsPromises.open(p, 'r')
+  try {
+    const decoder = new nodeUtil.TextDecoder('utf-8', { ignoreBOM: true })
+    const buffer = Buffer.alloc(Math.min(4096, maxChars))
+    let content = ''
+    while (content.length < maxChars) {
+      const { bytesRead } = await file.read(buffer, 0, Math.min(buffer.length, maxChars - content.length), null)
+      if (bytesRead === 0) {
+        content += decoder.decode()
+        break
+      }
+      content += decoder.decode(buffer.subarray(0, bytesRead), { stream: true })
+    }
+    return content.slice(0, maxChars)
+  } finally {
+    await file.close()
+  }
 }
 
 export async function writeTextFile(p: string, data: string | Buffer): Promise<void> {
@@ -235,6 +255,19 @@ export function mkdirSync(p: string, opts?: { recursive?: boolean }): string | u
 /** Đặt quyền POSIX. Trên win32 gần như vô nghĩa — đừng dựa vào nó làm rào duy nhất. */
 export function chmodSync(p: string, mode: number): void {
   fs.chmodSync(p, mode)
+}
+
+/**
+ * `chmodSync` không ném — cho chỗ quyền chỉ là lớp rào phụ. Rào chính phải nằm
+ * ở chỗ khác: `mode` ngay lúc tạo file, hoặc vị trí file dưới thư mục hồ sơ
+ * người dùng.
+ */
+export function chmodSafe(target: string, mode: number): void {
+  try {
+    chmodSync(target, mode)
+  } catch {
+    /* filesystem không hỗ trợ (win32, bind mount) */
+  }
 }
 
 export function renameSync(from: string, to: string): void {

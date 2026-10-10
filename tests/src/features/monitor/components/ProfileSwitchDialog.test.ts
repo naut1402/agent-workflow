@@ -170,14 +170,16 @@ describe('ProfileSwitchDialog', () => {
     w.unmount()
   })
 
-  it('a11y: dialog có role="dialog" + aria-modal + aria-label đúng heading', async () => {
+  it('a11y: dialog có role="dialog" + aria-modal + aria-labelledby trỏ đúng heading', async () => {
     const w = mountDialog()
     await flushPromises()
 
     const dialog = document.body.querySelector('.modal')
     expect(dialog?.getAttribute('role')).toBe('dialog')
     expect(dialog?.getAttribute('aria-modal')).toBe('true')
-    expect(dialog?.getAttribute('aria-label')).toBe('Đổi pipeline profile')
+    const labelId = dialog?.getAttribute('aria-labelledby')
+    expect(labelId).toBeTruthy()
+    expect(document.getElementById(labelId!)?.textContent?.trim()).toBe('Đổi pipeline profile')
     w.unmount()
   })
 

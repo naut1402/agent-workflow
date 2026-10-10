@@ -6,6 +6,7 @@ import Icon from '../../../frontend/ui/Icon.vue'
 import type { AutomationListItem, AutomationStepResult } from '../scripts/automationsApi'
 import AutomationFormDialog from './AutomationFormDialog.vue'
 import CScreenLayout from '../../../frontend/ui/CScreenLayout.vue'
+import { useApiAction } from '../../../frontend/composables/useApiAction'
 
 const props = defineProps<{
   projectId?: string
@@ -44,7 +45,9 @@ const expandedRunId = ref<string | null>(null)
 
 const showForm = ref(false)
 const editRule = ref<AutomationListItem | null>(null)
-const saving = ref(false)
+// Cặp gán cũ (`saving = true` … `saving = false`) nằm NGOÀI mọi `try`: một
+// lần `create`/`update` ném là kẹt loading vĩnh viễn. `run` nhả ở `finally`.
+const { pending: saving, run: runSave } = useApiAction()
 
 const formServerError = ref('')
 
@@ -67,14 +70,14 @@ async function onFormSubmit(payload: {
   id?: string
   body: Record<string, unknown>
 }): Promise<void> {
-  saving.value = true
-  const ok =
-    payload.mode === 'create'
-      ? await create(payload.body as never)
-      : await update(payload.id!, payload.body as never)
-  saving.value = false
-  if (ok) showForm.value = false
-  else formServerError.value = actionError.value
+  await runSave(async () => {
+    const ok =
+      payload.mode === 'create'
+        ? await create(payload.body as never)
+        : await update(payload.id!, payload.body as never)
+    if (ok) showForm.value = false
+    else formServerError.value = actionError.value
+  })
 }
 
 async function onRunNow(rule: AutomationListItem): Promise<void> {

@@ -88,9 +88,11 @@ async function loadDefaultRunner(): Promise<void> {
   try {
     const data = await fetchRunners()
     const runners: any[] = Array.isArray(data?.runners) ? data.runners : []
-    const picked =
-      runners.find((r) => r?.id === data?.defaultRunnerId) ??
-      runners.find((r) => r?.enabled !== false)
+    // Đọc thẳng default thật từ BE thay vì tự đoán: "runner enabled đầu tiên" là
+    // một luật khác với luật của `submitJob`, nên popover nêu một runner mà job
+    // sẽ không chạy. Không có default dùng được ⇒ bỏ dòng runner, 🚫 không rơi
+    // về `defaultRunnerId` — đó lại là đoán, chỉ đoán bằng một giá trị khác.
+    const picked = runners.find((r) => r?.id === data?.effectiveDefaultRunnerId) ?? null
     if (picked) {
       defaultRunner.value = {
         id: picked.id,
@@ -405,7 +407,7 @@ async function onCloseClick(): Promise<void> {
           <Icon
             :name="status.kind === 'busy' ? 'spinner' : 'info'"
             :size="14"
-            :class="{ 'nl-chat-spin': status.kind === 'busy' }"
+            :class="{ 'c-spin': status.kind === 'busy' }"
           />
         </button>
         <div v-if="infoOpen" class="nl-chat-info-popover" role="tooltip">

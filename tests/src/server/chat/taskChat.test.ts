@@ -553,3 +553,39 @@ describe('getTaskChatState', () => {
     expect(state.turns[0]?.tool).toBe('str_replace_based_edit_tool')
   })
 })
+
+/*
+ * T6427b18c TC-R7 — khung chat CẤP TASK (`stepId` rỗng) không được rơi vào
+ * phiên của nút điều phối.
+ *
+ * Sau fix, entry của nút điều phối tồn tại song song và lâu dài, nên nhánh
+ * fallback "entry `open` mới nhất" có thể trả về nó. Mà `sendTaskFeedback` đã
+ * loại job điều phối ra khỏi tập parent — panel hiển thị một phiên, tin nhắn
+ * người dùng gõ vào lại đi tới phiên khác.
+ */
+describe('resolveChatSession — khung chat cấp task vs phiên điều phối (TC-R7)', () => {
+  test('ledger chỉ có phiên điều phối ⇒ panel cấp task KHÔNG trả phiên đó', () => {
+    saveTaskSessionLedger(PROJECT, {
+      version: 1,
+      taskId: TASK,
+      sessionPolicy: 'single',
+      sessions: [ledgerEntry({ sessionId: 's-orch', stepIds: ['__orchestrator__'] })],
+    })
+
+    expect(resolveChatSession(PROJECT, TASK).sessionId).not.toBe('s-orch')
+  })
+
+  test('có phiên của một step ⇒ panel cấp task trỏ vào phiên step đó, không phải phiên điều phối', () => {
+    saveTaskSessionLedger(PROJECT, {
+      version: 1,
+      taskId: TASK,
+      sessionPolicy: 'single',
+      sessions: [
+        ledgerEntry({ sessionId: 's-a', stepIds: ['investigator'] }),
+        ledgerEntry({ sessionId: 's-orch', stepIds: ['__orchestrator__'] }),
+      ],
+    })
+
+    expect(resolveChatSession(PROJECT, TASK).sessionId).toBe('s-a')
+  })
+})

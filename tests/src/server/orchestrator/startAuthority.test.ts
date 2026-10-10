@@ -86,6 +86,48 @@ describe('resolveOrchestration', () => {
     expect(state.review_round).toBe(3)
     expect(state.name).toBe('giữ nguyên')
   })
+
+  // T8eb14482 — TC-CFG-01/02/05: `system_prompt`/`knowledge_inputs` phải đi
+  // trọn qua `resolveOrchestration` (điểm duy nhất dựng object `orch` mà
+  // `askAgent()` nhận), nếu không field mới ở schema không bao giờ tới prompt.
+  describe('system_prompt / knowledge_inputs (T8eb14482)', () => {
+    // writePipeline() dùng chung của file này chỉ nhận `enabled` (+ agent cố định)
+    // nên viết pipeline.yaml riêng cho các case dưới đây thay vì mở rộng nó.
+    function writePipelineWithOrchConfig(orchestratorYaml: string) {
+      fs.writeFileSync(
+        path.join(root, 'pipeline.yaml'),
+        ['version: 1', `orchestrator: { enabled: true, agent: "a:orch", ${orchestratorYaml} }`, 'steps:', '  - { id: implementer, name: Implement, agent: "a:impl" }'].join(
+          '\n',
+        ),
+        'utf8',
+      )
+    }
+
+    test('TC-CFG-01: khai đúng kiểu ⇒ trả về nguyên vẹn', async () => {
+      writePipelineWithOrchConfig('system_prompt: "Hướng dẫn xử lý PO", knowledge_inputs: ["global/a", "global/b"]')
+      seedTask('C1', {})
+      expect(await resolveOrchestration(root, 'C1')).toMatchObject({
+        system_prompt: 'Hướng dẫn xử lý PO',
+        knowledge_inputs: ['global/a', 'global/b'],
+      })
+    })
+
+    test('TC-CFG-02: không khai 2 field mới ⇒ undefined (tương thích ngược)', async () => {
+      writePipeline(true) // pipeline.yaml chuẩn của suite này, không có 2 field mới
+      seedTask('C2', {})
+      const orch = await resolveOrchestration(root, 'C2')
+      expect(orch.system_prompt).toBeUndefined()
+      expect(orch.knowledge_inputs).toBeUndefined()
+    })
+
+    test('TC-CFG-05: sai kiểu (number / mảng chứa non-string) ⇒ rơi về undefined/lọc, không throw', async () => {
+      writePipelineWithOrchConfig('system_prompt: 123, knowledge_inputs: [1, "ok"]')
+      seedTask('C3', {})
+      const orch = await resolveOrchestration(root, 'C3')
+      expect(orch.system_prompt).toBeUndefined()
+      expect(orch.knowledge_inputs).toEqual(['ok'])
+    })
+  })
 })
 
 describe('assertStartAllowed — điều phối BẬT', () => {

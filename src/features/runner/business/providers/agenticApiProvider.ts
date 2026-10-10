@@ -18,6 +18,9 @@ import { formatJobLogFooter, formatJobLogHeader } from '../jobLogFormat.js'
 import { ensureFreshOAuthToken } from '../oauthCredentials.js'
 import { mintSessionId } from '../sessionLedger.js'
 import { appendTranscriptTurn, loadSessionMessages, saveSessionMessages } from './agentTranscriptStore.js'
+import type { McpJobDelivery } from '../mcpDelivery/McpJobDelivery.js'
+import { NoMcpDelivery } from '../mcpDelivery/NoMcpDelivery.js'
+import type { McpBridgeTool, McpToolBridge } from '../mcpDelivery/ToolBridgeMcpDelivery.js'
 import { shouldSendAgentInstructions } from './claude-code-cli.js'
 import type { CredentialProfile, ExecuteRequest, ExecuteResult, ProviderFamily, RunnerProvider } from '../types.js'
 
@@ -189,6 +192,12 @@ export interface AgenticRunContext {
   signal?: AbortSignal
   /** Report tool calls / assistant text as they happen instead of only at the end — see `AgenticStreamHandlers`. */
   handlers: AgenticStreamHandlers
+  /**
+   * Tool MCP của job này, hoặc `null` khi Connection không bật server nào.
+   * `null` là đường mặc định: subclass phải dựng `tools` và preamble y hệt bản
+   * trước khi có bridge — xem `buildToolUsagePreamble`.
+   */
+  mcpBridge?: McpToolBridge | null
 }
 
 interface SandboxOk {
@@ -224,6 +233,13 @@ function countOccurrences(haystack: string, needle: string): number {
 export abstract class AgenticApiProvider implements RunnerProvider {
   abstract readonly providerId: string
   readonly family: ProviderFamily = 'ai-api'
+
+  /**
+   * @param mcpDelivery nối tool MCP của job vào vòng tool-use — lắp ráp ở
+   *   `registry.ts` (`ToolBridgeMcpDelivery`). Thiếu ⇒ `NoMcpDelivery`: bridge
+   *   luôn `null`, `tools` và preamble y hệt bản trước khi có MCP.
+   */
+  constructor(readonly mcpDelivery: McpJobDelivery<McpToolBridge> = new NoMcpDelivery()) {}
 
   /** The only method a subclass must implement — the model-specific tool-use loop. */
   protected abstract runConversation(ctx: AgenticRunContext): Promise<AgenticRunResult>
@@ -314,10 +330,14 @@ export abstract class AgenticApiProvider implements RunnerProvider {
    * `find_symbol`/`Skill`/`Write`) exactly which tools exist here and to
    * ignore any others mentioned in the system prompt below it.
    */
-  protected buildToolUsagePreamble(enabledTools: string[]): string {
+  protected buildToolUsagePreamble(enabledTools: string[], mcpTools: McpBridgeTool[] = []): string {
     return [
       '## Tool khả dụng (DUY NHẤT — bỏ qua mọi tên tool khác được nhắc ở phần hướng dẫn bên dưới)',
       ...enabledTools.map((name) => `- ${TOOL_DESCRIPTIONS[name] ?? name}`),
+      // 📌 BẮT BUỘC khi bridge mở: dòng tiêu đề ngay trên nói với model rằng danh
+      // sách này là DUY NHẤT. Thêm tool vào SDK mà không thêm vào đây thì model
+      // được bảo là chúng không tồn tại, và nó sẽ không gọi.
+      ...mcpTools.map((t) => `- ${t.name}: ${t.description}`),
       '',
       'Hướng dẫn bên dưới có thể nhắc tới các công cụ không tồn tại ở đây (vd find_symbol, ' +
         'Serena MCP, Skill, Write, Read, Edit, TaskCreate...) — đó là tài liệu viết cho môi trường ' +
@@ -626,6 +646,27 @@ export abstract class AgenticApiProvider implements RunnerProvider {
       },
     }
 
+    // Mở TRƯỚC vòng hội thoại và đóng trong `finally` của cùng khối: transport
+    // stdio là tiến trình con, nên một đường thoát quên `close()` là rò tiến
+    // trình theo từng job. Mở hụt 🚫 không làm hỏng job — chỉ mất tool.
+    let mcpBridge: McpToolBridge | null = null
+    try {
+      mcpBridge = await this.mcpDelivery.prepare({
+        ids: runnerConfig?.mcpServers,
+        workspace: req.workspace,
+        jobId: req.jobId,
+        metadata: req.metadata,
+        onWarning: (message) => appendLog(`[runner] MCP warning: ${message}\n`),
+      })
+    } catch (err: any) {
+      appendLog(`[runner] MCP warning: không mở được tool MCP — ${String(err?.message ?? err)}\n`)
+    }
+    if (mcpBridge) {
+      appendLog(
+        `[runner] MCP: ${mcpBridge.tools.length} tool từ server đã bật → vòng tool-use của ${this.providerId}\n`,
+      )
+    }
+
     let result: AgenticRunResult
     try {
       result = await this.runConversation({
@@ -636,6 +677,7 @@ export abstract class AgenticApiProvider implements RunnerProvider {
         workspace: req.workspace,
         signal: req.signal,
         handlers,
+        mcpBridge,
       })
     } catch (err: any) {
       flushAssistantBuffer() // don't lose a partially-streamed turn if the loop threw mid-turn
@@ -654,6 +696,8 @@ export abstract class AgenticApiProvider implements RunnerProvider {
       }
       appendLog(this.describeResult(failure))
       return failure
+    } finally {
+      await mcpBridge?.close().catch(() => {})
     }
 
     if (!streamed) {

@@ -734,7 +734,7 @@ onMounted(() => {
 <style scoped lang="scss">
 .statistics-panel {
   padding: 1rem 1.25rem;
-  max-width: 1400px;
+  max-width: none;
   display: flex;
   flex-direction: column;
   min-height: 0;

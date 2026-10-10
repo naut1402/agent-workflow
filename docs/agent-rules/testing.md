@@ -2,6 +2,9 @@
 
 Quy ước test **hiện hành**. Coverage ưu tiên cao: mỗi module refactor phải kèm test.
 
+> [!CAUTION]
+> <span style="color:#e5534b">🚫 Không sửa root [`README.md`](../../README.md) — ở bất kỳ bước nào. Cần đổi thì ghi đề xuất vào `docs/todo/<issue>/<task-id>.md` (**Loại nợ:** `readme`) để người duyệt tự sửa. Tài liệu chi tiết viết vào `docs/<chủ đề>/`. Nguyên văn: [`git-pr.md`](git-pr.md) §7.2.2.</span>
+
 ---
 
 ## 1. Runner & phạm vi

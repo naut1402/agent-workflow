@@ -36,6 +36,12 @@ vi.mock('@/features/runner/scripts/ProviderDialogApi', () => ({
   deleteProviderConfig: vi.fn(async () => ({ deleted: true })),
 }))
 
+// Dialog nạp danh sách MCP server lúc mount (TC-86). Mặc định rỗng để 🚫 không
+// đổi hành vi của các ca có sẵn; ca MCP tự nạp danh sách riêng.
+vi.mock('@/features/mcp/scripts/mcpApi', () => ({
+  fetchMcpServers: vi.fn(async () => ({ servers: [] })),
+}))
+
 import {
   fetchCredentials,
   saveCredential,
@@ -47,6 +53,7 @@ import {
   fetchAvailableModels,
 } from '@/features/runner/scripts/ConnectionDialogApi'
 import { fetchProviderConfigs, saveProviderConfig, deleteProviderConfig } from '@/features/runner/scripts/ProviderDialogApi'
+import { fetchMcpServers } from '@/features/mcp/scripts/mcpApi'
 
 const PROVIDERS: ProviderEntry[] = [
   { id: 'anthropic-api', kind: 'ai-provider', label: 'Anthropic API', family: 'ai-api' },
@@ -916,7 +923,10 @@ describe('ConnectionDialog / ProviderDialog — cấu trúc chống regression U
     const bodies = modal.querySelectorAll('.modal-body')
     expect(bodies).toHaveLength(1)
     expect(bodies[0].querySelector('.modal-head')).toBeNull()
-    expect(modal.querySelectorAll('.modal-actions button').length).toBeGreaterThan(0)
+    const actions = modal.querySelector('.modal-actions')!
+    expect(actions.querySelectorAll('button').length).toBeGreaterThan(0)
+    expect(actions.closest('.modal-body')).toBeNull()
+    expect(actions.closest('.c-loading-host')).toBeNull()
   }
 
   it('ConnectionDialog không truyền class control native vào CSelect', async () => {
@@ -930,6 +940,537 @@ describe('ConnectionDialog / ProviderDialog — cấu trúc chống regression U
     const w = await mountProviderDialog()
     assertNoNativeControlClass()
     assertSingleModalBody()
+    w.unmount()
+  })
+})
+
+/**
+ * TC-84…TC-88 — gắn MCP server vào Connection.
+ *
+ * ⚠️ TC-84 là khoá tương thích ngược: connection không tick MCP nào thì `config`
+ * 🚫 KHÔNG được mọc thêm khoá `mcpServers` — đó là điều kiện để argv của CLI
+ * không đổi một byte (xem TC-54/TC-57 ở suite provider).
+ */
+describe('ConnectionDialog — MCP servers', () => {
+  const MCP_SERVERS = [
+    { id: 'playwright', label: 'Playwright MCP', enabled: true, transport: 'stdio', command: 'npx', args: [], env: {} },
+    { id: 'serena', label: 'Serena', enabled: true, transport: 'stdio', command: 'uvx', args: [], env: {} },
+    { id: 'tat', label: 'Đang tắt', enabled: false, transport: 'stdio', command: 'npx', args: [], env: {} },
+  ]
+
+  /** Catalog có `mcpDelivery` — đúng shape `listProviderCatalog()` trả về sau task này. */
+  const PROVIDERS_WITH_MCP: ProviderEntry[] = [
+    ...PROVIDERS.map((p) => ({ ...p, mcpDelivery: 'unsupported' as const })),
+    { id: 'claude-code-cli', kind: 'local-console', label: 'Claude Code CLI', family: 'agent-cli', mcpDelivery: 'config-file-flag' },
+    { id: 'cursor-cli', kind: 'local-console', label: 'Cursor CLI', family: 'agent-cli', mcpDelivery: 'unsupported' },
+  ]
+
+  function mcpCheckbox(id: string): HTMLInputElement | undefined {
+    return qa<HTMLInputElement>(`input[type="checkbox"][value="${id}"]`)[0]
+  }
+  async function tickMcp(id: string) {
+    const box = mcpCheckbox(id)
+    if (!box) throw new Error(`mcp checkbox not found: ${id}`)
+    box.checked = true
+    box.dispatchEvent(new Event('change'))
+    await flushPromises()
+  }
+  async function mountLocalConsoleWithMcp(connection: any = null) {
+    vi.mocked(scanLocalCommands).mockResolvedValue({ commands: LOCAL_COMMANDS })
+    const w = mount(ConnectionDialog, {
+      props: { providers: PROVIDERS_WITH_MCP, providerConfigs: PROVIDER_CONFIGS, connection },
+      attachTo: document.body,
+    })
+    await flushPromises()
+    return w
+  }
+
+  beforeEach(() => {
+    vi.mocked(fetchMcpServers).mockClear()
+    vi.mocked(fetchMcpServers).mockResolvedValue({ servers: [...MCP_SERVERS] } as any)
+  })
+
+  // TC-84 — ⚠️ khoá tương thích ngược
+  it('TC-84: không chọn MCP nào ⇒ `config` 🚫 không mọc khoá `mcpServers`', async () => {
+    await mountConnectionOnLocalConsole()
+    await setInputValue(q<HTMLInputElement>('input[placeholder="vd. Claude local"]'), 'Claude local conn')
+    await click(buttonByText(runnerVi.connectionDialog.saveConnection))
+
+    const local = vi.mocked(saveConnection).mock.calls[0][0] as any
+    expect(local.config).toBeUndefined()
+
+    vi.mocked(saveConnection).mockClear()
+    document.body.innerHTML = ''
+
+    await mountConnectionOnAiProvider()
+    await chooseProviderConfig('pc-anthropic')
+    await chooseCredential('cred-anthropic')
+    await setInputValue(q<HTMLInputElement>('input[placeholder="vd. Claude local"]'), 'Claude API conn')
+    await click(buttonByText(runnerVi.connectionDialog.saveConnection))
+
+    const api = vi.mocked(saveConnection).mock.calls[0][0] as any
+    expect(api.config).not.toHaveProperty('mcpServers')
+  })
+
+  // TC-85 — AC-3
+  it('TC-85: có chọn ⇒ ghi mảng id vào `config.mcpServers`', async () => {
+    await mountLocalConsoleWithMcp()
+    await tickMcp('playwright')
+    await tickMcp('serena')
+    await setInputValue(q<HTMLInputElement>('input[placeholder="vd. Claude local"]'), 'Claude local conn')
+    await click(buttonByText(runnerVi.connectionDialog.saveConnection))
+
+    const payload = vi.mocked(saveConnection).mock.calls[0][0] as any
+    expect(payload.config.mcpServers).toEqual(['playwright', 'serena'])
+  })
+
+  // TC-86
+  it('TC-86: chỉ liệt kê server đang bật', async () => {
+    await mountLocalConsoleWithMcp()
+
+    expect(mcpCheckbox('playwright')).toBeTruthy()
+    expect(mcpCheckbox('serena')).toBeTruthy()
+    expect(mcpCheckbox('tat')).toBeUndefined()
+    expect(document.body.textContent).not.toContain('Đang tắt')
+  })
+
+  // TC-87 — G8: cảnh báo nhưng vẫn lưu được
+  it('TC-87: provider `unsupported` ⇒ cảnh báo, nút Lưu vẫn bật và lưu thành công', async () => {
+    await mountLocalConsoleWithMcp()
+    await chooseCommand('cursor-agent')
+    await tickMcp('playwright')
+
+    expect(document.body.textContent).toContain(runnerVi.connectionDialog.mcpUnsupported)
+    const saveBtn = buttonByText(runnerVi.connectionDialog.saveConnection)
+    expect(saveBtn.disabled).toBe(false)
+
+    await setInputValue(q<HTMLInputElement>('input[placeholder="vd. Claude local"]'), 'Cursor conn')
+    await click(saveBtn)
+    const payload = vi.mocked(saveConnection).mock.calls[0][0] as any
+    expect(payload.providerId).toBe('cursor-cli')
+    expect(payload.config.mcpServers).toEqual(['playwright'])
+
+    // Đổi sang provider có tiêu thụ MCP ⇒ cảnh báo biến mất.
+    await chooseCommand('claude')
+    expect(document.body.textContent).not.toContain(runnerVi.connectionDialog.mcpUnsupported)
+  })
+
+  // TC-88
+  it('TC-88: connection cũ chưa từng có `mcpServers` ⇒ không tick gì, lưu lại vẫn không mọc khoá', async () => {
+    const w = await mountLocalConsoleWithMcp({
+      id: 'claude-local',
+      label: 'Claude local',
+      kind: 'local-console',
+      providerId: 'claude-code-cli',
+      cliPath: 'claude',
+      flags: [],
+    })
+
+    expect(qa<HTMLInputElement>('input[type="checkbox"]').every((c) => !c.checked)).toBe(true)
+
+    await click(buttonByText(runnerVi.connectionDialog.saveConnection))
+    const payload = vi.mocked(saveConnection).mock.calls[0][0] as any
+    expect(payload.config).toBeUndefined()
+    w.unmount()
+  })
+})
+
+/** Cổng mở bằng tay — giữ request lưu treo mà không cần fake timer. */
+function gate() {
+  let release!: () => void
+  const p = new Promise<void>((r) => {
+    release = r
+  })
+  return { wait: () => p, release }
+}
+
+const OVERLAY = '.c-loading-overlay'
+const HOST = '.c-loading-host'
+
+/** Connection đã đủ dữ liệu để `save()` đi thẳng tới API, không qua bước chọn. */
+const READY_CONNECTION = {
+  id: 'existing-api',
+  label: 'Existing API',
+  kind: 'ai-provider',
+  providerId: 'gemini-api',
+  credentialId: 'cred-gemini',
+  config: { providerConfigId: 'pc-gemini' },
+}
+
+async function mountReadyToSave() {
+  const w = mount(ConnectionDialog, {
+    props: { providers: PROVIDERS, providerConfigs: PROVIDER_CONFIGS, connection: READY_CONNECTION },
+    attachTo: document.body,
+  })
+  await flushPromises()
+  return w
+}
+
+/** Nhãn nút Lưu đổi khi đang chạy, nên không tra được bằng một chuỗi cố định. */
+function saveButton(): HTMLButtonElement {
+  const labels = [runnerVi.connectionDialog.saveConnection, runnerVi.actions.saving]
+  const btn = qa<HTMLButtonElement>('button').find((b) => labels.includes(b.textContent?.trim() ?? ''))
+  if (!btn) throw new Error('save button not found')
+  return btn
+}
+
+function clickTwiceInOneTick(el: Element) {
+  el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+  el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+}
+
+describe('ConnectionDialog — overlay chặn thao tác lúc lưu', () => {
+  afterEach(() => {
+    // `beforeEach` chỉ `mockClear`, không gỡ implementation — trả lại bản mặc
+    // định để ca sau không thừa hưởng promise treo của ca này.
+    vi.mocked(saveConnection).mockImplementation(async (connection: any) => ({ connection }))
+  })
+
+  it('TC-21: bấm Lưu hai lần trong một lượt chỉ gửi một request', async () => {
+    const g = gate()
+    vi.mocked(saveConnection).mockImplementation(async (connection: any) => {
+      await g.wait()
+      return { connection }
+    })
+    const w = await mountReadyToSave()
+
+    clickTwiceInOneTick(saveButton())
+    await flushPromises()
+
+    expect(saveConnection).toHaveBeenCalledTimes(1)
+    expect(saveButton().disabled).toBe(true)
+
+    // Cấu trúc sau khi sửa F1: overlay là ANH EM đứng trước `.modal-body`, cả
+    // hai nằm trong `.c-loading-host`. Neo vào chính hộp cuộn là lỗi cũ —
+    // `inset: 0` khi đó lấy cỡ bằng padding box nhưng neo vào gốc nội dung, nên
+    // cuộn xuống là overlay trôi khỏi vùng nhìn thấy.
+    const overlay = document.body.querySelector(OVERLAY)
+    expect(overlay).not.toBe(null)
+    // Chính node overlay phải nằm NGOÀI hộp cuộn — đây là mệnh đề mạnh, và là
+    // mệnh đề duy nhất bắt được lỗi F1 ở dạng "giữ `.c-loading-host` nhưng vẫn
+    // nhét overlay vào trong `.modal-body`".
+    expect(overlay!.closest('.modal-body')).toBe(null)
+    expect(overlay!.closest('.qa-form-body')).toBe(null)
+    const host = overlay!.closest(HOST)
+    expect(host).not.toBe(null)
+    expect(host!.closest('.modal-body')).toBe(null)
+    expect(host!.querySelector('.modal-body')).not.toBe(null)
+
+    // Nút đóng ở `.modal-head` nằm ngoài overlay — người dùng vẫn thoát được.
+    expect(document.body.querySelector(`.modal-head ${OVERLAY}`)).toBe(null)
+
+    g.release()
+    await flushPromises()
+    w.unmount()
+  })
+
+  // T6fabee9b: ca này dùng 409 làm đại diện cho "lỗi bất kỳ", nhưng 409 nay
+  // mang nghĩa riêng "id đã tồn tại" và được ánh xạ sang message i18n. Đổi sang
+  // một status trung tính để nó tiếp tục chốt đúng thứ nó sinh ra để chốt (vòng
+  // đời overlay + nút), rồi ca TC-D39 ngay dưới phủ riêng nghĩa mới của 409.
+  it('TC-22: API lỗi thì overlay tắt, nút mở lại, thông điệp lỗi giữ nguyên', async () => {
+    const boom = Object.assign(new Error('Conflict'), { status: 500 })
+    vi.mocked(saveConnection).mockRejectedValueOnce(boom)
+    const w = await mountReadyToSave()
+
+    await click(saveButton())
+
+    expect(document.body.querySelector(OVERLAY)).toBe(null)
+    expect(document.body.querySelector('.err-banner')?.textContent).toBe('Conflict')
+    expect(saveButton().disabled).toBe(false)
+
+    // Mở lại được thật, không chỉ "trông như mở lại".
+    await click(saveButton())
+    expect(saveConnection).toHaveBeenCalledTimes(2)
+
+    w.unmount()
+  })
+
+  it('TC-D39: 409 ⇒ hiện message i18n "đổi tên khác", 🚫 không hiện chuỗi thô của BE', async () => {
+    // Nhận diện bằng status, 🚫 không so chuỗi tiếng Việt của tầng business.
+    vi.mocked(saveConnection).mockRejectedValueOnce(
+      Object.assign(new Error('connection id "existing-api" đã tồn tại'), { status: 409 }),
+    )
+    const w = await mountReadyToSave()
+
+    await click(saveButton())
+
+    const banner = document.body.querySelector('.err-banner')
+    expect(banner?.textContent?.trim()).toBe(
+      runnerVi.errors.connIdTaken.replace('{id}', 'existing-api'),
+    )
+    expect(banner?.textContent).not.toContain('connection id')
+
+    w.unmount()
+  })
+
+  it.each(['resolve', 'reject'])('TC-25: đóng dialog giữa lúc request đang bay (%s) rồi mở lại thì không kẹt', async (mode) => {
+    const g = gate()
+    vi.mocked(saveConnection).mockImplementation(async (connection: any) => {
+      await g.wait()
+      if (mode === 'reject') throw Object.assign(new Error('Gone'), { status: 410 })
+      return { connection }
+    })
+
+    const first = await mountReadyToSave()
+    await click(saveButton())
+    expect(saveConnection).toHaveBeenCalledTimes(1)
+    expect(document.body.querySelector(OVERLAY)).not.toBe(null)
+
+    // "Huỷ" trong task này chỉ có nghĩa là người dùng rời khỏi vùng đang bận
+    // (design D5 cố ý không thêm `AbortController`).
+    first.unmount()
+    g.release()
+    await flushPromises()
+
+    vi.mocked(saveConnection).mockImplementation(async (connection: any) => ({ connection }))
+    const second = await mountReadyToSave()
+
+    expect(document.body.querySelector(OVERLAY)).toBe(null)
+    expect(saveButton().disabled).toBe(false)
+
+    await click(saveButton())
+    expect(saveConnection).toHaveBeenCalledTimes(2)
+    second.unmount()
+  })
+})
+
+/* ═══ #378 · #379 · Tdf943817 — cảnh báo theo cách giao MCP của provider ══════ */
+
+import runnerEn from '@/features/runner/locales/en'
+import { listProviderCatalog } from '@/features/runner/business/registry'
+
+/**
+ * TC-P5-25 · TC-P5-26 (+ vế UI của #379).
+ *
+ * ⚠️ Lệch so với `design.md` §4.1 và `test-spec.md` §2.1: cảnh báo nằm ở
+ * **`ConnectionDialog.vue`**, 🚫 phải `RunnerConfigPanel.vue` — ô chọn MCP server
+ * thật sự ở đây, và P5-8 đòi người dùng thấy *TRƯỚC KHI BẬT* (`implement.md`
+ * §4 "Sai lệch 2"). TC đi theo bề mặt thật.
+ *
+ * 📌 Catalog ở đây lấy `mcpDelivery` từ **chính `listProviderCatalog()`** (kind
+ * của delivery gắn với provider), 🚫 hằng gõ tay: fixture gõ tay là thứ vẫn xanh
+ * sau khi giá trị thật đã đổi — đúng cái bẫy mà TC-62 vừa rơi vào.
+ */
+describe('ConnectionDialog — cảnh báo theo mcpDelivery (#378 / #379)', () => {
+  const MCP_SERVERS = [
+    { id: 'playwright', label: 'Playwright MCP', enabled: true, transport: 'stdio', command: 'npx', args: [], env: {} },
+  ]
+
+  const CATALOG = listProviderCatalog()
+  function mcpDeliveryOf(providerId: string): ProviderEntry['mcpDelivery'] {
+    const entry = CATALOG.find((e) => e.id === providerId)
+    if (!entry) throw new Error(`provider không có trong catalog: ${providerId}`)
+    return entry.mcpDelivery
+  }
+
+  const REAL_PROVIDERS: ProviderEntry[] = [
+    { id: 'claude-code-cli', kind: 'local-console', label: 'Claude Code CLI', family: 'agent-cli', mcpDelivery: mcpDeliveryOf('claude-code-cli') },
+    { id: 'cursor-cli', kind: 'local-console', label: 'Cursor CLI', family: 'agent-cli', mcpDelivery: mcpDeliveryOf('cursor-cli') },
+    { id: 'codex-cli', kind: 'local-console', label: 'Codex CLI', family: 'agent-cli', mcpDelivery: mcpDeliveryOf('codex-cli') },
+    ...PROVIDERS.map((p) => ({ ...p, mcpDelivery: mcpDeliveryOf(p.id) })),
+  ] as ProviderEntry[]
+
+  const LOCAL_COMMANDS_REAL = [
+    { id: 'claude', command: 'claude', path: 'claude', available: true, providerId: 'claude-code-cli', flags: [] },
+    { id: 'cursor-agent', command: 'cursor-agent', path: 'cursor-agent', available: true, providerId: 'cursor-cli', flags: [] },
+    { id: 'codex', command: 'codex', path: 'codex', available: true, providerId: 'codex-cli', flags: [] },
+  ]
+
+  async function mountReal(connection: any = null) {
+    vi.mocked(scanLocalCommands).mockResolvedValue({ commands: LOCAL_COMMANDS_REAL })
+    const w = mount(ConnectionDialog, {
+      props: { providers: REAL_PROVIDERS, providerConfigs: PROVIDER_CONFIGS, connection },
+      attachTo: document.body,
+    })
+    await flushPromises()
+    return w
+  }
+  async function tick(id: string) {
+    const box = qa<HTMLInputElement>(`input[type="checkbox"][value="${id}"]`)[0]
+    if (!box) throw new Error(`mcp checkbox not found: ${id}`)
+    box.checked = true
+    box.dispatchEvent(new Event('change'))
+    await flushPromises()
+  }
+  async function chooseCmd(label: string) {
+    await pickCSelectOption(cSelectRootByLabel('Command'), label)
+  }
+
+  beforeEach(() => {
+    vi.mocked(fetchMcpServers).mockClear()
+    vi.mocked(fetchMcpServers).mockResolvedValue({ servers: [...MCP_SERVERS] } as any)
+  })
+
+  // TC-P5-25 ⭐
+  it('TC-P5-25: cursor-cli + có server bật ⇒ cảnh báo file nằm TRONG workspace', async () => {
+    const w = await mountReal()
+    await chooseCmd('cursor-agent')
+    await tick('playwright')
+
+    const text = document.body.textContent ?? ''
+    expect(text).toContain(runnerVi.connectionDialog.mcpWorkspaceFile)
+    // Nội dung phải nói đủ hai điều người dùng cần biết TRƯỚC khi bật.
+    expect(runnerVi.connectionDialog.mcpWorkspaceFile).toContain('.cursor/mcp.json')
+    expect(runnerVi.connectionDialog.mcpWorkspaceFile).toContain('~/.cursor')
+    // …và 🚫 còn báo sai rằng cursor không dùng được MCP (bug kéo theo đã sửa).
+    expect(text).not.toContain(runnerVi.connectionDialog.mcpUnsupported)
+
+    w.unmount()
+  })
+
+  it('TC-P5-25 (b): claude-code-cli ⇒ 🚫 cảnh báo workspace-file', async () => {
+    const w = await mountReal()
+    await chooseCmd('claude')
+    await tick('playwright')
+
+    const text = document.body.textContent ?? ''
+    expect(text).not.toContain(runnerVi.connectionDialog.mcpWorkspaceFile)
+    expect(text).not.toContain(runnerVi.connectionDialog.mcpUnsupported)
+    w.unmount()
+  })
+
+  it('TC-P5-25 (c): 🚫 chọn server nào ⇒ 🚫 cảnh báo nào, kể cả với cursor', async () => {
+    const w = await mountReal()
+    await chooseCmd('cursor-agent')
+
+    const text = document.body.textContent ?? ''
+    expect(text).not.toContain(runnerVi.connectionDialog.mcpWorkspaceFile)
+    expect(text).not.toContain(runnerVi.connectionDialog.mcpUnsupported)
+    w.unmount()
+  })
+
+  it('TC-P5-25 (d): codex-cli vẫn là `unsupported` ⇒ giữ nguyên cảnh báo cũ', async () => {
+    const w = await mountReal()
+    await chooseCmd('codex')
+    await tick('playwright')
+
+    const text = document.body.textContent ?? ''
+    expect(text).toContain(runnerVi.connectionDialog.mcpUnsupported)
+    expect(text).not.toContain(runnerVi.connectionDialog.mcpWorkspaceFile)
+    w.unmount()
+  })
+
+  /** #379 vế UI — họ `ai-api` nạp tool thẳng vào vòng tool-use, 🚫 qua file. */
+  it('TC-P6-UI: provider `ai-api` ⇒ nói đúng là tool nạp vào vòng tool-use, 🚫 báo unsupported', async () => {
+    const w = await mountReal()
+    const aiRadio = q<HTMLInputElement>('input[type="radio"][value="ai-provider"]')
+    aiRadio.checked = true
+    aiRadio.dispatchEvent(new Event('change'))
+    await flushPromises()
+    await chooseProviderConfig('pc-anthropic')
+    await flushPromises()
+    await tick('playwright')
+
+    const text = document.body.textContent ?? ''
+    expect(text).toContain(runnerVi.connectionDialog.mcpToolBridge)
+    expect(text).not.toContain(runnerVi.connectionDialog.mcpUnsupported)
+    expect(runnerVi.connectionDialog.mcpToolBridge).toContain('mcp__')
+    w.unmount()
+  })
+
+  // TC-P5-26 — i18n: khoá mới có đủ ở CẢ hai locale và 🚫 rỗng.
+  it('TC-P5-26: khoá `mcpWorkspaceFile` / `mcpToolBridge` có đủ ở vi và en', () => {
+    for (const [name, dict] of [['vi', runnerVi], ['en', runnerEn]] as const) {
+      for (const key of ['mcpWorkspaceFile', 'mcpToolBridge'] as const) {
+        const value = (dict.connectionDialog as Record<string, unknown>)[key]
+        expect(typeof value, `${name}.${key}`).toBe('string')
+        expect(String(value).trim().length, `${name}.${key}`).toBeGreaterThan(0)
+      }
+    }
+    // Hai locale 🚫 được chép nguyên văn của nhau (dấu hiệu quên dịch).
+    expect(runnerEn.connectionDialog.mcpWorkspaceFile).not.toBe(
+      runnerVi.connectionDialog.mcpWorkspaceFile,
+    )
+  })
+})
+
+/* ═══ Tcebe274e-P4 · #483 — cách giao MCP đọc thẳng từ catalog ════════════════ */
+
+/**
+ * Catalog provider (`ProviderEntry.mcpDelivery`) là nguồn duy nhất; dialog 🚫 đoán
+ * lại theo `family` hay đuôi `-api` của `providerId`. Fixture cố ý ghép những tổ
+ * hợp mà phép đoán cũ trả lời KHÁC catalog — xanh ở đây nghĩa là dialog đọc
+ * catalog, 🚫 đọc tên provider.
+ */
+describe('ConnectionDialog — thông báo MCP theo `mcpDelivery` của catalog (#483)', () => {
+  const MCP_SERVERS = [
+    { id: 'playwright', label: 'Playwright MCP', enabled: true, transport: 'stdio', command: 'npx', args: [], env: {} },
+  ]
+
+  async function tickPlaywright() {
+    const box = qa<HTMLInputElement>('input[type="checkbox"][value="playwright"]')[0]
+    if (!box) throw new Error('mcp checkbox not found: playwright')
+    box.checked = true
+    box.dispatchEvent(new Event('change'))
+    await flushPromises()
+  }
+  /** Connection AI API `anthropic-api` (họ `ai-api`) với `mcpDelivery` do catalog quyết. */
+  async function mountAiApiWith(mcpDelivery: ProviderEntry['mcpDelivery']) {
+    const providers = PROVIDERS.map((p) => (p.id === 'anthropic-api' ? { ...p, mcpDelivery } : p))
+    const w = mount(ConnectionDialog, {
+      props: { providers, providerConfigs: PROVIDER_CONFIGS, connection: null },
+      attachTo: document.body,
+    })
+    await flushPromises()
+    const aiRadio = q<HTMLInputElement>('input[type="radio"][value="ai-provider"]')
+    aiRadio.checked = true
+    aiRadio.dispatchEvent(new Event('change'))
+    await flushPromises()
+    await chooseProviderConfig('pc-anthropic')
+    await tickPlaywright()
+    return w
+  }
+  function shown() {
+    const text = document.body.textContent ?? ''
+    return {
+      unsupported: text.includes(runnerVi.connectionDialog.mcpUnsupported),
+      toolBridge: text.includes(runnerVi.connectionDialog.mcpToolBridge),
+      workspaceFile: text.includes(runnerVi.connectionDialog.mcpWorkspaceFile),
+    }
+  }
+
+  beforeEach(() => {
+    vi.mocked(fetchMcpServers).mockClear()
+    vi.mocked(fetchMcpServers).mockResolvedValue({ servers: [...MCP_SERVERS] } as any)
+  })
+
+  it('TC-P4-11: họ `ai-api`, catalog `bridge-tools` ⇒ chỉ thông báo nạp tool vào vòng tool-use', async () => {
+    const w = await mountAiApiWith('bridge-tools')
+
+    expect(shown()).toEqual({ unsupported: false, toolBridge: true, workspaceFile: false })
+    w.unmount()
+  })
+
+  it('TC-P4-12: họ `ai-api` nhưng catalog `unsupported` ⇒ báo không hỗ trợ, 🚫 đoán là tool bridge', async () => {
+    const w = await mountAiApiWith('unsupported')
+
+    expect(shown()).toEqual({ unsupported: true, toolBridge: false, workspaceFile: false })
+    w.unmount()
+  })
+
+  it('TC-P4-13: catalog chưa có `mcpDelivery` ⇒ 🚫 thông báo nào, kể cả với provider đuôi `-api`', async () => {
+    const w = await mountAiApiWith(undefined)
+
+    expect(shown()).toEqual({ unsupported: false, toolBridge: false, workspaceFile: false })
+    w.unmount()
+  })
+
+  it('TC-P4-14: provider `agent-cli` mà catalog trả `bridge-tools` ⇒ vẫn theo catalog', async () => {
+    vi.mocked(scanLocalCommands).mockResolvedValue({ commands: LOCAL_COMMANDS })
+    const providers: ProviderEntry[] = [
+      ...PROVIDERS,
+      { id: 'claude-code-cli', kind: 'local-console', label: 'Claude Code CLI', family: 'agent-cli', mcpDelivery: 'bridge-tools' },
+    ]
+    const w = mount(ConnectionDialog, {
+      props: { providers, providerConfigs: PROVIDER_CONFIGS, connection: null },
+      attachTo: document.body,
+    })
+    await flushPromises()
+    await chooseCommand('claude')
+    await tickPlaywright()
+
+    expect(shown()).toEqual({ unsupported: false, toolBridge: true, workspaceFile: false })
     w.unmount()
   })
 })

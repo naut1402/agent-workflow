@@ -1,5 +1,20 @@
-import { test, expect } from '@playwright/test'
+import { test, expect, type Page } from '@playwright/test'
 import { capture } from './_capture'
+
+/**
+ * Stub `GET /api/tasks/:id/chat` and its SSE transport `/chat/stream` with the
+ * same payload — the regex matches both, and the stream needs an event-stream
+ * body (`event: chat`), not plain JSON, or the chat never receives it.
+ */
+async function routeTaskChat(page: Page, payloadFor: (url: URL) => Record<string, unknown>) {
+  await page.route(/\/api\/tasks\/[^/]+\/chat/, (route) => {
+    const url = new URL(route.request().url())
+    const json = payloadFor(url)
+    return url.pathname.endsWith('/chat/stream')
+      ? route.fulfill({ contentType: 'text/event-stream', body: `event: chat\ndata: ${JSON.stringify(json)}\n\n` })
+      : route.fulfill({ json })
+  })
+}
 
 // E2E for the NL chat surface (F0012) after the UI review on PR #158:
 //  1. the window uses the theme panel background, not a hardcoded white one,
@@ -168,32 +183,27 @@ test('nl chat: message sides, status indicator and minimize (capture)', async ({
 test('pipeline node popover opens a step-scoped runner chat (capture)', async ({ page }, testInfo) => {
   // The chat endpoint is stubbed: the fixture project has no CLI session, and a
   // real one would need a configured runner. Shape mirrors GET /api/tasks/:id/chat.
-  await page.route(/\/api\/tasks\/[^/]+\/chat/, (route) => {
-    const url = new URL(route.request().url())
-    route.fulfill({
-      json: {
-        taskId: 'DEMO-1',
-        stepId: url.searchParams.get('stepId'),
-        sessionId: 'sess-e2e',
-        transcriptFound: true,
-        total: 3,
-        turns: [
-          { index: 0, role: 'user', text: 'chạy step design' },
-          { index: 1, role: 'tool', tool: 'Read', text: 'docs/design.md' },
-          {
-            index: 2,
-            role: 'assistant',
-            // Markdown: the reply must render, not show raw ** / - / ` syntax.
-            text: '**Đã cập nhật** design.md:\n\n- thêm §4\n- sửa `steps[].agent`',
-          },
-        ],
-        running: { jobId: 'job-e2e', stepId: url.searchParams.get('stepId'), startedAt: null },
-        runner: { id: 'runner-e2e', name: 'Runner E2E', enabled: true },
-        canSend: true,
-        queued: true,
+  await routeTaskChat(page, (url) => ({
+    taskId: 'DEMO-1',
+    stepId: url.searchParams.get('stepId'),
+    sessionId: 'sess-e2e',
+    transcriptFound: true,
+    total: 3,
+    turns: [
+      { index: 0, role: 'user', text: 'chạy step design' },
+      { index: 1, role: 'tool', tool: 'Read', text: 'docs/design.md' },
+      {
+        index: 2,
+        role: 'assistant',
+        // Markdown: the reply must render, not show raw ** / - / ` syntax.
+        text: '**Đã cập nhật** design.md:\n\n- thêm §4\n- sửa `steps[].agent`',
       },
-    })
-  })
+    ],
+    running: { jobId: 'job-e2e', stepId: url.searchParams.get('stepId'), startedAt: null },
+    runner: { id: 'runner-e2e', name: 'Runner E2E', enabled: true },
+    canSend: true,
+    queued: true,
+  }))
 
   await page.goto('/')
   // ⚠️ Không dùng waitForLoadState('networkidle') — SSE task/job list (#348)
@@ -496,23 +506,18 @@ test('nl chat: an unsubmitted draft survives switching to a step chat and back',
   // The bug this task fixes: typing into the creation chat, opening a step's
   // chat, and finding no way back to what was typed. Nothing is ever sent, so
   // no job is submitted against the shared e2e runner.
-  await page.route(/\/api\/tasks\/[^/]+\/chat/, (route) => {
-    const url = new URL(route.request().url())
-    route.fulfill({
-      json: {
-        taskId: 'DEMO-1',
-        stepId: url.searchParams.get('stepId'),
-        sessionId: 'sess-switch',
-        transcriptFound: true,
-        total: 1,
-        turns: [{ index: 0, role: 'user', text: 'chạy step design' }],
-        running: null,
-        runner: { id: 'runner-e2e', name: 'Runner E2E', enabled: true },
-        canSend: true,
-        queued: false,
-      },
-    })
-  })
+  await routeTaskChat(page, (url) => ({
+    taskId: 'DEMO-1',
+    stepId: url.searchParams.get('stepId'),
+    sessionId: 'sess-switch',
+    transcriptFound: true,
+    total: 1,
+    turns: [{ index: 0, role: 'user', text: 'chạy step design' }],
+    running: null,
+    runner: { id: 'runner-e2e', name: 'Runner E2E', enabled: true },
+    canSend: true,
+    queued: false,
+  }))
 
   await page.goto('/')
   // ⚠️ Không dùng waitForLoadState('networkidle') — SSE task/job list (#348)

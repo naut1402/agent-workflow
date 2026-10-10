@@ -27,6 +27,8 @@ export interface ProviderConfigOption {
 export interface ConnectionOption {
   id: string
   label: string
+  /** Như `RunnerDraft.create` — cờ chỉ sống trên payload tạo mới, không persist. */
+  create?: true
   kind?: ConnectionKind
   providerId?: string
   cliPath?: string
@@ -57,6 +59,11 @@ export interface RunnerDraft {
   connectionId: string
   enabled: boolean
   maxConcurrency: number
+  /**
+   * Chỉ có mặt trên payload gửi đi của dialog tạo mới / copy — BE dùng để chặn
+   * ghi đè bản ghi trùng id (409). Không bao giờ được persist vào `runners.json`.
+   */
+  create?: true
   config: {
     timeoutMs: number
     /** Claude Code CLI only — omitted for console-command / other providers. */

@@ -21,6 +21,13 @@ export default {
     groupLabel: 'Default artifact view mode',
     block: 'Block by H2',
     full: 'Full',
+    accordion: 'Only one section open at a time',
+    sectionDesc: 'Section state when a document opens (block mode only).',
+    sectionGroupLabel: 'Default section state',
+    sectionExpanded: 'Expand all',
+    sectionCollapsed: 'Collapse all',
+    sectionForcedHint:
+      'While "only one section open at a time" is on, documents always open fully collapsed.',
   },
   chatFeedback: {
     title: 'Chat while a step is running',

@@ -14,7 +14,7 @@ import type { ExecuteRequest, ExecuteResult, RunnerProvider } from '../../../../
 // the very first step. Driven via Hono's app.request, same style as
 // runStep.route.test.ts.
 
-const PROVIDER_ID = 'stub-task-feedback-route'
+const PROVIDER_ID = 'stub-task-feedback-route-api'
 
 let resolveGate: (() => void) | null = null
 let gated = false
@@ -71,6 +71,30 @@ async function settle(id: string) {
   throw new Error(`job ${id} never settled (status=${loadJob(id)?.status})`)
 }
 
+/**
+ * Chờ task không còn job nào queued/running.
+ *
+ * Bước cuối của `runJob` là `advancePipelineStepChain`, và nó submit job của
+ * step kế tiếp SAU khi job hiện tại đã về `succeeded`. `settle()` một mình vì
+ * vậy không đủ: gửi feedback đúng khe đó thì `sendTaskFeedback` thấy một job
+ * đang chạy và trả `{ queued: true }` — phản hồi hợp lệ của sản phẩm, nhưng
+ * không phải thứ ca test đang chấm, nên nó đỏ ngẫu nhiên (~1/3 số lượt, có cả
+ * trên base). Chờ task rảnh là cách duy nhất chốt đúng ca "chat lúc không có
+ * job nào chạy" mà 🚫 không nới assert nào.
+ */
+async function waitIdle(taskId: string, tries = 400) {
+  for (let i = 0; i < tries; i++) {
+    const busy = listJobs(200).some(
+      (j) =>
+        j.metadata?.taskId === taskId &&
+        (j.status === 'queued' || j.status === 'running' || j.status === 'awaiting_recovery'),
+    )
+    if (!busy) return
+    await sleep(5)
+  }
+  throw new Error(`task ${taskId} vẫn còn job đang chạy sau khi chờ`)
+}
+
 async function waitForPhase(taskId: string, predicate: (phase: string | null) => boolean, tries = 400) {
   const stateFile = path.join(root, '.dev-state', `${taskId}.json`)
   for (let i = 0; i < tries; i++) {
@@ -123,7 +147,10 @@ async function runStep(taskId: string, body: Record<string, unknown> = {}) {
 }
 
 describe('run-step wiring: sessionMode resume', () => {
-  test('a chain through gate-less steps leaves exactly one open ledger entry', async () => {
+  // T6427b18c: ledger khoá entry theo NODE, nên một chain qua 2 step để lại 2
+  // entry `open` — mỗi step một phiên. Bất biến còn lại (và là bất biến thật)
+  // là: mỗi node ĐÚNG MỘT entry `open`, và không entry nào thuộc hai node.
+  test('a chain through gate-less steps leaves exactly one open ledger entry PER NODE', async () => {
     seedTask('W1', { current_phase: 'implementer' })
     const first = await runStep('W1')
     expect(first.status).toBe(201)
@@ -136,7 +163,12 @@ describe('run-step wiring: sessionMode resume', () => {
 
     const ledger = loadTaskSessionLedger(PROJECT_ID, 'W1')
     const openEntries = ledger.sessions.filter((s) => s.status === 'open')
-    expect(openEntries.length).toBe(1)
+    const owners = openEntries.map((s) => (s.stepIds ?? []).join(','))
+    expect(owners.sort()).toEqual(['implementer', 'reviewer'])
+    // Một node không được giữ hai entry `open`, và một entry không được thuộc
+    // hai node — đó là hai nửa của bug gốc.
+    expect(new Set(owners).size).toBe(owners.length)
+    expect(openEntries.every((s) => (s.stepIds ?? []).length === 1)).toBe(true)
   })
 })
 
@@ -188,6 +220,9 @@ describe('POST /api/tasks/:id/feedback', () => {
     expect(stepRes.status).toBe(201)
     const { job } = await stepRes.json()
     await settle(job.id)
+    // Chuỗi step tự chạy tiếp sang `reviewer` — chat lúc nó còn chạy sẽ bị xếp
+    // hàng (`{ queued: true }`, không có `job`) thay vì mở phiên mới.
+    await waitIdle('F3')
 
     const res = await app.request('/api/tasks/F3/feedback', {
       method: 'POST',

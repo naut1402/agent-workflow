@@ -1,21 +1,10 @@
-// ProjectRegistry — a filesystem-backed store of the dev-team workspaces the
-// dashboard can point at. Lives at a neutral, server-global location so it is
-// independent of any single `.dev-team-agent/` workspace:
-//
-//   ~/.dev-team-dashboard/projects.json   (override via DEV_TEAM_DASHBOARD_HOME)
-//
-// This module is the single source of truth shared by BOTH the REST API
-// (src/backend/devTeamApi.js) and the MCP server (mcp/server.mjs), so CRUD applied
-// from either channel stays consistent and validation can never be bypassed.
-//
-// Design ref: U0001 design.md §4.2 (schema + validate), §4.3 (resolveProjectRoot
-// + backward-compat).
-
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import crypto from 'node:crypto'
-import { writeTextFileAtomicSync } from './lib/fileHelper.js'
+import { existsSync, mkdirSync, writeTextFileAtomicSync } from './lib/fileHelper.js'
+import { dumpYaml } from './lib/yamlLib.js'
+import { DEFAULT_PIPELINE } from '../features/pipeline-editor/business/pipeline/index.js'
 
 const REGISTRY_VERSION = 1
 
@@ -84,9 +73,6 @@ function emptyRegistry(): Registry {
   return { version: REGISTRY_VERSION, projects: [] }
 }
 
-// Read the registry. Never throws: a missing or corrupt file is treated as an
-// empty registry (mirrors readState's resilience in devTeamApi.js) so the
-// server / MCP never crashes on a bad file.
 export function loadRegistry(): Registry {
   const file = registryFile()
   let raw: string
@@ -137,6 +123,25 @@ function slug(name: unknown): string {
 
 function shortHash(input: unknown): string {
   return crypto.createHash('sha1').update(String(input)).digest('hex').slice(0, 8)
+}
+
+/**
+ * Scaffold `.dev-team-agent/pipeline.yaml` for a newly-added project so it never
+ * silently falls back to the built-in `DEFAULT_PIPELINE` just because nobody ran
+ * `/dev-dashboard` yet. Idempotent (never overwrites an existing file, including
+ * a hand-tuned one from before the project was removed and re-added) and
+ * best-effort (a write failure here must not roll back `add()`).
+ */
+function scaffoldPipelineYaml(projectPath: string): void {
+  const dest = path.join(projectPath, 'pipeline.yaml')
+  if (existsSync(dest)) return
+  try {
+    mkdirSync(projectPath, { recursive: true })
+    const { version, defaults, steps, doc_reviewer } = DEFAULT_PIPELINE
+    writeTextFileAtomicSync(dest, dumpYaml({ version, defaults, steps, doc_reviewer }))
+  } catch (err) {
+    console.warn(`[dev-team-dashboard] scaffold pipeline.yaml failed for ${projectPath}: ${err}`)
+  }
 }
 
 // ── Validation (shared by REST + MCP)
@@ -245,6 +250,7 @@ export function add({ path: inputPath, name }: { path?: string; name?: string } 
   }
   reg.projects.push(project)
   saveRegistry(reg)
+  scaffoldPipelineYaml(v.path)
   return { ok: true, project }
 }
 

@@ -8,11 +8,12 @@ import {
   type SessionCaptureMode,
 } from '../sessionLedger.js'
 import type { CredentialProfile, ExecuteRequest, ExecuteResult, ResolvedAgent, RunnerProvider } from '../types.js'
-import type { AgentCliProvider, McpDelivery } from './agentCli.js'
-import { mcpDeliveryOf } from './agentCli.js'
-import { prepareMcpConfigForJob, type McpJobConfigHandle } from './mcpJobConfig.js'
-import { maskSecretText } from '../../../mcp/business/index.js'
+import type { AgentCliProvider } from './agentCli.js'
+import { SecretMasker, SelfMcpServer } from '../../../mcp/business/index.js'
 import { formatJobLogFooter, formatJobLogHeader } from '../jobLogFormat.js'
+import type { McpConfigHandle } from '../mcpDelivery/FileMcpDelivery.js'
+import type { McpJobDelivery } from '../mcpDelivery/McpJobDelivery.js'
+import { NoMcpDelivery } from '../mcpDelivery/NoMcpDelivery.js'
 
 interface ProcResult {
   exitCode: number | null
@@ -121,6 +122,9 @@ function resolveEffectiveFlags(flags: unknown, credential: CredentialProfile): s
  * text nên không có vấn đề Windows argv-quoting, và model không "nhìn thấy"
  * giá trị thật của token trong context/transcript (chỉ viết literal tên biến
  * trong lệnh `curl`, shell mới thay giá trị lúc thực thi).
+ *
+ * Tên biến và guard thuộc `SelfMcpServer` — cùng guard với entry MCP tự gắn
+ * (`SelfMcpServer.forJob`), nên env và tool không thể lệch nhau.
  */
 function buildChildEnv(credential: CredentialProfile, metadata?: Record<string, unknown>): NodeJS.ProcessEnv {
   const env = { ...process.env }
@@ -128,14 +132,7 @@ function buildChildEnv(credential: CredentialProfile, metadata?: Record<string, 
   if (auth.type === 'env' && auth.key && auth.value) {
     env[auth.key] = auth.value
   }
-  if (
-    metadata?.orchestratorJob === true
-    && typeof metadata.orchestratorToken === 'string'
-    && process.env.DEV_TEAM_SELF_BASE_URL
-  ) {
-    env.DASHBOARD_ORCHESTRATOR_TOKEN = metadata.orchestratorToken
-    env.DASHBOARD_ORCHESTRATOR_BASE_URL = process.env.DEV_TEAM_SELF_BASE_URL
-  }
+  Object.assign(env, SelfMcpServer.childEnv(metadata))
   return env
 }
 
@@ -326,18 +323,27 @@ export interface LocalConsoleProviderOptions {
   claudeStyleArgs?: boolean
   /** How this provider captures/presets CLI session ids. */
   sessionCapture?: SessionCaptureMode
-  /** Override for tests; production reads `mcpDeliveryOf(providerId)`. */
-  mcpDelivery?: McpDelivery
+  /**
+   * Cách provider nhận MCP của job — lắp ráp ở `registry.ts`. Thiếu ⇒
+   * `NoMcpDelivery`: job không nhận MCP, argv không đổi.
+   *
+   * 📌 Delivery phải khớp cách provider dựng argv: `config-file-flag` chỉ có cờ
+   * ở nhánh claude-style, `workspace-config-file` chỉ có `--approve-mcps` ở nhánh
+   * `parse-json`. Provider dựng sẵn luôn khớp; tổ hợp khác (test) truyền tường minh.
+   */
+  mcpDelivery?: McpJobDelivery<McpConfigHandle>
 }
 
 /** Shared Agent CLI spawn provider (Claude / Cursor / Codex) — not console-command. */
 export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): AgentCliProvider {
   const claudeStyle = opts.claudeStyleArgs !== false && opts.providerId === 'claude-code-cli'
   const sessionCapture: SessionCaptureMode = opts.sessionCapture ?? 'none'
+  const mcpDelivery: McpJobDelivery<McpConfigHandle> = opts.mcpDelivery ?? new NoMcpDelivery()
 
   return {
     providerId: opts.providerId,
     family: 'agent-cli',
+    mcpDelivery,
 
     validateRunnerConfig(config) {
       const errors: string[] = []
@@ -365,7 +371,7 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): A
         maxConcurrency: 1,
         sessionCapture,
         supportsTokenUsage: false,
-        mcpDelivery: opts.mcpDelivery ?? mcpDeliveryOf(opts.providerId),
+        mcpDelivery: mcpDelivery.kind,
       }
     },
 
@@ -399,11 +405,11 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): A
         runnerConfig.dangerouslySkipPermissions !== 'false'
 
       const logPath = req.metadata?.logPath as string | undefined
-      let mcpHandle: McpJobConfigHandle | null = null
+      let mcpHandle: McpConfigHandle | null = null
       // Đọc `mcpHandle` lúc gọi chứ không lúc khai: handle chỉ có sau khi serialize
       // xong, mà mọi dòng log đều phải đi qua cùng một bộ lọc.
       const maskLog = (text: string) =>
-        mcpHandle?.secrets.length ? maskSecretText(text, mcpHandle.secrets) : text
+        mcpHandle?.masker.values.length ? mcpHandle.masker.mask(text) : text
       const appendLog = (text: string) => {
         if (!logPath) return
         try {
@@ -413,39 +419,36 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): A
         }
       }
 
-      // Một biểu thức quyết định cả "có sinh file" lẫn "có đẩy cờ": cờ chỉ được
-      // thêm trong nhánh claude-style, nên sinh file ngoài nhánh đó là ghi rồi xoá
-      // một file không ai đọc.
-      const useMcpConfigFile =
-        (opts.mcpDelivery ?? mcpDeliveryOf(opts.providerId)) === 'config-file-flag' && useClaudeStyle
-
       // try/finally phải ôm TOÀN BỘ phần còn lại, kể cả lời gọi sinh file và nhánh
       // trả ExecuteResult sớm khi runProcess ném — nếu không, file 0600 chứa secret
       // ở lại trên đĩa.
       try {
-        if (useMcpConfigFile) {
-          try {
-            mcpHandle = prepareMcpConfigForJob({
-              ids: runnerConfig.mcpServers,
-              workspace: req.workspace,
-              jobId: req.jobId,
-              // Nhận ngay lúc phát sinh, vì id bị tắt/xoá hết thì hàm trả `null`
-              // và không còn handle nào mang warnings ra.
-              onWarning: (message) => appendLog(`[runner] MCP warning: ${message}\n`),
-            })
-          } catch (err: any) {
-            // Chạy tiếp mà thiếu tool là kiểu hỏng tệ nhất: job fail vì lý do
-            // không liên quan và không ai truy được về đây.
-            const result: ExecuteResult = {
-              ok: false,
-              exitCode: null,
-              durationMs: Date.now() - started,
-              logPath,
-              error: `không sinh được file cấu hình MCP: ${String(err?.message ?? err)}`,
-            }
-            appendLog(describeResult(result))
-            return result
+        try {
+          // Một lời gọi cho mọi cách giao: delivery gắn theo provider (registry.ts)
+          // nên provider không nhận MCP có `NoMcpDelivery` ⇒ `null`, argv không đổi.
+          mcpHandle = await mcpDelivery.prepare({
+            ids: runnerConfig.mcpServers,
+            workspace: req.workspace,
+            jobId: req.jobId,
+            // Delivery claude đọc để tự gắn entry dev-team-dashboard cho job điều phối.
+            metadata: req.metadata,
+            // Nhận ngay lúc phát sinh, vì id bị tắt/xoá hết thì hàm trả `null`
+            // và không còn handle nào mang warnings ra.
+            onWarning: (message) => appendLog(`[runner] MCP warning: ${message}\n`),
+            onLog: appendLog,
+          })
+        } catch (err: any) {
+          // Chạy tiếp mà thiếu tool là kiểu hỏng tệ nhất: job fail vì lý do
+          // không liên quan và không ai truy được về đây.
+          const result: ExecuteResult = {
+            ok: false,
+            exitCode: null,
+            durationMs: Date.now() - started,
+            logPath,
+            error: `không sinh được file cấu hình MCP: ${String(err?.message ?? err)}`,
           }
+          appendLog(describeResult(result))
+          return result
         }
 
         let args: string[]
@@ -459,7 +462,9 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): A
             sessionId: sessionPlan.sessionId,
             resumeSessionId: sessionPlan.resumeSessionId,
             model: runnerConfig.model,
-            mcpConfigPath: mcpHandle?.path,
+            // 📌 Chỉ nhánh cờ mới đẩy đường dẫn vào argv. Nhánh cursor dùng cùng
+            // kiểu handle nhưng CLI tự đọc theo cwd — đẩy vào là argv sai.
+            mcpConfigPath: mcpHandle?.kind === 'config-file-flag' ? mcpHandle.path : undefined,
           })
           args = invocation.args
           stdinInput = invocation.stdinInput
@@ -471,6 +476,7 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): A
             flags,
             prompt,
             resumeSessionId: sessionPlan.resumeSessionId,
+            mcpEnabled: Boolean(mcpHandle),
           })
           args = invocation.args
           stdinInput = invocation.stdinInput
@@ -503,15 +509,32 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): A
             `[runner] MCP: ${mcpHandle.count} server (${mcpHandle.names.join(', ')}) → ${mcpHandle.path}\n`,
           )
         }
+        if (mcpHandle?.kind === 'workspace-config-file') {
+          appendLog(
+            '[runner] MCP: cursor nhận cấu hình qua <workspace>/.cursor/mcp.json và chạy với '
+            + '--approve-mcps ⇒ các server trên được GHI vào danh sách phê duyệt cục bộ '
+            + '(~/.cursor), tác dụng phụ này TỒN TẠI SAU khi job kết thúc\n',
+          )
+        }
 
         // MCP server (hoặc chính CLI) in token ra stderr là chuyện thường —
         // `401 Unauthorized: Bearer sk-…`. File config được bảo vệ 0600 mà log job
         // thì không, nên lọc ở đúng một chỗ trước khi chunk đi bất cứ đâu.
-        const wrappedOnLog = (chunk: string) => {
-          const text = maskLog(chunk)
+        //
+        // Bộ lọc phải CÓ TRẠNG THÁI: `maskLog` là split/join từng chunk, nên một
+        // secret bị tiến trình con xuất làm hai chunk lọt qua cả hai lần gọi.
+        // Đổi lại, log trễ `max(len(secret)) - 1` ký tự ⇒ `flushStream()` là bắt
+        // buộc ở CẢ nhánh thành công lẫn nhánh lỗi, nếu không là nuốt đuôi log.
+        const streamMasker = (mcpHandle?.masker ?? SecretMasker.NONE).stream()
+        const emitLog = (text: string) => {
+          if (!text) return
           onLog?.(text)
           appendLog(text)
         }
+        const wrappedOnLog = (chunk: string) => emitLog(streamMasker.push(chunk))
+        // Gọi NGAY sau khi `runProcess` trả về / ném, TRƯỚC mọi `describeResult` —
+        // nếu không thì dòng tổng kết chen lên trước phần đuôi của log stream.
+        const flushStream = () => emitLog(streamMasker.flush())
 
         const wrappedOnStart = (info: { pid: number | null }) => {
           onStart?.(info)
@@ -532,6 +555,7 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): A
             stdinInput,
           })
         } catch (err: any) {
+          flushStream()
           const result: ExecuteResult = {
             ok: false,
             exitCode: null,
@@ -542,6 +566,7 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): A
           appendLog(describeResult(result))
           return result
         }
+        flushStream()
 
         const artifactsFound: string[] = []
         if (req.produces?.length) {
@@ -588,10 +613,14 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): A
           // → SSE. `redactPayload` chỉ lọc theo tên khoá nên khoá `error` lọt sạch.
           error: ok ? undefined : maskLog(formatFailure(procResult, timeoutMs)),
           timedOut: procResult.killed,
-          // stdout KHÔNG mask: là payload chức năng (proposal ghép vào scratch, dòng
-          // ORCHESTRATOR_DECISION), mask mù sẽ cắt giữa artifact. `error` đã mask, và
-          // đó là nhánh duy nhất stderr của server MCP đi ra ngoài.
+          // stdout THÔ: là payload chức năng (proposal ghép vào scratch, dòng
+          // ORCHESTRATOR_DECISION), mask mù sẽ cắt giữa artifact.
           stdout,
+          // …còn bản ĐÃ MASK đi kèm cho biên persist/API (`JobRecord.stdout`,
+          // `GET /api/jobs`). Hai đường tách hẳn nhau: đường chức năng đọc `stdout`,
+          // đường ghi đĩa đọc `maskedStdout ?? stdout` (`jobQueue.persistStdout`).
+          // 🚫 Không mask thẳng `stdout` — xem design §3.4.
+          ...(mcpHandle?.masker.values.length ? { maskedStdout: maskLog(stdout) } : {}),
           sessionId: capturedSessionId,
           tokenUsage,
         }
@@ -604,11 +633,14 @@ export function createLocalConsoleProvider(opts: LocalConsoleProviderOptions): A
   }
 }
 
-export function createClaudeCodeCliProvider(): AgentCliProvider {
+export function createClaudeCodeCliProvider(
+  deps: Pick<LocalConsoleProviderOptions, 'mcpDelivery'> = {},
+): AgentCliProvider {
   return createLocalConsoleProvider({
     providerId: 'claude-code-cli',
     defaultCliPath: 'claude',
     claudeStyleArgs: true,
     sessionCapture: 'preset-uuid',
+    mcpDelivery: deps.mcpDelivery,
   })
 }

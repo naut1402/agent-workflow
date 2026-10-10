@@ -66,6 +66,12 @@ export default {
     select: 'Select this folder',
     selectDirRequired: 'Open a folder before selecting.',
   },
+  loadingOverlay: {
+    label: 'Working…',
+  },
+  dialog: {
+    close: 'Close',
+  },
   markdownView: {
     metadata: 'Metadata',
     untitledSection: 'Untitled section',

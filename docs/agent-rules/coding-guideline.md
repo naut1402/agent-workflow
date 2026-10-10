@@ -4,6 +4,9 @@ Quy ước viết code **hiện hành** trong repo này.
 
 Mức độ ràng buộc đánh dấu bằng màu callout — bảng màu ở [`writing-guideline.md`](writing-guideline.md) §5.
 
+> [!CAUTION]
+> <span style="color:#e5534b">🚫 Không sửa root [`README.md`](../../README.md) — ở bất kỳ bước nào. Cần đổi thì ghi đề xuất vào `docs/todo/<issue>/<task-id>.md` (**Loại nợ:** `readme`) để người duyệt tự sửa. Tài liệu chi tiết viết vào `docs/<chủ đề>/`. Nguyên văn: [`git-pr.md`](git-pr.md) §7.2.2.</span>
+
 ---
 
 ## 1. Ngôn ngữ & module
@@ -91,6 +94,7 @@ Primitive dùng chung trong `src/frontend/ui/`:
 - **Icon luôn qua `<Icon name="..." />`** (`src/frontend/ui/Icon.vue`) — **không** tự vẽ `<svg>` / `<path>` trong component feature. Icon chưa có thì thêm case mới vào `Icon.vue` (giữ nguyên viewBox/style gốc), không copy SVG ra file khác dù chỉ dùng 1 nơi.
 - **Dropdown mới không dùng `<select>` native** — dùng `CSelect` (option cố định) hoặc `CComboSelect` (nhiều option / creatable). Chỉ giữ `<select>` khi cần hành vi trình duyệt gốc không có API tương đương.
 - **Class truyền vào `CSelect`/`CComboSelect` chỉ lo kích thước** (`width` / `flex` / `min-width`). Truyền class control native (`cfg-input`, `cfg-textarea`) sẽ rơi vào `div` wrapper → hộp lồng hộp. Mẫu đúng: `cfg-select` / `cfg-combo-select`.
+- **Dialog modal mới dùng `CDialog`** — không tự dựng `Teleport` + `.modal-backdrop` + handler `Escape` trong feature. Kích thước truyền qua prop, không qua class scoped — [`ui-design-guideline.md`](ui-design-guideline.md) §3.
 
 ---
 
@@ -162,15 +166,16 @@ installPlugins(createApp(App), { i18n: { locale } }).mount('#app')
 
 ## 7. Comment code (KISS)
 
-> [!WARNING]
-> <span style="color:#d29922">Chỉ comment khi cần giải thích *why* — constraint ẩn, workaround, invariant khó thấy. Không giải thích *what*: tên biến/hàm tốt đã đủ.</span>
+> [!CAUTION]
+> <span style="color:#e5534b">🚫 Cấm giải thích trong code — cả *what* lẫn *why*. Lý do, bối cảnh, constraint ẩn, workaround thuộc `docs/` hoặc PR body, không thuộc comment.</span>
 
-- **Thử đổi tên trước khi thêm comment.** Comment giải thích một tên xấu là trả lãi mãi; đổi tên là trả gốc một lần. `BEFORE` → `TARGET_SHA` bỏ được cả câu giải thích nó là gì.
-- **Một why = một dòng.** Cần đoạn văn mới nói hết thì đó là dấu hiệu bối cảnh thuộc chỗ khác: PR body, hoặc `docs/`. Trong code để lại đúng câu chốt + link tới mục tài liệu.
+- **Code tự nói *what*** — tên biến/hàm/type đủ rõ thì không cần comment. Thử đổi tên trước: `BEFORE` → `TARGET_SHA` bỏ được cả câu giải thích nó là gì.
+- **Bối cảnh *why* ghi vào `docs/`** — mục tài liệu của feature, hoặc PR body nếu chỉ có giá trị lúc review.
+- **Được phép giữ lại** — một dòng link tới mục tài liệu (`// xem docs/mcp/server.md §3.1`), directive cho công cụ (`// eslint-disable-next-line …`, `// @ts-expect-error …`), `TODO` kèm link nợ.
 - **Không markup nhấn mạnh trong comment code** — `**bold**`, 🚫, ⚠️, khung `── ─` là ngôn ngữ của tài liệu và PR. Trong code chúng thành nhiễu, và khung rỗng kéo comment dài ra cho "xứng".
 - **Sửa nhỏ lẻ thì giữ nguyên comment cũ** — chỉ sửa khi nó đã outdate/sai so với code hiện tại.
 - **Không thêm comment tường thuật thay đổi vừa làm** — cấm dạng `// sửa theo review`, `// fix CI`, `// đổi X vì lỗi Y`.
-- **Comment mô tả hành vi hiện hành**, không kể lịch sử, không trích số issue / số PR / tên người, không nhắc định danh nội bộ của quy trình (số đợt, tên khối việc, mã task) — code sống lâu hơn kế hoạch.
+- **Comment mô tả hành vi hiện hành**, không kể lịch sử, không trích số issue / số PR / tên người, không nhắc định danh nội bộ của quy trình (số đợt, tên khối việc, mã task, mã quyết định / finding trong design · review như `D3`, `G8`, `TC-D8`) — code sống lâu hơn kế hoạch.
 - **Ngôn ngữ theo mật độ code xung quanh** — khối comment tiếng Anh thì viết tiếp tiếng Anh, không trộn nửa Anh nửa Việt.
 
 ---

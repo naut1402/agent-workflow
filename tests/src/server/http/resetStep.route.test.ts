@@ -4,7 +4,14 @@ import os from 'node:os'
 import path from 'node:path'
 import { createApp } from '../../../../src/backend/apiServer.js'
 import type { RegistryContext } from '../../../../src/backend/http/types.js'
-import { loadJob, listJobs, registerProvider, upsertConnection, upsertRunner } from '../../../../src/features/runner/business/index.js'
+import {
+  loadJob,
+  listJobs,
+  registerProvider,
+  setDefaultRunner,
+  upsertConnection,
+  upsertRunner,
+} from '../../../../src/features/runner/business/index.js'
 import type { ExecuteRequest, ExecuteResult, RunnerProvider } from '../../../../src/features/runner/business/types.js'
 
 // Route-level contract for POST /api/tasks/:id/reset-step — the recycle
@@ -91,6 +98,18 @@ beforeAll(async () => {
   registerProvider(stubProvider)
   upsertConnection({ id: 'stub-conn-reset-step', kind: 'local-console', providerId: PROVIDER_ID, cliPath: 'stub' })
   upsertRunner({ id: 'stub-runner-reset-step', connectionId: 'stub-conn-reset-step', config: {} })
+  // T6fabee9b: suite này pin runner ở mọi job nên không chạm default — nhưng
+  // `stub-runner-reset-step` thuộc họ `console-command`, nên default tự suy của
+  // store là một runner KHÔNG đủ điều kiện. Seed một default tường minh để ca
+  // đầu tiên bỏ pin không đỏ vì một lý do chẳng liên quan gì tới nó.
+  upsertConnection({
+    id: 'stub-conn-reset-step-default',
+    kind: 'local-console',
+    providerId: 'stub-reset-step-default-api',
+    cliPath: 'stub',
+  })
+  upsertRunner({ id: 'stub-runner-reset-step-default', connectionId: 'stub-conn-reset-step-default', config: {} })
+  setDefaultRunner('stub-runner-reset-step-default')
   fs.writeFileSync(path.join(root, 'pipeline.yaml'), PIPELINE, 'utf8')
   app = await createApp(fakeCtx())
 })

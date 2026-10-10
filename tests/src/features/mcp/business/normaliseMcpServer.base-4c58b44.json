@@ -1,0 +1,298 @@
+{
+  "baseSha": "4c58b44",
+  "entries": [
+    {
+      "name": "stdio tối thiểu",
+      "result": {
+        "id": "a",
+        "label": "a",
+        "enabled": true,
+        "lastCheck": null,
+        "transport": "stdio",
+        "command": "npx",
+        "args": [],
+        "env": {}
+      }
+    },
+    {
+      "name": "stdio đủ field",
+      "result": {
+        "id": "full",
+        "label": "Đầy đủ",
+        "enabled": true,
+        "timeoutMs": 30000,
+        "lastCheck": {
+          "at": "2026-01-01T00:00:00.000Z",
+          "ok": true,
+          "toolCount": 2,
+          "toolNames": [
+            "a",
+            "b"
+          ]
+        },
+        "transport": "stdio",
+        "command": "npx",
+        "args": [
+          "-y",
+          "@x/srv"
+        ],
+        "env": {
+          "TOKEN": "sk-abc",
+          "REF": "env:HOME"
+        },
+        "cwd": "/tmp/ws"
+      }
+    },
+    {
+      "name": "stdio thiếu command",
+      "result": null
+    },
+    {
+      "name": "stdio command rỗng",
+      "result": null
+    },
+    {
+      "name": "stdio command toàn khoảng trắng",
+      "result": null
+    },
+    {
+      "name": "stdio args lẫn kiểu sai",
+      "result": {
+        "id": "e",
+        "label": "e",
+        "enabled": true,
+        "lastCheck": null,
+        "transport": "stdio",
+        "command": "npx",
+        "args": [
+          "ok",
+          "hai"
+        ],
+        "env": {}
+      }
+    },
+    {
+      "name": "stdio env kiểu sai",
+      "result": {
+        "id": "f",
+        "label": "f",
+        "enabled": true,
+        "lastCheck": null,
+        "transport": "stdio",
+        "command": "npx",
+        "args": [],
+        "env": {
+          "B": "hai"
+        }
+      }
+    },
+    {
+      "name": "stdio enabled=false",
+      "result": {
+        "id": "g",
+        "label": "g",
+        "enabled": false,
+        "lastCheck": null,
+        "transport": "stdio",
+        "command": "npx",
+        "args": [],
+        "env": {}
+      }
+    },
+    {
+      "name": "stdio enabled vắng",
+      "result": {
+        "id": "h",
+        "label": "h",
+        "enabled": true,
+        "lastCheck": null,
+        "transport": "stdio",
+        "command": "npx",
+        "args": [],
+        "env": {}
+      }
+    },
+    {
+      "name": "stdio timeoutMs = 0",
+      "result": {
+        "id": "i",
+        "label": "i",
+        "enabled": true,
+        "lastCheck": null,
+        "transport": "stdio",
+        "command": "npx",
+        "args": [],
+        "env": {}
+      }
+    },
+    {
+      "name": "stdio timeoutMs âm",
+      "result": {
+        "id": "j",
+        "label": "j",
+        "enabled": true,
+        "lastCheck": null,
+        "transport": "stdio",
+        "command": "npx",
+        "args": [],
+        "env": {}
+      }
+    },
+    {
+      "name": "stdio timeoutMs không nguyên",
+      "result": {
+        "id": "k",
+        "label": "k",
+        "enabled": true,
+        "timeoutMs": 1234,
+        "lastCheck": null,
+        "transport": "stdio",
+        "command": "npx",
+        "args": [],
+        "env": {}
+      }
+    },
+    {
+      "name": "stdio label rỗng",
+      "result": {
+        "id": "l",
+        "label": "l",
+        "enabled": true,
+        "lastCheck": null,
+        "transport": "stdio",
+        "command": "npx",
+        "args": [],
+        "env": {}
+      }
+    },
+    {
+      "name": "stdio label quá dài",
+      "result": {
+        "id": "m",
+        "label": "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
+        "enabled": true,
+        "lastCheck": null,
+        "transport": "stdio",
+        "command": "npx",
+        "args": [],
+        "env": {}
+      }
+    },
+    {
+      "name": "stdio field thừa",
+      "result": {
+        "id": "n",
+        "label": "n",
+        "enabled": true,
+        "lastCheck": null,
+        "transport": "stdio",
+        "command": "npx",
+        "args": [],
+        "env": {}
+      }
+    },
+    {
+      "name": "http đủ field",
+      "result": {
+        "id": "o",
+        "label": "o",
+        "enabled": true,
+        "lastCheck": null,
+        "transport": "http",
+        "url": "https://a.example/mcp",
+        "credentialId": null,
+        "headers": {
+          "X-K": "v"
+        }
+      }
+    },
+    {
+      "name": "http thiếu url",
+      "result": null
+    },
+    {
+      "name": "http url rỗng",
+      "result": null
+    },
+    {
+      "name": "sse đủ field",
+      "result": {
+        "id": "r",
+        "label": "r",
+        "enabled": true,
+        "lastCheck": null,
+        "transport": "sse",
+        "url": "https://a.example/sse",
+        "credentialId": "c1",
+        "authHeader": "X-API-Key",
+        "headers": {}
+      }
+    },
+    {
+      "name": "sse thiếu url",
+      "result": null
+    },
+    {
+      "name": "transport lạ ws",
+      "result": null
+    },
+    {
+      "name": "transport rỗng",
+      "result": null
+    },
+    {
+      "name": "transport undefined",
+      "result": null
+    },
+    {
+      "name": "transport là số",
+      "result": null
+    },
+    {
+      "name": "id không hợp lệ VÀ thiếu command",
+      "result": null
+    },
+    {
+      "name": "id không hợp lệ, transport hợp lệ",
+      "result": null
+    },
+    {
+      "name": "id vắng",
+      "result": null
+    },
+    {
+      "name": "lastCheck vắng",
+      "result": {
+        "id": "x",
+        "label": "x",
+        "enabled": true,
+        "lastCheck": null,
+        "transport": "stdio",
+        "command": "npx",
+        "args": [],
+        "env": {}
+      }
+    },
+    {
+      "name": "lastCheck kiểu sai",
+      "result": {
+        "id": "y",
+        "label": "y",
+        "enabled": true,
+        "lastCheck": null,
+        "transport": "stdio",
+        "command": "npx",
+        "args": [],
+        "env": {}
+      }
+    },
+    {
+      "name": "raw là null",
+      "result": null
+    },
+    {
+      "name": "raw là chuỗi",
+      "result": null
+    }
+  ]
+}

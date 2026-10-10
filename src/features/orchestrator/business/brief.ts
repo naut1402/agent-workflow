@@ -3,14 +3,18 @@
  * thô: mỗi step là một session CLI mới, không có brief thì node nào cũng phải
  * tự đọc lại repo để dựng lại bối cảnh.
  *
- * Thuần I/O đọc — không ghi file nào (brief đi trong `job.userPrompt`, truy vết
- * được ở job record), nên `MACHINE_FILES` không đổi.
+ * Chủ yếu I/O đọc (brief đi trong `job.userPrompt`, truy vết được ở job
+ * record) — ngoại lệ duy nhất: `ensureProjectRulesFile` ghi
+ * `.dev-team-agent/project-rules.md` một lần nếu file chưa tồn tại (best-effort,
+ * không throw), nên `MACHINE_FILES` không cần khai thêm file này (không phải
+ * artifact do người dùng chỉnh tay).
  */
 
 import { joinPath, readDir, readTextFile } from '../../../backend/lib/fileHelper.js'
 import { loadKnowledgeBundle } from '../../knowledge/business/index.js'
 import { loadPipelineConfig } from '../../pipeline-editor/business/pipeline/index.js'
 import { MAX_BRIEF_BYTES } from '../schemas/orchestrator.js'
+import { ensureProjectRulesFile, extractRuleSection } from './projectRules.js'
 
 /** Vì sao step này được gọi — quyết định phần "Việc của bạn" nói gì. */
 export type DispatchReason =
@@ -105,7 +109,7 @@ export function summarizeExport(
   return blocks.length ? blocks.join('\n\n') : '(các bước trước chưa ghi dữ liệu export)'
 }
 
-function renderBundle(bundle: any[]): string {
+export function renderBundle(bundle: any[]): string {
   if (!bundle?.length) return ''
   return bundle
     .map((entry) =>
@@ -135,10 +139,20 @@ function renderAssignment(step: any, input: StepBriefInput): string {
   if (input.detail?.trim()) lines.push(`\n### Nội dung cần xử lý\n\n${input.detail.trim()}`)
   const agentNote = agentPart(input.agentContext, 'context')
   if (agentNote) lines.push(`\n### Bối cảnh từ node điều phối\n\n${agentNote}`)
+  // Kênh con → cha. Node điều phối chạy trong phiên riêng và chỉ đọc dòng này
+  // + danh sách artifact, nên context làm việc của nút con không tràn sang nó.
+  lines.push(
+    '\n### Khi xong\n\n' +
+      'Kết thúc output bằng MỘT dòng cuối cùng đúng dạng:\n\n' +
+      '`STEP_SUMMARY: <1–3 câu: đã làm gì, ghi artifact nào, việc còn lại>`\n\n' +
+      'Node điều phối chỉ đọc dòng này + danh sách artifact. Mọi chi tiết khác ' +
+      'phải nằm trong artifact, không nằm trong output.',
+  )
   return lines.join('\n')
 }
 
 const SECTION_CONTEXT = 'Bối cảnh task'
+const SECTION_RULE = 'Rule của project'
 const SECTION_ORCHESTRATOR = 'Tóm tắt của node điều phối'
 const SECTION_PREVIOUS = 'Kết quả các bước trước'
 const SECTION_KNOWLEDGE = 'Knowledge'
@@ -193,8 +207,15 @@ export async function composeStepBrief(input: StepBriefInput): Promise<string> {
   const fallbackArtifacts = await listTaskMarkdown(input.root, input.taskId)
   const bundle = await loadKnowledgeBundle(input.root, step.knowledge_inputs ?? [])
 
+  const ruleBody = step.rule_category
+    ? await ensureProjectRulesFile(input.root)
+        .then((md) => extractRuleSection(md, step.rule_category) ?? '⚠️ Chưa thiết lập rule cho category này.')
+        .catch(() => '⚠️ Chưa thiết lập rule cho category này.')
+    : ''
+
   const parts = [
     { title: SECTION_CONTEXT, body: request.trim() },
+    { title: SECTION_RULE, body: ruleBody },
     { title: SECTION_ORCHESTRATOR, body: agentPart(input.agentContext, 'summary') },
     { title: SECTION_PREVIOUS, body: summarizeExport(exportJson, steps, input.stepId, fallbackArtifacts) },
     { title: SECTION_KNOWLEDGE, body: renderBundle(bundle) },

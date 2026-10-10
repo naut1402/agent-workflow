@@ -156,7 +156,6 @@ export default {
     description: 'Mô tả (tuỳ chọn)',
     enabled: 'Bật ngay sau khi lưu',
     cancel: 'Huỷ',
-    close: 'Đóng',
     save: 'Lưu',
     saving: 'Đang lưu…',
     nameRequired: 'Cần nhập tên',

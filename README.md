@@ -28,7 +28,7 @@
 - **Runtime & build** — [Bun](https://bun.sh) (dev server, test, script), [Vite](https://vitejs.dev) cho SPA và dev middleware.
 - **Frontend** — [Vue 3](https://vuejs.org) `<script setup>`, DI/IoC bằng `provide/inject` thuần + `ModeRegistry` (mỗi mode tự đăng ký), `vue-i18n` (vi/en, glob theo feature), [Vue Flow](https://vueflow.dev) cho pipeline canvas, Toast UI Editor + Mermaid cho markdown & sơ đồ, SCSS token tập trung.
 - **Backend** — [Hono](https://hono.dev) trên **hai transport** (Vite middleware khi dev, `src/backend/standalone.ts` khi chạy Node/Bun), route tự nạp từ `src/features/*/api.ts`, [Zod](https://zod.dev) validate biên I/O, không database — filesystem là nguồn sự thật.
-- **Tích hợp AI** — Anthropic SDK cho wizard sinh agent bằng ngôn ngữ tự nhiên; MCP server stdio (`bun run mcp`) cho Claude Code.
+- **Tích hợp AI** — Anthropic SDK cho wizard sinh agent bằng ngôn ngữ tự nhiên; MCP server stdio (`bun run mcp`) cho Claude Code, có mode vận hành `readonly` / `full`.
 - **Chất lượng** — TypeScript (`vue-tsc`), ESLint, Prettier, Commitlint, `bun test` (domain/API), Vitest + coverage (frontend), Playwright (e2e).
 - **Đóng gói** — Docker Compose + Dockerfile kèm `install.sh` (xem [`docker/`](docker/)).
 
@@ -43,7 +43,7 @@
 - **Quick action** — chạy nhanh một action lên task/artifact đang chọn, không cần tạo task đầy đủ; menu lồng nhau.
 - **Logs** — soi lại chuyện đã xảy ra: audit thao tác, request HTTP, log job; bật/tắt từng loại trong Settings.
 - **Statistics** — thống kê drill-down project → task → step → job, biểu đồ pie / xychart.
-- **MCP** — CRUD project registry qua stdio (`bun run mcp`), không cần HTTP server chạy.
+- **MCP** — đường vào cho agent không nói HTTP qua stdio (`bun run mcp`), không cần HTTP server chạy. Đọc project registry, task, artifact và knowledge bundle; CRUD registry chỉ mở ở mode `full`. Xem [`docs/mcp/`](docs/mcp/README.md).
 
 ## Data root `.dev-team-agent/`
 
@@ -75,7 +75,7 @@ bun run dev          # Vite :5174 — single-project
 bun run build        # SPA → dist/
 bun run serve        # Node standalone (cần dist/) :5174
 bun run start        # build + serve
-bun run mcp          # MCP stdio — project registry
+bun run mcp          # MCP stdio — mặc định readonly; --mode=full để mở tool ghi
 ```
 
 ### Lệnh hữu ích
@@ -91,16 +91,10 @@ bun run test:all     # typecheck → lint → test → test:fe → e2e
 bun run check:todo   # gate docs/todo (CI promote → main)
 ```
 
-### Biến môi trường
-
-| Biến | Bắt buộc? | Dùng cho | Khi không set |
-|------|-----------|----------|---------------|
-| `ANTHROPIC_API_KEY` | Tuỳ chọn | Sinh bản nháp agent từ mô tả (`/api/custom-agents/generate`) | Fallback heuristic |
-| `DASHBOARD_SECRET_KEY` | Bắt buộc cho vault | Mã hoá `secret-vault.json` (`secretVault.ts`) — credential kiểu "dán secret trực tiếp" (`stored:`) và "Connect via browser"/OAuth (`oauth:`) trong `ConnectionDialog.vue` | 2 luồng đó fail rõ ràng; CLI và secretRef `env:` / `file:` không bị ảnh hưởng |
-
 ## Liên kết
 
-- [`docker/`](docker/) — Compose, Dockerfile, `install.sh`, [`.env.example`](docker/.env.example)
+- [`docker/`](docker/) — Compose, Dockerfile, `install.sh`, [`.env.example`](docker/.env.example) · [`docs/docker.md`](docs/docker.md): biến môi trường
+- MCP server (`bun run mcp`) — [`docs/mcp/`](docs/mcp/README.md): mode vận hành, bảng tool, khai `mcpServers`, mã lỗi
 - Liên quan — [plugin Claude Code (bộ agent template)](docs/template/agents/) · [Issues](https://github.com/naut1402/agent-workflow/issues) · [Pull requests](https://github.com/naut1402/agent-workflow/pulls)
 - Tài liệu — [danh mục đầy đủ trong `docs/`](docs/README.md): kiến trúc, domain event, i18n, quy ước UI, template pipeline
 
