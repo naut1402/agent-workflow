@@ -146,12 +146,12 @@ Thứ tự quyết định:
 | Thao tác kiểu dữ liệu thuần | `*Utils` | `stringUtils`, `arrayUtils`, `dateUtils` |
 | Biên thư viện bên thứ ba | `*Lib` | `yamlLib`, `markdownLib`, `diffLib` |
 | Filesystem / path / URL file (Node) | `fileHelper` | `joinPath`, `readTextFile`, `pathToFileURL` |
-| Quét thư mục + dynamic `import` | `dirModuleLoader` | `loadModulesUnder` |
+| Quét thư mục + dynamic `import` | `dirModuleLoader` | `loadModulesUnder`, `loadEntriesUnder` |
 
 - **`parseFrontmatter` / `readYamlSafe` nằm ở `yamlLib`.**
 - **Module dùng chung FE+BE không top-level import `node:*`** (Vite bundle) — I/O Node để `fileHelper` hoặc dynamic import có chủ đích.
 - **`business/` không import trực tiếp `node:fs` / `node:path` / `node:url`** — đi qua `fileHelper`. Cần thao tác fs mới thì bổ sung vào `fileHelper` (kèm overload nếu cần) rồi mới gọi từ business.
-- **`apiServer` không liệt kê feature tay** — `loadModulesUnder(featuresRoot, { entryFile: 'api.ts' })` rồi sort `routeOrder`; giữ `node:http` / `node:buffer` ở tầng transport.
+- **`apiServer` không liệt kê feature tay** — `loadEntriesUnder(featuresRoot, …)` nạp `api.ts` (kiểu cũ), `controller.ts` và `controllers/*.ts` rồi sort theo `routeOrder` / `@Controller({ order })` (§2.5); giữ `node:http` / `node:buffer` ở tầng transport.
 - **Đổi chữ ký helper → chạy `bun run typecheck`** (CI gate).
 
 ### 3.2 Không thuộc `*/lib`
