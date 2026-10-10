@@ -23,7 +23,6 @@ import {
   resolveNotifySoundEnabled,
   resolveLocale,
   resolveThemePreference,
-  DEFAULT_LOCALE,
 } from '@/frontend/configs/appSettings'
 
 describe('parseAppSettings', () => {
@@ -434,7 +433,6 @@ describe('resolveLocale — locale hiệu dụng', () => {
     expect(resolveLocale(undefined)).toBe('vi')
     expect(resolveLocale({})).toBe('vi')
     expect(resolveLocale({ locale: '' })).toBe('vi')
-    expect(DEFAULT_LOCALE).toBe('vi')
   })
 
   it('TC-I02: không truyền `allowed` ⇒ chỉ kiểm non-empty (boot, manifest chưa về)', () => {
