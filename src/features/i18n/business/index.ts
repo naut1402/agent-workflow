@@ -5,5 +5,7 @@ export {
   listLocales,
   localeEtag,
   readLocaleBundle,
+  readLocaleBundleCached,
   type LocaleBundle,
+  type LocaleBundleEntry,
 } from './localeCatalog.js'

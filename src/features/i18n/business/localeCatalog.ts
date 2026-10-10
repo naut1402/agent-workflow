@@ -5,6 +5,7 @@ import {
   resolvePath,
   resolvePathUnder,
   safeReadDir,
+  statSafe,
 } from '../../../backend/lib/fileHelper.js'
 import { loadYaml } from '../../../backend/lib/yamlLib.js'
 
@@ -129,4 +130,52 @@ function stableStringify(value: unknown): string {
 export function localeEtag(bundle: unknown): string {
   const hash = nodeCrypto.createHash('sha1').update(stableStringify(bundle)).digest('hex')
   return `"${hash}"`
+}
+
+export type LocaleBundleEntry = { bundle: LocaleBundle; etag: string }
+
+const bundleMemo = new Map<string, { stamp: string; entry: LocaleBundleEntry }>()
+
+/** Dấu thay đổi của một thư mục locale: mtime thư mục + tên/mtime/size từng file `.yaml`. */
+async function dirStamp(dir: string | null): Promise<string> {
+  if (!dir) return '-'
+  const info = await statSafe(dir)
+  if (!info.exists) return '-'
+  const parts = [String(info.mtime)]
+  const files = (await safeReadDir(dir))
+    .filter((e) => e.isFile() && e.name.endsWith('.yaml'))
+    .map((e) => e.name)
+    .sort()
+  for (const name of files) {
+    const file = resolvePathUnder(dir, name)
+    const s = file ? await statSafe(file) : null
+    parts.push(`${name}:${s?.mtime ?? '-'}:${s?.size ?? 0}`)
+  }
+  return parts.join('|')
+}
+
+/** `readLocaleBundle` kèm ETag, memo trong tiến trình; đọc lại khi file repo/overlay đổi mtime. */
+export async function readLocaleBundleCached(
+  locale: string,
+  defaultRoot: string | null,
+  baseDir: string = REPO_LOCALES,
+): Promise<LocaleBundleEntry | null> {
+  if (!isSafeLocaleCode(locale)) return null
+  const overlay = overlayDir(defaultRoot)
+  const stamp = [
+    await dirStamp(resolvePathUnder(baseDir, locale)),
+    await dirStamp(overlay ? resolvePathUnder(overlay, locale) : null),
+  ].join('#')
+  const key = JSON.stringify([baseDir, defaultRoot, locale])
+  const hit = bundleMemo.get(key)
+  if (hit && hit.stamp === stamp) return hit.entry
+
+  const bundle = await readLocaleBundle(locale, defaultRoot, baseDir)
+  if (!bundle) {
+    bundleMemo.delete(key)
+    return null
+  }
+  const entry = { bundle, etag: localeEtag(bundle) }
+  bundleMemo.set(key, { stamp, entry })
+  return entry
 }

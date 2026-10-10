@@ -24,6 +24,7 @@ window:
   runnerRunning: đang chạy
   runnerReady: sẵn sàng
   runnerDisabled: đã tắt
+  statusErrorWithMessage: 'Có lỗi: {error}'
 message:
   copy: Copy nội dung
   expand: Xem thêm
@@ -50,3 +51,53 @@ builder:
   nudge: Có thể mô tả gọn lại giúp mình không?
   roleAssistant: Trợ lý
   roleUser: Bạn
+  inputPlaceholder: Nhập tin nhắn...
+  statusCreating: Đang tạo… {seconds}s
+  statusThinking: Agent đang suy nghĩ… {seconds}s
+  checkingAgents: Đang kiểm tra danh sách agent hợp lệ...
+  unknownAgents: 'Agent không tồn tại trong catalog: {agents}'
+  invalidDraftJson: Draft JSON không hợp lệ — vui lòng sửa lại trước khi xác nhận.
+  draftBadge: Draft {entity}
+  entity:
+    task: Task
+    pipeline: Pipeline
+    agent: Agent
+    automation: Automation
+  pipelineName: Tên pipeline
+  pipelineNamePlaceholder: Tên profile pipeline
+  agentScope: Phạm vi agent
+  agentScopeProject: Chỉ project hiện tại
+  agentScopeGlobal: Toàn cục (mọi project)
+  agentScopeNoProject: Chưa chọn project ở header — chọn project hoặc đổi phạm vi agent sang "Toàn cục".
+  confirm: Xác nhận & tạo
+  cancel: Huỷ
+  entityUnclear: Mình chưa rõ bạn muốn tạo Task, Pipeline, Agent hay Automation — bạn nói rõ giúp mình nhé?
+  catalogLoadFailed: Không tải được danh sách agent để kiểm tra — vui lòng thử lại.
+  catalogUnchecked: Chưa kiểm tra được danh sách agent hợp lệ — vui lòng thử lại.
+  pipelineUnknownAgents: 'Pipeline tham chiếu agent không tồn tại trong catalog: {agents}'
+  profilesLoadFailed: Không tải được danh sách pipeline profile để kiểm tra — vui lòng thử lại.
+  checkingProfiles: Đang kiểm tra danh sách pipeline profile...
+  unknownProfiles: 'Pipeline profile không tồn tại: {profiles} — sửa lại hoặc bỏ trống để dùng pipeline mặc định.'
+  noProjectSelected: Chưa chọn project — chọn project ở header hoặc đổi phạm vi agent sang "Toàn cục".
+  jobMissing: job missing
+  noJobId: no job id returned
+  jobTimeout: timeout waiting for job
+  jobEnded: job {status}
+taskChat:
+  roleUserPending: Bạn · đang gửi
+  roleRunner: Runner
+  loading: Đang tải hội thoại của runner…
+  noSession: Step này chưa có phiên CLI nào — chạy step trước rồi quay lại đây.
+  transcriptMissing: Không tìm thấy transcript của phiên {sessionId} trên máy này.
+  emptySession: Phiên chưa có nội dung hội thoại nào.
+  inputPlaceholder: Nhập tin nhắn cho runner…
+  cannotSend: Chưa gửi được
+  statusSending: Đang gửi…
+  statusRunning: Runner đang chạy
+  statusRunningStep: 'Runner đang chạy: {step}'
+  staleSession: Phiên đã cũ ({reason}) — tin nhắn mới có thể mở phiên khác, agent sẽ không nhớ ngữ cảnh trước.
+  noCompletedJob: Chưa có job nào hoàn tất cho task này để nối tiếp hội thoại.
+  stepBusy: Step đang chạy — chờ chạy xong mới gửi được tin nhắn.
+  queued: Tin nhắn mới sẽ được gửi khi step hiện tại hoàn tất.
+floating:
+  open: Tạo mới bằng chat

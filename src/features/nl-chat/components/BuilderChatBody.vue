@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
-import { useNlChatSession, type NlChatEntityType } from '../composables/useNlChatSession'
+import { useNlChatSession } from '../composables/useNlChatSession'
 import { useChatComposer } from '../composables/useChatComposer'
 import ChatMessageBubble from './ChatMessageBubble.vue'
 import ChatComposer from './ChatComposer.vue'
@@ -62,7 +62,7 @@ const { isOverDropZone } = composer
 const pipelineAgentError = computed<string | null>(() => {
   if (entityType.value !== 'pipeline' || step.value !== 'previewDraft') return null
   if (catalogError.value) return catalogError.value
-  if (!catalogAgentIds.value) return 'Đang kiểm tra danh sách agent hợp lệ...'
+  if (!catalogAgentIds.value) return t('nlChat.builder.checkingAgents')
   let parsed: Record<string, unknown>
   try {
     parsed = JSON.parse(draftText.value)
@@ -71,10 +71,10 @@ const pipelineAgentError = computed<string | null>(() => {
     return null
   }
   const invalid = findInvalidPipelineAgentRefs(parsed)
-  return invalid.length > 0 ? `Agent không tồn tại trong catalog: ${invalid.join(', ')}` : null
+  return invalid.length > 0 ? t('nlChat.builder.unknownAgents', { agents: invalid.join(', ') }) : null
 })
 
-// Cùng lối với `pipelineAgentError`, cho `profileName` của draft task/automation — `profileNameError` giữ luôn thông điệp vì i18n của nl-chat chưa migrate.
+// Cùng lối với `pipelineAgentError`, cho `profileName` của draft task/automation.
 const taskProfileError = computed<string | null>(() => {
   if (step.value !== 'previewDraft') return null
   if (entityType.value !== 'task' && entityType.value !== 'automation') return null
@@ -100,7 +100,7 @@ function onConfirm(): void {
     draftParseError.value = null
     void confirm(parsed)
   } catch {
-    draftParseError.value = 'Draft JSON không hợp lệ — vui lòng sửa lại trước khi xác nhận.'
+    draftParseError.value = t('nlChat.builder.invalidDraftJson')
   }
 }
 
@@ -111,12 +111,9 @@ function onCancel(): void {
 
 defineExpose({ cancel, reset })
 
-const ENTITY_LABELS: Record<NlChatEntityType, string> = {
-  task: 'Task',
-  pipeline: 'Pipeline',
-  agent: 'Agent',
-  automation: 'Automation',
-}
+const entityBadge = computed(() =>
+  entityType.value ? t('nlChat.builder.draftBadge', { entity: t(`nlChat.builder.entity.${entityType.value}`) }) : '',
+)
 
 // A turn is a CLI round trip that can take tens of seconds, so "đang suy nghĩ" alone reads as frozen — the elapsed counter is the progress signal.
 const waitingSeconds = ref(0)
@@ -143,16 +140,19 @@ const status = computed<{ kind: 'idle' | 'busy' | 'done' | 'error'; text: string
     return {
       kind: 'busy',
       text: confirming.value
-        ? `Đang tạo… ${waitingSeconds.value}s`
-        : `Agent đang suy nghĩ… ${waitingSeconds.value}s`,
+        ? t('nlChat.builder.statusCreating', { seconds: waitingSeconds.value })
+        : t('nlChat.builder.statusThinking', { seconds: waitingSeconds.value }),
     }
   }
   // `step === 'error'` can arrive without any message, hence the fallback text.
   if (step.value === 'error' || error.value) {
-    return { kind: 'error', text: error.value ? `Có lỗi: ${error.value}` : 'Có lỗi' }
+    return {
+      kind: 'error',
+      text: error.value ? t('nlChat.window.statusErrorWithMessage', { error: error.value }) : t('nlChat.window.statusError'),
+    }
   }
-  if (step.value === 'done') return { kind: 'done', text: 'Hoàn tất' }
-  return { kind: 'idle', text: 'Sẵn sàng' }
+  if (step.value === 'done') return { kind: 'done', text: t('nlChat.window.statusDone') }
+  return { kind: 'idle', text: t('nlChat.window.statusReady') }
 })
 
 watch(status, (s) => emit('status', s), { immediate: true })
@@ -201,20 +201,20 @@ watch([() => messages.value.length, () => sending.value], async () => {
       <p v-if="error" class="nl-chat-error">{{ error }}</p>
       <p v-if="step === 'done'" class="nl-chat-done">{{ t('nlChat.builder.done') }}</p>
     </div>
-    <ChatComposer :composer="composer" placeholder="Nhập tin nhắn..." />
+    <ChatComposer :composer="composer" :placeholder="t('nlChat.builder.inputPlaceholder')" />
   </template>
 
   <div v-else-if="step === 'previewDraft'" class="nl-chat-preview">
-    <p v-if="entityType" class="nl-chat-entity-badge">Draft {{ ENTITY_LABELS[entityType] }}</p>
+    <p v-if="entityType" class="nl-chat-entity-badge">{{ entityBadge }}</p>
     <label v-if="entityType === 'pipeline'" class="nl-chat-pipeline-name">
-      Tên pipeline
-      <input v-model="pipelineName" type="text" placeholder="Tên profile pipeline" />
+      {{ t('nlChat.builder.pipelineName') }}
+      <input v-model="pipelineName" type="text" :placeholder="t('nlChat.builder.pipelineNamePlaceholder')" />
     </label>
     <label v-if="entityType === 'agent'" class="nl-chat-agent-scope">
-      Phạm vi agent
+      {{ t('nlChat.builder.agentScope') }}
       <select v-model="agentScope">
-        <option value="project">Chỉ project hiện tại</option>
-        <option value="global">Toàn cục (mọi project)</option>
+        <option value="project">{{ t('nlChat.builder.agentScopeProject') }}</option>
+        <option value="global">{{ t('nlChat.builder.agentScopeGlobal') }}</option>
       </select>
     </label>
     <textarea v-model="draftText" class="nl-chat-draft-textarea" rows="14"></textarea>
@@ -222,11 +222,13 @@ watch([() => messages.value.length, () => sending.value], async () => {
     <p v-if="entityType === 'pipeline' && pipelineAgentError" class="nl-chat-error">{{ pipelineAgentError }}</p>
     <p v-if="taskProfileError" class="nl-chat-error">{{ taskProfileError }}</p>
     <p v-if="entityType === 'agent' && agentScope === 'project' && !props.projectId" class="nl-chat-error">
-      Chưa chọn project ở header — chọn project hoặc đổi phạm vi agent sang "Toàn cục".
+      {{ t('nlChat.builder.agentScopeNoProject') }}
     </p>
     <div class="nl-chat-preview-actions">
-      <button type="button" :disabled="!canConfirm || confirming" @click="onConfirm">Xác nhận & tạo</button>
-      <button type="button" @click="onCancel">Huỷ</button>
+      <button type="button" :disabled="!canConfirm || confirming" @click="onConfirm">
+        {{ t('nlChat.builder.confirm') }}
+      </button>
+      <button type="button" @click="onCancel">{{ t('nlChat.builder.cancel') }}</button>
     </div>
   </div>
 </template>

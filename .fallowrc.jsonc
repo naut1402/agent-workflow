@@ -19,10 +19,8 @@
     // DUY NHẤT của backend — mọi thứ khác của feature treo dưới file này.
     "src/features/*/api.ts",
     // Frontend: `import.meta.glob(..., { eager: true })` ở `frontend/main.ts`
-    // (mode registry) và `frontend/plugins/i18n/loadLocales.ts` (locale).
-    "src/features/*/registerMode.ts",
-    "src/features/*/locales/*.ts",
-    "src/frontend/plugins/i18n/locales/*/*.ts"
+    // (mode registry).
+    "src/features/*/registerMode.ts"
   ],
 
   // ── 2. Gói chỉ dòng test dùng / chỉ dòng test resolve được ───────────────

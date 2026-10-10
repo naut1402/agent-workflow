@@ -4,6 +4,7 @@ import { resolveChatFeedbackMode } from '../../../frontend/configs/appSettings'
 import { useAppSettings } from '../../../frontend/composables/useAppSettings'
 import { openSseStream, type SseStream } from '../../../frontend/lib/sseClient'
 import { ensureDashboardTransport, isSseEnabled } from '../../../frontend/lib/dashboardTransport'
+import { t } from '../../../frontend/plugins/i18n'
 
 /**
  * Chat with the runner of a task's pipeline step: replays the CLI session's own
@@ -47,14 +48,14 @@ export interface UseTaskChatOptions {
   idlePollMs?: number
 }
 
-const BLOCKED_TEXT: Record<TaskChatBlockedReason, string> = {
-  noCompletedJob: 'Chưa có job nào hoàn tất cho task này để nối tiếp hội thoại.',
+const BLOCKED_TEXT_KEY: Record<TaskChatBlockedReason, string> = {
+  noCompletedJob: 'nlChat.taskChat.noCompletedJob',
 }
 
 /** A step's own job is busy and this session has no `.dev-state` to queue against (nl-chat). */
-const STEP_BUSY_TEXT = 'Step đang chạy — chờ chạy xong mới gửi được tin nhắn.'
+const STEP_BUSY_TEXT_KEY = 'nlChat.taskChat.stepBusy'
 /** Shown while the target step's job is running, in the (default) queue mode — before anything has been sent. */
-const QUEUED_TEXT = 'Tin nhắn mới sẽ được gửi khi step hiện tại hoàn tất.'
+const QUEUED_TEXT_KEY = 'nlChat.taskChat.queued'
 
 export function useTaskChat(opts: UseTaskChatOptions) {
   const { settings } = useAppSettings()
@@ -95,8 +96,8 @@ export function useTaskChat(opts: UseTaskChatOptions) {
   let generation = 0
 
   const blockedText = computed(() => {
-    if (blockedReason.value) return BLOCKED_TEXT[blockedReason.value]
-    if (queued.value) return QUEUED_TEXT
+    if (blockedReason.value) return t(BLOCKED_TEXT_KEY[blockedReason.value])
+    if (queued.value) return t(QUEUED_TEXT_KEY)
     return null
   })
 
@@ -298,7 +299,7 @@ export function useTaskChat(opts: UseTaskChatOptions) {
       pendingItems.value.push({ text: message, at: new Date().toISOString() })
       await refresh(true)
     } catch (e: any) {
-      error.value = e?.status === 409 ? STEP_BUSY_TEXT : String(e?.message || e)
+      error.value = e?.status === 409 ? t(STEP_BUSY_TEXT_KEY) : String(e?.message || e)
     } finally {
       sending.value = false
     }

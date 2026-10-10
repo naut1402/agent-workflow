@@ -81,47 +81,90 @@ export type EnsureLocaleOptions = {
   force?: boolean
 }
 
+export const LOCALE_FETCH_TIMEOUT_MS = 10_000
+
+/** Locale đang nạp, theo thứ tự bắt đầu; `pending` là phần tử cuối. */
+const pendingLocales: string[] = []
+
+function beginPending(locale: string): void {
+  pendingLocales.push(locale)
+  pending.value = locale
+}
+
+function endPending(locale: string): void {
+  const i = pendingLocales.lastIndexOf(locale)
+  if (i >= 0) pendingLocales.splice(i, 1)
+  pending.value = pendingLocales.at(-1) ?? null
+}
+
+async function fetchLocale(
+  locale: string,
+  cached: CacheEntry | null,
+  signal: AbortController['signal'],
+): Promise<void> {
+  const headers: Record<string, string> = {}
+  if (cached?.etag) headers['If-None-Match'] = cached.etag
+  const res = await apiFetch(`/api/i18n/${locale}`, { headers, signal })
+
+  if (res.status === 304) return
+  if (!res.ok) throw new Error(`i18n ${res.status}`)
+
+  const etag = res.headers.get('ETag') ?? ''
+  const body = await res.json()
+  if (signal.aborted) return
+  const messages = (body?.messages ?? {}) as Record<string, unknown>
+  registerLocale(locale, messages)
+  writeCache(locale, { etag, messages })
+  markLoaded(locale)
+}
+
+async function fetchLocaleWithTimeout(locale: string, cached: CacheEntry | null): Promise<void> {
+  const controller = new AbortController()
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort()
+      reject(new Error('i18n timeout'))
+    }, LOCALE_FETCH_TIMEOUT_MS)
+  })
+  try {
+    await Promise.race([fetchLocale(locale, cached, controller.signal), timeout])
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 /** Nạp locale vào vue-i18n, không ném; `true` khi vue-i18n có messages của locale đó. */
 export async function ensureLocale(
   locale: string,
   opts: EnsureLocaleOptions = {},
 ): Promise<boolean> {
-  const existing = inflight.get(locale)
+  const key = opts.force ? `${locale}:force` : locale
+  const existing = inflight.get(key) ?? (opts.force ? undefined : inflight.get(`${locale}:force`))
   if (existing) return existing
 
   const cached = opts.force ? null : readCacheEntry(locale)
   if (cached) primeFromCache(locale)
 
-  const task = (async (): Promise<boolean> => {
-    pending.value = locale
-    lastError.value = null
-    try {
-      const headers: Record<string, string> = {}
-      if (cached?.etag) headers['If-None-Match'] = cached.etag
-      const res = await apiFetch(`/api/i18n/${locale}`, { headers })
+  beginPending(locale)
+  lastError.value = null
+  const task: Promise<boolean> = Promise.resolve()
+    .then(() => fetchLocaleWithTimeout(locale, cached))
+    .then(
+      () => true,
+      (err: unknown) => {
+        const ok = hasMessages(locale)
+        if (ok) markLoaded(locale)
+        else lastError.value = err instanceof Error ? err.message : String(err)
+        return ok
+      },
+    )
+    .finally(() => {
+      endPending(locale)
+      if (inflight.get(key) === task) inflight.delete(key)
+    })
 
-      if (res.status === 304) return true
-      if (!res.ok) throw new Error(`i18n ${res.status}`)
-
-      const etag = res.headers.get('ETag') ?? ''
-      const body = await res.json()
-      const messages = (body?.messages ?? {}) as Record<string, unknown>
-      registerLocale(locale, messages)
-      writeCache(locale, { etag, messages })
-      markLoaded(locale)
-      return true
-    } catch (err) {
-      const ok = hasMessages(locale)
-      if (ok) markLoaded(locale)
-      else lastError.value = err instanceof Error ? err.message : String(err)
-      return ok
-    } finally {
-      pending.value = null
-      inflight.delete(locale)
-    }
-  })()
-
-  inflight.set(locale, task)
+  inflight.set(key, task)
   return task
 }
 

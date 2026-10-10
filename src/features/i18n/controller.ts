@@ -1,6 +1,6 @@
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { AbstractController } from '../../backend/http/AbstractController.js'
-import { DEFAULT_LOCALE, listLocales, localeEtag, readLocaleBundle } from './business/index.js'
+import { DEFAULT_LOCALE, listLocales, readLocaleBundleCached } from './business/index.js'
 import { LocaleParam } from './schemas/i18n.js'
 
 /** Chuỗi dịch dùng chung mọi project: đọc `ctx.defaultRoot`, bỏ qua `?project=`. */
@@ -16,10 +16,10 @@ export class I18nController extends AbstractController {
     const parsed = LocaleParam.safeParse(this.c.req.param('locale'))
     if (!parsed.success) return this.badRequest('invalid locale code')
 
-    const bundle = await readLocaleBundle(parsed.data, this.ctx.defaultRoot)
-    if (!bundle) return this.notFound('unknown locale', { locale: parsed.data })
+    const entry = await readLocaleBundleCached(parsed.data, this.ctx.defaultRoot)
+    if (!entry) return this.notFound('unknown locale', { locale: parsed.data })
 
-    const etag = localeEtag(bundle)
+    const { bundle, etag } = entry
     if (matchesIfNoneMatch(this.c.req.header('If-None-Match'), etag)) {
       this.c.header('ETag', etag)
       this.c.header('Cache-Control', 'no-cache')

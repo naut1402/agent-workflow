@@ -84,7 +84,7 @@ Hai lý do:
 
 - **`<script setup lang="ts">`** cho mọi SFC.
 - **Kéo logic suy diễn ra khỏi `.vue`** xuống composable / lib thuần TS để test không cần render.
-- **Cấu trúc feature-module** — `src/features/<mode>/{components,composables,scripts/*Api.ts,styles,locales,schemas}` + nền `src/frontend/{ui,composables,lib,shell}`; plugin app-scope ở `src/frontend/plugins/`.
+- **Cấu trúc feature-module** — `src/features/<mode>/{components,composables,scripts/*Api.ts,styles,schemas}` + nền `src/frontend/{ui,composables,lib,shell}`; plugin app-scope ở `src/frontend/plugins/`.
 - **Quy ước button** (ưu tiên icon-btn, default không viền, hover scale) — [`ui-design-guideline.md`](ui-design-guideline.md) §1.
 - **Chiến lược tràn là bắt buộc, không phải tuỳ chọn** — mọi danh sách / vùng nội dung dài tuỳ dữ liệu phải có vùng cuộn giới hạn chiều cao ngay từ lúc viết, không được giả định "dữ liệu chắc là ngắn" — [`ui-design-guideline.md`](ui-design-guideline.md) §2.
 

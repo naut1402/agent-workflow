@@ -23,12 +23,12 @@ export function useLocale(): {
   lastError: Ref<string | null>
 } {
   const { settings, update } = useAppSettings()
-  const { ensureLocale, loadedLocales, pending, lastError } = useLocaleMessages()
+  const { ensureLocale, loadedLocales, pending, lastError, registry } = useLocaleMessages()
   const gp = getCurrentInstance()?.appContext.config.globalProperties as
     | { $setI18nLocale?: (locale: LocalePreference) => void }
     | undefined
   const applyLocale = gp?.$setI18nLocale ?? setI18nLocaleFallback
-  const locale = computed(() => resolveLocale(settings.value))
+  const locale = computed(() => resolveLocale(settings.value, registry.locales))
 
   /** Yêu cầu mới nhất thắng; nạp thất bại thì giữ locale cũ. */
   async function setLocale(next: LocalePreference): Promise<void> {
