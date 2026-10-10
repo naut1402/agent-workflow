@@ -261,6 +261,62 @@ describe('i18n:import — ghi ngược, KHÔNG xoá khoá', () => {
     }
   })
 
+  test('TC-K06b: segment `__proto__`/`constructor`/`prototype` bị bỏ qua, file đích không đổi', () => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'i18n-vendor-'))
+    try {
+      const file = path.join(tmp, 'vi.yaml')
+      writeFlat(file, {
+        'common.__proto__.polluted': 'x',
+        'common.constructor.prototype.polluted': 'x',
+        'common.language.prototype': 'x',
+      })
+      const r = importFile('vi', file)
+      expect(r.code).toBe(0)
+      const out = `${r.stdout}${r.stderr}`
+      expect(out).toContain('common.__proto__.polluted')
+      expect(out).toContain('common.constructor.prototype.polluted')
+      expect(out).toContain('common.language.prototype')
+      expect(snapshotLocales()).toEqual(pristine)
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true })
+    }
+  })
+
+  test('TC-K06c: khoá đi xuyên qua chuỗi sẵn có, hoặc đè chuỗi lên nhánh ⇒ bỏ qua, giữ giá trị cũ', () => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'i18n-vendor-'))
+    try {
+      const file = path.join(tmp, 'en.yaml')
+      writeFlat(file, {
+        'common.language.title.sub': 'xuyên qua lá chuỗi',
+        'common.language.names': 'đè lên nhánh',
+        'common.language.desc': 'Pick a language (changed)',
+      })
+      const r = importFile('en', file)
+      expect(r.code).toBe(0)
+      expect(`${r.stdout}${r.stderr}`).toContain('common.language.title.sub')
+
+      const common = readYamlFile(path.join(LOCALES_DIR, 'en/common.yaml'))
+      const before = loadYaml(pristine.get('en/common.yaml')!) as Record<string, any>
+      expect(common.language.title).toBe(before.language.title)
+      expect(common.language.names).toEqual(before.language.names)
+      expect(common.language.desc).toBe('Pick a language (changed)')
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true })
+    }
+  })
+
+  test('TC-K06d: ghi qua file tạm rồi rename ⇒ 🚫 không để lại `*.tmp` trong thư mục locale', () => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'i18n-vendor-'))
+    try {
+      const file = path.join(tmp, 'en.yaml')
+      writeFlat(file, { 'common.language.title': 'Language (changed)' })
+      expect(importFile('en', file).code).toBe(0)
+      expect(fs.readdirSync(path.join(LOCALES_DIR, 'en')).filter((f) => f.endsWith('.tmp'))).toEqual([])
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true })
+    }
+  })
+
   test('TC-K07: vendor đổi 1 khoá của `common` ⇒ CHỈ `common.yaml` đổi', () => {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'i18n-vendor-'))
     try {

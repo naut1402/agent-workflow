@@ -176,6 +176,7 @@ describe('useLocale.setLocale (nhóm H)', () => {
     })
     const store = useLocaleMessages()
     store.loadedLocales.value = ['en']
+    store.lastError.value = 'i18n 500'
 
     const { locale, setLocale } = useLocale()
     await setLocale('en')
@@ -183,6 +184,8 @@ describe('useLocale.setLocale (nhóm H)', () => {
     expect(calls).toEqual([])
     expect(locale.value).toBe('en')
     expect(i18n.global.locale.value).toBe('en')
+    // Đổi thành công ⇒ lỗi của lượt trước 🚫 không còn treo ở Settings.
+    expect(store.lastError.value).toBeNull()
   })
 
   it('TC-H03: locale chưa nạp, nạp OK ⇒ đổi locale + persist preference', async () => {

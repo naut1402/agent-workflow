@@ -65,6 +65,7 @@ function reset() {
   const store = useLocaleMessages()
   store.loadedLocales.value = []
   store.lastError.value = null
+  store.manifestError.value = null
   store.pending.value = null
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
@@ -184,20 +185,37 @@ describe('ensureLocale — đường hỏng 🚫 không ném', () => {
   it('TC-G08: API 500 ⇒ không ném; true khi đã có bản build-time, false khi chưa', async () => {
     stubFetch(() => new Response('boom', { status: 500 }))
 
-    // `en` có messages build-time → vẫn dùng được, chỉ là chữ cũ.
+    // `en` có messages build-time → vẫn dùng được, chỉ là chữ cũ, không báo lỗi.
     expect(await ensureLocale('en')).toBe(true)
-    expect(useLocaleMessages().lastError.value).not.toBeNull()
+    expect(useLocaleMessages().lastError.value).toBeNull()
 
     // `de` chưa có gì ở vue-i18n → báo đúng là không nạp được.
     expect(await ensureLocale('de')).toBe(false)
+    expect(useLocaleMessages().lastError.value).toContain('500')
   })
 
   it('TC-G09: mạng chết (fetch reject) ⇒ như TC-G08, 🚫 không ném ra ngoài', async () => {
     stubFetch(() => Promise.reject(new Error('network')))
 
     expect(await ensureLocale('en')).toBe(true)
-    expect(useLocaleMessages().lastError.value).toContain('network')
+    expect(useLocaleMessages().lastError.value).toBeNull()
     expect(await ensureLocale('de')).toBe(false)
+    expect(useLocaleMessages().lastError.value).toContain('network')
+  })
+
+  it('TC-G09b: lỗi của lượt trước bị xoá khi lượt sau thành công (200 và 304)', async () => {
+    const store = useLocaleMessages()
+
+    store.lastError.value = 'i18n 500'
+    stubFetch(() => jsonResponse({ locale: 'en', messages: { common: { ok: 'OK' } } }, { ETag: '"e1"' }))
+    expect(await ensureLocale('en')).toBe(true)
+    expect(store.lastError.value).toBeNull()
+
+    store.lastError.value = 'i18n 500'
+    vi.unstubAllGlobals()
+    stubFetch(() => new Response(null, { status: 304 }))
+    expect(await ensureLocale('en')).toBe(true)
+    expect(store.lastError.value).toBeNull()
   })
 
   it('TC-G12: `localStorage.setItem` ném (quota/private) ⇒ vẫn true, messages vẫn vào (G-C10)', async () => {
@@ -293,7 +311,9 @@ describe('ensureManifest — đồng bộ danh sách locale', () => {
     await ensureManifest()
 
     expect([...supportedLocales()]).toEqual(before)
-    expect(useLocaleMessages().lastError.value).not.toBeNull()
+    // Lỗi manifest tách riêng, 🚫 không thành "không tải được bản dịch" ở Settings.
+    expect(useLocaleMessages().manifestError.value).not.toBeNull()
+    expect(useLocaleMessages().lastError.value).toBeNull()
   })
 
   it('TC-G17b: manifest trả body rác ⇒ 🚫 không ném, registry giữ nguyên', async () => {

@@ -101,6 +101,17 @@ describe('listLocales — hợp của hai tầng, thứ tự ghim', () => {
     expect(await listLocales(tmp)).toEqual(['vi', 'en', 'ja'])
   })
 
+  test('TC-A02c: thư mục locale không có file `.yaml` nào ⇒ không vào manifest, bundle null', async () => {
+    writeFxRoot(tmp)
+    fs.mkdirSync(path.join(tmp, 'locales', 'ko'), { recursive: true })
+    fs.mkdirSync(path.join(tmp, 'locales', 'fr'), { recursive: true })
+    fs.writeFileSync(path.join(tmp, 'locales', 'fr', 'common.json'), '{"a":"b"}')
+
+    expect(await listLocales(tmp)).toEqual(['vi', 'en', 'ja'])
+    expect(await readLocaleBundle('ko', tmp)).toBeNull()
+    expect(await readLocaleBundle('fr', tmp)).toBeNull()
+  })
+
   test('TC-A15: env đã tước ⇒ kết quả không đổi (chạy cùng lượt, không phụ thuộc HOME)', async () => {
     const savedHome = process.env.HOME
     const savedDash = process.env.DEV_TEAM_DASHBOARD_HOME
