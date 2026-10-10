@@ -63,9 +63,8 @@ describe('buildTurnPrompt', () => {
     expect(prompt).not.toContain('"kind": "time"')
   })
 
-  // Drift guard: `AUTOMATION_EVENT_TYPES_HINT` là bản chép tay của
-  // `KNOWN_AUTOMATION_EVENT_TYPES` (nlChatSession.ts cố ý không có import nào).
-  // Lệch thì im lặng — hint sai → draft bị Zod trả 400 ở POST /api/automations.
+  // Drift guard: hint lấy thẳng `KNOWN_AUTOMATION_EVENT_TYPES` (import qua barrel
+  // nl-chat). Lệch thì im lặng — hint sai → draft bị Zod trả 400 ở POST /api/automations.
   test('automation hint liệt kê đủ KNOWN_AUTOMATION_EVENT_TYPES', () => {
     const prompt = buildTurnPrompt({ entityType: 'automation', turnIndex: 1, message: 'm' })
     for (const t of KNOWN_AUTOMATION_EVENT_TYPES) expect(prompt).toContain(t)
