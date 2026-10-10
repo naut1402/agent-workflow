@@ -323,3 +323,48 @@ describe('getTaskChatState — panel của node điều phối (TC-13, TC-14)', 
     expect(state.runner).toBeNull()
   })
 })
+
+/*
+ * T6427b18c TC-R2 — khung chat TỪNG NODE trả đúng phiên của node đó.
+ *
+ * Sau khi ledger giữ một entry `open` cho mỗi node, hai entry tồn tại song
+ * song và lâu dài. Case này chốt rằng việc chọn phiên đi theo `stepId`, không
+ * theo "entry nào mở sau".
+ */
+describe('resolveChatSession — hai node, hai phiên song song (TC-R2)', () => {
+  function seedTwoNodes(): void {
+    saveTaskSessionLedger(PROJECT, {
+      version: 1,
+      taskId: TASK,
+      sessionPolicy: 'single',
+      sessions: [
+        ledgerEntry({ sessionId: 's-orch', stepIds: [ORCHESTRATOR_STEP_ID] }),
+        ledgerEntry({ sessionId: 's-a', stepIds: ['investigator'], runnerId: 'r-step' }),
+      ],
+    })
+  }
+
+  test('(a) chat với step investigator ⇒ nối đúng s-a', () => {
+    seedTwoNodes()
+    expect(resolveChatSession(PROJECT, TASK, 'investigator')).toMatchObject({ sessionId: 's-a' })
+  })
+
+  test('(b) khung chat của node điều phối ⇒ s-orch, KHÔNG phải s-a (entry mở sau)', () => {
+    seedTwoNodes()
+    expect(resolveChatSession(PROJECT, TASK, ORCHESTRATOR_STEP_ID)).toMatchObject({ sessionId: 's-orch' })
+  })
+
+  test('đảo thứ tự entry trong file không đổi kết quả của cả hai node', () => {
+    saveTaskSessionLedger(PROJECT, {
+      version: 1,
+      taskId: TASK,
+      sessionPolicy: 'single',
+      sessions: [
+        ledgerEntry({ sessionId: 's-a', stepIds: ['investigator'], runnerId: 'r-step' }),
+        ledgerEntry({ sessionId: 's-orch', stepIds: [ORCHESTRATOR_STEP_ID] }),
+      ],
+    })
+    expect(resolveChatSession(PROJECT, TASK, 'investigator')).toMatchObject({ sessionId: 's-a' })
+    expect(resolveChatSession(PROJECT, TASK, ORCHESTRATOR_STEP_ID)).toMatchObject({ sessionId: 's-orch' })
+  })
+})

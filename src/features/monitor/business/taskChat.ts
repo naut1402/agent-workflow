@@ -141,7 +141,7 @@ function transcriptCoversLatestJob(turns: TranscriptTurn[], latest: JobRecord | 
 
 export type TaskChatBlockedReason = 'noCompletedJob'
 
-// `providerFamilyOf(id) === 'ai-api'` (agentCli.ts) is the source of truth for
+// `providerFamilyOf(id) === 'ai-api'` (runner registry.ts) is the source of truth for
 // `AgenticApiProvider` ids — no separate list to keep in sync here.
 export type TranscriptProviderHint = 'claude-code-cli' | 'cursor-cli' | 'unknown' | (string & {})
 
@@ -244,6 +244,22 @@ function isSessionDismissedForStep(ledger: TaskSessionLedger, sessionId: string,
 }
 
 /**
+ * Phiên của nút điều phối. Nó có nhánh riêng ở đầu `resolveChatSession`, nên mọi
+ * đường "cấp task" phía dưới phải loại nó ra: trước fix tách phiên, entry `open`
+ * duy nhất luôn là của step vừa chạy; nay entry điều phối tồn tại song song và
+ * lâu dài, nên nhánh fallback có thể trả về nó. Mà `sendTaskFeedback` đã loại
+ * job điều phối khỏi tập parent — panel hiển thị một phiên, tin nhắn người dùng
+ * gõ vào lại đi tới phiên khác.
+ */
+function isOrchestratorEntry(entry: SessionEntry): boolean {
+  return Boolean(entry.stepIds?.includes(ORCHESTRATOR_STEP_ID))
+}
+
+function isOrchestratorJobRecord(job: JobRecord): boolean {
+  return job.metadata?.orchestratorJob === true || stepIdOf(job) === ORCHESTRATOR_STEP_ID
+}
+
+/**
  * The CLI session to show for (task, step). A running job wins — its session is
  * the one producing output right now — then the newest finished job of that
  * step, then the step's ledger entry, then the task's newest open entry.
@@ -290,7 +306,11 @@ export function resolveChatSession(
       : { sessionId: null }
   }
 
-  const running = jobs.find((j) => j.status === 'queued' || j.status === 'running')
+  // Tới đây `stepId` chắc chắn KHÔNG phải node điều phối (nhánh trên đã trả),
+  // nên job/entry của nó không bao giờ là câu trả lời đúng ở các đường dưới.
+  const running = jobs.find(
+    (j) => (j.status === 'queued' || j.status === 'running') && !isOrchestratorJobRecord(j),
+  )
   if (running?.sessionId && (!stepId || stepIdOf(running) === stepId || !stepIdOf(running))) {
     return {
       sessionId: running.sessionId,
@@ -333,8 +353,11 @@ export function resolveChatSession(
   const byStep = stepId
     ? [...ledger.sessions].reverse().find((s) => s.stepIds?.includes(stepId) && s.sessionId)
     : undefined
-  const open = [...ledger.sessions].reverse().find((s) => s.status === 'open' && s.sessionId)
-  const entry = byStep ?? open ?? [...ledger.sessions].reverse().find((s) => s.sessionId)
+  const open = [...ledger.sessions]
+    .reverse()
+    .find((s) => s.status === 'open' && s.sessionId && !isOrchestratorEntry(s))
+  const entry =
+    byStep ?? open ?? [...ledger.sessions].reverse().find((s) => s.sessionId && !isOrchestratorEntry(s))
   if (entry) {
     return {
       sessionId: entry.sessionId,
@@ -348,7 +371,7 @@ export function resolveChatSession(
     }
   }
 
-  const anyJob = jobs.find((j) => j.sessionId)
+  const anyJob = jobs.find((j) => j.sessionId && !isOrchestratorJobRecord(j))
   return anyJob?.sessionId
     ? {
         sessionId: anyJob.sessionId,

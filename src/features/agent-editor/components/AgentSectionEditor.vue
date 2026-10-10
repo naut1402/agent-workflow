@@ -8,6 +8,7 @@ import {
 } from '../business/agentDraft.js'
 import { slugifySectionKey } from '../../../shared/lib/stringUtils'
 import { useSortable } from '../../../frontend/composables/useSortable'
+import { useKeyedApiAction } from '../../../frontend/composables/useApiAction'
 import { saveAgentTemplate } from '../scripts/AgentSectionEditorApi'
 import MarkdownTextEditor from '../../../frontend/ui/MarkdownTextEditor.vue'
 import WorkflowSectionEditor from './WorkflowSectionEditor.vue'
@@ -21,7 +22,10 @@ const props = defineProps({
 const emit = defineEmits(['update:draft', 'message', 'error'])
 
 const collapsed = ref(new Set())
-const savingTemplate = ref('')
+// Keyed: giữ KEY của section đang lưu, không phải boolean. Rảnh là `null` —
+// `''` từng là sentinel "không ai chạy" nhưng cũng là một key hợp lệ, nên mọi
+// so sánh phải là `=== key`, không dựa truthiness.
+const { pendingKey: savingTemplate, run: runSaveTemplate } = useKeyedApiAction()
 
 const order = computed({
   get: () => props.draft.section_order || [],
@@ -128,23 +132,21 @@ async function saveSectionTemplate(key) {
   const defaultName = `section-${slugifySectionKey(title)}`
   const name = prompt(t('agentEditor.section.promptTemplateName'), defaultName)
   if (!name?.trim()) return
-
-  savingTemplate.value = key
-  try {
-    const tplDraft = emptyDraft({
-      name: name.trim(),
-      description: `Template section: ${title}`,
-      sections: { [key]: content },
-      section_order: [key],
-      section_labels: key.startsWith('custom_') ? { [key]: title } : {},
-    })
-    const result = await saveAgentTemplate(tplDraft)
-    emit('message', t('agentEditor.section.savedTemplate', { name: result.name }))
-  } catch (e) {
-    emit('error', String(e.message || e))
-  } finally {
-    savingTemplate.value = ''
-  }
+  await runSaveTemplate(key, async () => {
+    try {
+      const tplDraft = emptyDraft({
+        name: name.trim(),
+        description: `Template section: ${title}`,
+        sections: { [key]: content },
+        section_order: [key],
+        section_labels: key.startsWith('custom_') ? { [key]: title } : {},
+      })
+      const result = await saveAgentTemplate(tplDraft)
+      emit('message', t('agentEditor.section.savedTemplate', { name: result.name }))
+    } catch (e) {
+      emit('error', String(e.message || e))
+    }
+  })
 }
 </script>
 

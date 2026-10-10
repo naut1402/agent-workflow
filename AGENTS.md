@@ -5,6 +5,7 @@
 - 📖 **Đọc file này trước**, rồi mở rule tương ứng với bước đang làm (bảng §3).
 - 📐 **Rule chi tiết ở [`docs/agent-rules/`](docs/agent-rules/)** — mỗi file một category, dashboard quét qua `GET /api/rules` và gắn cho từng bước pipeline.
 - 📚 **Tài liệu mô tả hệ thống ở [`docs/`](docs/)** — kiến trúc, domain event, i18n, quy ước UI.
+- 🚫 **Không sửa root [`README.md`](README.md) trực tiếp** — tuyệt đối. Cần đổi thì ghi đề xuất vào file todo debt (`docs/todo/`, loại nợ `readme`) chờ người duyệt sửa — [`git-pr.md`](docs/agent-rules/git-pr.md) §7.2.2.
 - ⚖️ **Bất biến repo = checklist Review §4** (nhóm **Kiến trúc** + **Dữ liệu & An toàn**) — xung đột về bất biến hoặc coupling tối thiểu thì coi file này là đúng.
 
 ---
@@ -20,7 +21,7 @@
 - **Shared** — `src/shared/`: chỉ logic/type thuần dùng thật ở cả hai phía.
 - **Data root** — `.dev-team-agent/`; standalone qua `ProjectRegistry` (`?project=<id>`).
 - **Pipeline** — `DEFAULT_PIPELINE` ← `pipeline.yaml` ← `tasks/<id>/pipeline.yaml`. Key `orchestrator` (opt-in, mặc định tắt) merge cùng 3 tầng như `doc_reviewer`.
-- **MCP** — `bun run mcp`, CRUD registry, không cần HTTP server.
+- **MCP** — `bun run mcp`, CRUD registry, không cần HTTP server. Tham chiếu tool + vai client: [`docs/mcp/`](docs/mcp/README.md).
 
 ---
 
@@ -31,7 +32,7 @@ agent-workflow/
 ├── src/     # backend/ (Node), frontend/ (browser), shared/ (cả hai), features/
 ├── mcp/
 ├── tests/   # unit (bun + vitest) · test-e2e/ — Playwright
-└── docs/    # agent-rules/ · convention/ · template/ · architecture/ — xem docs/README.md
+└── docs/    # agent-rules/ · mcp/ · template/ · architecture/ — xem docs/README.md
 ```
 
 ---
@@ -46,13 +47,31 @@ agent-workflow/
 | 🧪 Test implement | `test` | [`testing.md`](docs/agent-rules/testing.md) — dòng branch test §3.1, mốc coverage + nợ test theo task §6 · [`git-pr.md`](docs/agent-rules/git-pr.md) §4.3 |
 | 🚀 PR | `git-pr` | [`git-pr.md`](docs/agent-rules/git-pr.md) — đặt tên branch §4, dòng test §4.3, worktree §6 (làm trên commit mới nhất §6.3), todo debt §7, PR phát hành §8 · issue task: version, milestone, chia nhỏ §5 · publish tài liệu vào issue §11 (mọi bước có tài liệu đầu ra) |
 
-Tra cứu (không phải rule): [`README.md`](README.md) quickstart · [`docs/architecture/`](docs/architecture/) kiến trúc C4 · [`docs/architecture/events/`](docs/architecture/events/README.md) domain event · [`docs/template/`](docs/template/) template agent / pipeline.
+**Áp cho mọi bước, mọi category** (không riêng `git-pr`): 🚫 agent không sửa root [`README.md`](README.md) — quy ước đầy đủ và cách ghi đề xuất ở [`git-pr.md`](docs/agent-rules/git-pr.md) §7.2.2, checklist ở §4 dưới.
+
+Tra cứu (không phải rule): [`README.md`](README.md) quickstart · [`docs/architecture/`](docs/architecture/) kiến trúc C4 · [`docs/architecture/events/`](docs/architecture/events/README.md) domain event · [`docs/template/`](docs/template/) template agent / pipeline · [`docs/mcp/`](docs/mcp/README.md) bộ tool MCP server + vai client.
 
 ---
 
 ## 4. Checklist hoàn thành workflow
 
 Template agent (`docs/template/agents/*`) chỉ có **bước cuối generic**: đọc mục này. Checklist nhóm theo giai đoạn pipeline (bảng §3).
+
+### Mọi bước
+
+<details>
+<summary><b>🚫 Không sửa root <code>README.md</code></b></summary>
+
+Quy ước: [`git-pr.md`](docs/agent-rules/git-pr.md) §7.2.2. Áp cho **mọi** bước pipeline — investigate, design, implement, test, review, PR.
+
+- [ ] **Không sửa / thêm / xoá dòng nào trong root `README.md`** — kể cả sửa link gãy hay số liệu lệch code.
+- [ ] **Cần đổi README → ghi đề xuất** vào `docs/todo/<issue>/<task-id>.md`, **Loại nợ:** `readme`; người duyệt tự sửa rồi xoá file nợ.
+- [ ] **Tài liệu chi tiết viết vào `docs/<chủ đề>/`** — root `README.md` chỉ trỏ link sang. Đó là chỗ agent được sửa.
+- [ ] **Review**: thấy `README.md` trong diff mà không phải commit của người duyệt → yêu cầu bỏ ra.
+
+</details>
+
+---
 
 ### Mọi bước có tài liệu đầu ra
 
@@ -110,6 +129,7 @@ Chốt ngay trong `design.md` những gì Review sẽ kiểm — sai ở đây t
 - [ ] **Chốt scope `backend` / `frontend` / `shared`** — chỉ logic dùng thật ở cả hai phía mới đưa vào `src/shared/`.
 - [ ] **Route & schema** — route mới ở `api.ts` + `controller.ts` của feature nào; schema Zod đặt ở `features/<f>/schemas/`.
 - [ ] **Dùng lại helper có sẵn** — nêu `*Utils` / `*Lib` / `fileHelper` sẽ dùng hoặc mở rộng, thay vì viết mới.
+- [ ] **Abstraction ↔ chi tiết** — trong `business/`: thứ nào là abstraction (interface / `Abstract*`), thứ nào là hiện thực, chỗ lắp ráp ở đâu ([`feature-architecture-guideline.md`](docs/agent-rules/feature-architecture-guideline.md) §2).
 
 </details>
 
@@ -141,6 +161,7 @@ Chốt ngay trong `design.md` những gì Review sẽ kiểm — sai ở đây t
 - [ ] **Cập nhật rule** trong [`docs/agent-rules/`](docs/agent-rules/) ngay trong cùng thay đổi — rule lệch code là nợ, không phải chi tiết.
 - [ ] **Cập nhật tài liệu cho người** nếu quy ước đó cũng mô tả hệ thống — [`docs/architecture/`](docs/architecture/) và các file liên quan trong `docs/`.
 - [ ] **Cập nhật file này** nếu bảng §3 không còn đúng.
+- [ ] **🚫 Không sửa root `README.md`** — cần đổi thì ghi đề xuất vào `docs/todo/<issue>/<task-id>.md` (loại nợ `readme`) chờ người duyệt ([`git-pr.md`](docs/agent-rules/git-pr.md) §7.2.2).
 
 </details>
 
@@ -236,8 +257,10 @@ Dùng khi review PR đụng `src/features/*`, `src/backend/**`, `src/frontend/**
 - [ ] **Không wiring thủ công** — không thêm tay nếu glob/auto-load đã đủ (route / `apiServer` registry / styles / locales / `registerMode`).
 - [ ] **Đặt style đúng tầng** — 1 component render selector gốc → `<style scoped>`; ≥2 cùng feature → `features/<f>/styles/`; xuyên feature → `src/frontend/styles/`. Không thêm file `styles/*.scss` chỉ-comment.
 - [ ] **Danh sách dài không bị cắt cụt** — xem checklist **Chiến lược tràn nội dung UI** ở [Testing](#testing).
+- [ ] **Dialog modal qua `CDialog`** — không tự dựng `Teleport` / `.modal-backdrop` / handler `Escape` trong feature; [`ui-design-guideline.md`](docs/agent-rules/ui-design-guideline.md) §3.
 - [ ] **Tuân thủ mode-registry khi thêm/sửa mode** — đối chiếu checklist Implement › **Thêm mode mới ở FE shell**.
-- [ ] **Gom module theo nghiệp vụ** — không tách file theo kiểu thao tác (`store` / `fetch` / `paths` / `scan` mỏng).
+- [ ] **Chia file theo abstraction ↔ hiện thực** — trong `business/` / `mcp/`: một abstraction một file, một hiện thực một file; abstraction không chứa chi tiết (env var, path, tên nhà cung cấp); không gom interface vào `types.ts` chung.
+- [ ] **Module không có abstraction thì gom theo nghiệp vụ** — không tách file theo kiểu thao tác (`store` / `fetch` / `paths` / `scan` mỏng).
 - [ ] **Không phụ thuộc Hono** — `business/` không import Hono, không phụ thuộc `c.req`.
 - [ ] **Ranh giới `src/backend` ⟂ `src/frontend` ⟂ `src/shared` giữ nguyên** — lint chặn, không whitelist; chi tiết ở `src/{backend,frontend,shared}/README.md`.
 - [ ] **ESM thuần, không import tĩnh `bun:*` trên đường nạp `vite.config.ts`** — [`coding-guideline.md`](docs/agent-rules/coding-guideline.md) §1.
@@ -259,7 +282,7 @@ Dùng khi review PR đụng `src/features/*`, `src/backend/**`, `src/frontend/**
 - [ ] **Đọc FS phòng thủ** — `safeReadDir` / `statSafe` / `readYamlSafe`; lỗi file không làm sập request.
 - [ ] **Chống traversal** — input path từ user đã sanitize / `resolvePathUnder`.
 - [ ] **Ghi atomic** — file quan trọng ghi qua temp + rename (registry, runners, settings).
-- [ ] **Fetch qua wrapper an toàn** — URL người dùng qua `fetchUrlSafe` (https, chặn private host).
+- [ ] **Fetch qua wrapper an toàn** — URL người dùng qua `fetchUrlSafe` (https, chặn private host). Ngoại lệ duy nhất: endpoint MCP (`http`/`sse`) đi qua `RemoteMcpServer.assertEndpoint` của feature `mcp` (`https` mọi host · `http` chỉ loopback/private) — chốt riêng vì ca dùng chính là server chạy local (playwright, serena), không dùng làm tiền lệ cho endpoint mới.
 - [ ] **Pattern scan tuỳ chỉnh không escape project root** — `settings.scanPatterns` lọc 3 lớp: `sanitiseScanPattern` → `expandScanPatterns` (bỏ qua symlink) → `resolvePathUnder(projectRoot, …)` cho mỗi match.
 - [ ] **Biến môi trường tuỳ chọn/bắt buộc đúng chỗ** — `ANTHROPIC_API_KEY` tuỳ chọn, `DASHBOARD_SECRET_KEY` bắt buộc cho vault; hành vi khi thiếu ở [`README.md`](README.md) › Biến môi trường.
 - [ ] **Emit & catalog event khớp code** — `emit` / `emitEntity` sau persist, payload không secret; file mode trong [`docs/architecture/events/`](docs/architecture/events/README.md) và `DashboardEventType` đổi theo, hoặc nợ `docs/todo/` có lý do.
@@ -272,6 +295,7 @@ Dùng khi review PR đụng `src/features/*`, `src/backend/**`, `src/frontend/**
 - [ ] **Xác định bề mặt cần phủ** — mỗi vùng đổi có hàm/route/hành vi công khai test được. Không có bề mặt nào test được là vấn đề của **code**, không phải của test.
 - [ ] **PR dòng source: test KHÔNG nằm trong diff** — test đi ở PR dòng test ([`git-pr.md`](docs/agent-rules/git-pr.md) §4.3). Thấy file `tests/`·`test-e2e/` trong diff PR code → yêu cầu chuyển sang PR dòng test.
 - [ ] **PR dòng test: chọn đúng runner** — domain/fs → **bun test**; FE/component → vitest; khai báo path theo checklist [Testing](#testing).
+- [ ] **Root `README.md` không nằm trong diff** — trừ commit của người duyệt; agent sửa thì yêu cầu bỏ ra, chuyển thành đề xuất `docs/todo/` loại nợ `readme` ([`git-pr.md`](docs/agent-rules/git-pr.md) §7.2.2).
 - [ ] **Giữ build xanh** — PR đụng helper FE+BE hoặc `fileHelper` → typecheck/build xanh cả local và CI.
 - [ ] **Tuân thủ commitlint** — commit/PR title đúng `type(scope): subject`, không trailer công cụ.
 - [ ] **Trình bày đúng nội dung PR** — có Tổng quan theo loại task; mỗi thay đổi đánh số, fix/refactor có Logic trước → sau, chi tiết chỉnh sửa nhóm theo cây thư mục ([`git-pr.md`](docs/agent-rules/git-pr.md) §9).
@@ -300,7 +324,8 @@ Quy ước: [`git-pr.md`](docs/agent-rules/git-pr.md) §1.
 
 Bối cảnh đầy đủ: [`git-pr.md`](docs/agent-rules/git-pr.md) §7.
 
-- [ ] **Hoãn docs/convention** — đã có `docs/todo/<issue>/<task-id>.md`.
+- [ ] **Hoãn tài liệu docs** — đã có `docs/todo/<issue>/<task-id>.md`.
+- [ ] **Đề xuất sửa `README.md`** — ghi ở file nợ loại `readme`, không sửa thẳng; người duyệt sửa rồi xoá file nợ.
 - [ ] **PR feature → `dev/x.y.z/main`** — được mang nợ; Todo debt **không** chặn.
 - [ ] **PR `dev/x.y.z/main` → `main`** — **không còn** thư mục `docs/todo/`; `bun run check:todo` xanh.
 - [ ] **Đã trả nợ** — đã xoá toàn bộ `docs/todo/`.

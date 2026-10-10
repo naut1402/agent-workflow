@@ -22,12 +22,13 @@ import {
   type Orchestration,
 } from '../../monitor/business/tasks/startAuthority.js'
 import { applyOrchestratorHaltAction } from '../../monitor/business/tasks/state.js'
-import { listJobs, loadJob, loadTaskSessionLedger, submitJob } from '../../runner/business/index.js'
+import { listJobs, loadJob, resolveStepRunnerId, submitJob } from '../../runner/business/index.js'
 import type { JobRecord } from '../../runner/business/index.js'
 import { loadPipelineConfig } from '../../pipeline-editor/business/pipeline/index.js'
 import { isRespawnTarget } from '../../monitor/lib/pipelineRunGuards.js'
 import { resolveHitlPending, gateStepsFromConfig } from '../../../shared/lib/phase.js'
 import { ORCHESTRATOR_STEP_ID, type OrchestratorDecision } from '../schemas/orchestrator.js'
+import { stepSummaryOf } from '../../../shared/lib/orchestrator.js'
 import { loadKnowledgeBundle } from '../../knowledge/business/index.js'
 import { composeStepBrief, renderBundle, type AgentContext, type DispatchReason } from './brief.js'
 import {
@@ -37,6 +38,7 @@ import {
   type DecisionTrigger,
   type StepResult,
 } from './decision.js'
+import { resolveDecisionRoute } from './mcpRoute.js'
 import { mintOrchestratorToken, revokeOrchestratorTokensFor } from './orchestratorTokens.js'
 
 /** Quét lại task treo mỗi 60s — lưới cứu khi event bus (in-process) mất tín hiệu. */
@@ -412,6 +414,8 @@ export async function respawnStep(
   emitDispatched(ref, { stepId, action: 'respawn', reason: 'respawn' })
 
   submitJob({
+    // Respawn không có khái niệm "caller chỉ định runner" nên không cần `??`.
+    runnerId: resolveStepRunnerId(step).runnerId,
     agentRef: step.agent,
     workspace: joinPath(ref.root, 'tasks', ref.taskId),
     userPrompt: brief,
@@ -477,19 +481,16 @@ async function askAgent(
   const pipeline = await loadPipelineConfig(ref.root, ref.taskId)
   const stepIds = (pipeline.steps || []).map((s: any) => s?.id).filter(Boolean)
 
-  // `resolveSessionPlan` với `resume` sẽ bắt entry open MỚI NHẤT khi chưa có
-  // entry nào mang `stepId` cần tìm — tức là session của một step. Vì vậy lượt
-  // đầu của orchestrator luôn phải là `new`.
-  const ledger = loadTaskSessionLedger(ref.projectId, ref.taskId)
-  const hasOwnSession = ledger.sessions.some(
-    (s) => s.status === 'open' && s.stepIds?.includes(ORCHESTRATOR_STEP_ID),
-  )
-
   // Mint NGAY TRƯỚC submitJob: metadata đi vào job lúc submit và không sửa lại
   // được sau (job file là snapshot) — mint muộn hơn nghĩa là job không bao giờ
   // biết token của chính nó.
   const orchestratorToken = mintOrchestratorToken(ref)
+  // Chốt tuyến NGAY TRƯỚC submitJob, cùng lý do với mint token: metadata là
+  // snapshot không sửa lại được sau. Một giá trị — prompt và runner cùng đọc,
+  // nên không có cửa sổ "prompt dạy gọi tool mà job không có tool".
+  const { route: mcpRoute } = resolveDecisionRoute()
   const knowledgeBundle = await loadKnowledgeBundle(ref.root, orch.knowledge_inputs ?? [])
+  const liveStep = liveJobsOfTask(ref.root, ref.taskId).find((j) => !isOrchestratorJob(j))
   const job = submitJob({
     agentRef: orch.agent,
     workspace: joinPath(ref.root, 'tasks', ref.taskId),
@@ -501,11 +502,19 @@ async function askAgent(
       detail: extra.detail,
       stepResult: extra.stepResult,
       gatePending: extra.gatePending,
+      activeStep: liveStep
+        ? { stepId: (liveStep.metadata?.pipelineStepId as string | undefined) ?? null, status: liveStep.status }
+        : null,
       recent: recentOf(ref.root, ref.taskId),
       extraSystemPrompt: orch.system_prompt,
       knowledgeText: renderBundle(knowledgeBundle),
+      route: mcpRoute,
     }),
-    sessionMode: hasOwnSession ? 'resume' : 'new',
+    // Luôn `resume`: ledger khoá entry theo `stepId`, và job này mang
+    // `metadata.stepId = ORCHESTRATOR_STEP_ID` ⇒ lượt đầu tự ra `new` (node chưa
+    // có entry), lượt sau resume vào ĐÚNG phiên của nó. Guard `hasOwnSession` cũ
+    // ở đây chỉ che một triệu chứng của ledger dùng chung một ô session.
+    sessionMode: 'resume',
     metadata: {
       projectRoot: dirname(ref.root),
       devTeamRoot: ref.root,
@@ -519,6 +528,10 @@ async function askAgent(
       // quyết định là sự cố phải xử lý, ở lượt chat thì chỉ là im lặng.
       orchestratorTrigger: trigger,
       orchestratorToken,
+      // Runner đọc lại ĐÚNG giá trị prompt đã dùng để quyết định có gắn MCP của
+      // dashboard vào job hay không. Job cũ thiếu khoá này ⇒ `undefined` ⇒
+      // `!== 'mcp'` ⇒ không gắn: tương thích ngược hoàn toàn.
+      orchestratorMcpRoute: mcpRoute,
     },
   })
   return { job }
@@ -703,13 +716,44 @@ function stdoutOf(job: JobRecord | null): string {
   return typeof job?.stdout === 'string' ? job.stdout : ''
 }
 
-/** Kết quả một lượt chạy step, gói lại cho prompt của agent. */
-function stepResultOf(
+/**
+ * Tóm tắt do `runJob` chốt sẵn từ `result.stdout` ĐẦY ĐỦ, trước cả
+ * `shouldPersistStdout` lẫn `CHAT_STDOUT_LIMIT` — xem `jobQueue.captureStepSummary`.
+ * Đây là đường chính; đọc lại từ `job.stdout` chỉ là lưới cho job ghi trước fix.
+ */
+function pinnedSummaryOf(job: JobRecord | null): string | null {
+  const pinned = job?.metadata?.stepSummary
+  return typeof pinned === 'string' && pinned.trim() ? pinned.trim() : null
+}
+
+/**
+ * Kết quả một lượt chạy step, gói lại cho prompt của agent điều phối.
+ *
+ * Cố ý KHÔNG mang stdout thô: context làm việc của nút con phải ở lại phiên của
+ * nút con. Cha nhận `STEP_SUMMARY` do chính con soạn, và chỉ khi không có mới
+ * rơi về đuôi output (`fromTail`) — chi tiết đầy đủ nằm ở artifact.
+ *
+ * Export thuần để test gọi thẳng, cùng quy ước với `identifyTask` /
+ * `isOrchestratorJob`: đây là hợp đồng con → cha, phải đo được không cần bus.
+ */
+export function stepResultOf(
   job: JobRecord | null,
   stepId: string,
   status: StepResult['status'],
 ): StepResult {
-  return { stepId, status, artifacts: job?.artifactsFound ?? [], output: stdoutOf(job) }
+  // `job.stdout` ĐÃ được provider bóc khỏi khung JSON (`parse-json` làm việc đó
+  // ở `providers/claude-code-cli.ts`), nên ở đây nó luôn là text thuần. Bóc lần
+  // thứ hai từng rơi vào nhánh "cắt từ `{` đầu tới `}` cuối" và vứt mất chính
+  // dòng `STEP_SUMMARY` thật khi nút con có in một khối JSON trong câu trả lời.
+  const text = stdoutOf(job)
+  const summary = pinnedSummaryOf(job) ?? stepSummaryOf(text)
+  return {
+    stepId,
+    status,
+    artifacts: job?.artifactsFound ?? [],
+    result: summary ?? text,
+    fromTail: !summary,
+  }
 }
 
 /* Subscriber */

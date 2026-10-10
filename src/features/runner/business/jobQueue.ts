@@ -5,7 +5,15 @@ import os from 'node:os'
 import { registryHome } from '../../../backend/registry.js'
 import { isLogTypeEnabled } from '../../../backend/log/loggingPrefsIo.js'
 import { emit } from '../../../backend/events/index.js'
-import { getRunner, getDefaultRunner, substituteConfig, getProvider } from './registry.js'
+import {
+  getRunner,
+  getDefaultRunner,
+  resolveDefaultRunner,
+  resolveStepRunnerId,
+  substituteConfig,
+  getProvider,
+  cleanupOrphanedMcpDeliveries,
+} from './registry.js'
 import { getConnection } from './connections.js'
 import { getCredential } from './credentials.js'
 import { resolveAgent } from './agentResolver.js'
@@ -15,6 +23,7 @@ import { captureJobUsage, captureTokenUsageFromExecute } from './usageCapture.js
 import type { Connection, CredentialProfile, ExecuteResult, JobRecord, JobStatus, MutationResult } from './types.js'
 import type { RunTaskStepResult } from '../../monitor/business/tasks/runStep.js'
 import type { UsageSnapshot } from '../../../shared/log/schema.js'
+import { stepSummaryOf } from '../../../shared/lib/orchestrator.js'
 import {
   advanceStepOnJobSuccess,
   assertStartAllowedSync,
@@ -159,6 +168,18 @@ function backoffMsFor(attemptCount: number, schedule: number[]): number {
 const jobAbortControllers = new Map<string, AbortController>()
 
 /** Persist agent reply on the job record for chat UI (NL + pipeline task chat). */
+/**
+ * Giá trị `stdout` cho BIÊN PERSIST/API — `jobs/<id>.json` không 0600 và chảy
+ * thẳng ra `GET /api/jobs`, nên nó phải là bản đã mask secret MCP khi có.
+ *
+ * 🚫 Không dùng ở đường chức năng. `foldProposalIntoScratch` và
+ * `tryDispatchOrchestratorDecision` cố ý giữ `result.stdout` THÔ: mask là
+ * split/join mù, nó cắt giữa artifact đang fold và giữa dòng `ORCHESTRATOR_DECISION`.
+ */
+function persistStdout(result: ExecuteResult): string | undefined {
+  return result.maskedStdout ?? result.stdout
+}
+
 function shouldPersistStdout(job: JobRecord, providerId: string | undefined): boolean {
   if (job.metadata?.isNlChat) return true
   // Với job quyết định của orchestrator, stdout LÀ kênh truyền lệnh (dòng
@@ -167,6 +188,24 @@ function shouldPersistStdout(job: JobRecord, providerId: string | undefined): bo
   // pipeline đứng im — kết cục tệ hơn hẳn một lần halt tường minh.
   if (job.metadata?.orchestratorJob) return true
   return Boolean(providerId && isAgentCliProviderId(providerId))
+}
+
+/**
+ * Chốt `STEP_SUMMARY` của nút con vào `metadata`, đọc từ `result.stdout` ĐẦY ĐỦ.
+ *
+ * Đây là kênh con → cha của node điều phối, nên nó không được phụ thuộc vào
+ * `job.stdout`: `shouldPersistStdout` chỉ persist stdout cho provider agent-CLI
+ * (connection `*-api` / `console-command` không có), và khi CÓ persist thì
+ * `CHAT_STDOUT_LIMIT` cắt từ ĐẦU — đúng phần đuôi nơi `STEP_SUMMARY` nằm bị bỏ
+ * trước tiên. Cả hai ca đều biến "nút con đã trả tóm tắt" thành "nút con không
+ * trả", mà phía cha không có cách nào phân biệt. Chốt ở đây thoát cả hai.
+ *
+ * Không có tóm tắt thì KHÔNG ghi field — `fromTail` phía cha giữ nguyên nghĩa
+ * "nút con không in `STEP_SUMMARY`".
+ */
+function withStepSummary(record: JobRecord, stdout: string | undefined): JobRecord {
+  const summary = stepSummaryOf(stdout)
+  return summary ? { ...record, metadata: { ...record.metadata, stepSummary: summary } } : record
 }
 
 /**
@@ -226,6 +265,10 @@ bindRecoverPoller({ loadJob, saveJob, requeueJob })
 
 // Reap orphaned running jobs once when the module loads (server restart).
 reapOrphanedRunningJobs()
+// Cùng lý do, cho cách giao MCP bằng file: `dispose()` không chạy được khi tiến
+// trình bị kill, và file bỏ lại chứa token đã giải ở dạng plaintext — với cursor
+// còn nằm TRONG repo người dùng kèm bản sao lưu `.cursor/mcp.json` gốc của họ.
+cleanupOrphanedMcpDeliveries()
 startRecoverPoller()
 
 function jobsDir(): string {
@@ -491,15 +534,23 @@ function pumpQueue(): void {
 }
 
 async function runJob(job: JobRecord): Promise<void> {
-  const runner = getRunner(job.runnerId) || getDefaultRunner()
+  const pinned = getRunner(job.runnerId)
+  const fallback = pinned ? null : resolveDefaultRunner()
+  const runner = pinned ?? fallback?.runner ?? null
   if (!runner || runner.enabled === false) {
+    // Giữ nguyên văn tiền tố `runner not found or disabled` (FE/log đang khớp
+    // chuỗi này), chỉ nối thêm lý do để người dùng biết phải sửa gì.
+    const detail = pinned
+      ? `runner "${job.runnerId}" đang bị tắt`
+      : `không có runner mặc định dùng được (${fallback?.runnerId ?? 'chưa đặt'}: ${fallback?.reason ?? 'unset'})`
+    const error = `runner not found or disabled — ${detail}`
     saveJob({
       ...job,
       status: 'failed',
       finishedAt: new Date().toISOString(),
-      error: 'runner not found or disabled',
+      error,
     })
-    emit('job.failed', { jobId: job.id, error: 'runner not found or disabled' })
+    emit('job.failed', { jobId: job.id, error })
     return
   }
 
@@ -551,7 +602,17 @@ async function runJob(job: JobRecord): Promise<void> {
     }
   }
 
-  saveJob({ ...job, status: 'running', startedAt: new Date().toISOString(), logPath: logPath ?? null, pid: null })
+  saveJob({
+    ...job,
+    // Job record phải nêu runner THẬT SỰ chạy: `job.runnerId` có thể trỏ runner đã
+    // xoá và vừa rơi về default ở trên. Không ghi ngược thì Running Jobs, panel
+    // chat và vòng chat kế tiếp (kế thừa `parent.runnerId`) đều mang giá trị sai.
+    runnerId: runner.id,
+    status: 'running',
+    startedAt: new Date().toISOString(),
+    logPath: logPath ?? null,
+    pid: null,
+  })
   emit('job.started', {
     jobId: job.id,
     runnerId: runner.id,
@@ -639,6 +700,21 @@ async function runJob(job: JobRecord): Promise<void> {
     sessionStaleReason = plan.staleReason
     if (plan.sessionMode === 'resume' && plan.resumeSessionId) {
       execResumeSessionId = plan.resumeSessionId
+      // Ghi nhận quyền sở hữu NGAY lúc start. Trước đây entry chỉ được ghi khi
+      // job xong, nên trong suốt lượt chạy node này không có entry nào mang
+      // `stepId` của nó — và lúc ghi, lookup bắt nhầm entry `open` của node khác.
+      // KHÔNG `forceNew`: đây là nối tiếp một phiên đang mở, không phải mở mới.
+      recordSessionUsage({
+        projectId,
+        taskId,
+        sessionId: plan.resumeSessionId,
+        providerId: connection.providerId,
+        runnerId: runner.id,
+        connectionId: connection.id,
+        workspace: job.workspace,
+        model: resolvedAgent.model,
+        stepId: jobStepId,
+      })
     } else if (plan.sessionMode === 'new') {
       execSessionId = plan.sessionId || mintSessionId()
       recordSessionUsage({
@@ -883,7 +959,7 @@ async function runJob(job: JobRecord): Promise<void> {
       console.error('[jobQueue] advancePipelineStepChain failed', err)
     } finally {
       saveJob({
-        ...(loadJob(job.id) as JobRecord),
+        ...withStepSummary(loadJob(job.id) as JobRecord, persistStdout(result)),
         status: 'succeeded',
         finishedAt: new Date().toISOString(),
         exitCode: result.exitCode,
@@ -892,7 +968,7 @@ async function runJob(job: JobRecord): Promise<void> {
         artifactsFound: result.artifactsFound,
         pid: null,
         ...(shouldPersistStdout(job, connection.providerId)
-          ? { stdout: (result.stdout ?? '').slice(0, CHAT_STDOUT_LIMIT) }
+          ? { stdout: (persistStdout(result) ?? '').slice(0, CHAT_STDOUT_LIMIT) }
           : {}),
         ...(capturedSessionId ? { sessionId: capturedSessionId } : {}),
       })
@@ -904,7 +980,7 @@ async function runJob(job: JobRecord): Promise<void> {
 
   const finalStatus = result.ok ? (isApprovalJob ? 'awaiting_approval' : 'succeeded') : 'failed'
   saveJob({
-    ...(loadJob(job.id) as JobRecord),
+    ...withStepSummary(loadJob(job.id) as JobRecord, persistStdout(result)),
     status: finalStatus,
     finishedAt: new Date().toISOString(),
     exitCode: result.exitCode,
@@ -915,7 +991,7 @@ async function runJob(job: JobRecord): Promise<void> {
     // Task/NL chat read the agent's reply from here: the log file also contains
     // the payload/prompt framing, which must never be shown as the chat answer.
     ...(shouldPersistStdout(job, connection.providerId)
-      ? { stdout: (result.stdout ?? '').slice(0, CHAT_STDOUT_LIMIT) }
+      ? { stdout: (persistStdout(result) ?? '').slice(0, CHAT_STDOUT_LIMIT) }
       : {}),
     ...(capturedSessionId && !isApprovalJob ? { sessionId: capturedSessionId } : {}),
   })
@@ -1031,7 +1107,9 @@ async function advancePipelineStepChain(job: JobRecord): Promise<void> {
   } = job.metadata || {}
 
   submitJob({
-    runnerId: job.runnerId === 'unknown' ? undefined : job.runnerId,
+    // Mỗi step tự giải runner của chính nó. Kế thừa `job.runnerId` làm pin của một
+    // step lây sang mọi step sau nó trong chain — đúng thứ task này phải sửa.
+    runnerId: resolveStepRunnerId(nextStep).runnerId,
     agentRef: nextStep.agent,
     workspace,
     userPrompt,
@@ -1353,19 +1431,40 @@ export async function sendTaskFeedback(
   }
   if (!parent) return { ok: false, status: 400, error: 'no completed job to give feedback on' }
 
-  const ledger = loadTaskSessionLedger(projectId, taskId)
-  const hasOpenSession = ledger.sessions.some((s) => s.status === 'open')
-
   // The step may have changed agent since `parent` ran (pipeline edited via
   // chat, or advanced past a retry loop) — re-resolve from the pipeline
   // config that's live NOW rather than trusting the old job's `agentRef`.
   let agentRef = parent.agentRef
   const parentStepId = stepIdOf(parent)
+
+  const ledger = loadTaskSessionLedger(projectId, taskId)
+  // Lọc theo node: "còn phiên mở" phải là phiên CỦA STEP NÀY. Không lọc thì
+  // phản hồi gửi cho step A resume vào phiên đang mở của nút điều phối, và từ
+  // đó hai node dùng chung một phiên CLI. Parent không có `stepId` (job ad-hoc
+  // gắn vào task) giữ nguyên nghĩa cũ — "có entry mở nào đó thì nối tiếp".
+  const hasOpenSession = ledger.sessions.some(
+    (s) => s.status === 'open' && (!parentStepId || s.stepIds?.includes(parentStepId)),
+  )
   const devTeamRoot = typeof parent.metadata?.devTeamRoot === 'string' ? parent.metadata.devTeamRoot : undefined
+  let step: any = null
   if (parentStepId && devTeamRoot) {
     const pipeline = await loadPipelineConfig(devTeamRoot, taskId)
-    const step = (pipeline.steps || []).find((s: any) => s.id === parentStepId)
+    step = (pipeline.steps || []).find((s: any) => s.id === parentStepId) ?? null
     if (step?.agent) agentRef = step.agent
+  }
+
+  // Giữ runner của job cha để resume đúng phiên CLI. Chỉ giải lại khi runner đó
+  // đã bị XOÁ hoặc TẮT — không xét eligibility, vì một job chạy trên runner
+  // console-command vẫn là job hợp lệ và không được đổi runner oan.
+  let inheritedRunnerId = parent.runnerId === 'unknown' ? undefined : parent.runnerId
+  if (inheritedRunnerId) {
+    const parentRunner = getRunner(inheritedRunnerId)
+    if (!parentRunner || parentRunner.enabled === false) {
+      console.warn(
+        `[chat] job cha "${parent.id}" dùng runner "${inheritedRunnerId}" đã xoá/tắt — giải lại theo pin của step`,
+      )
+      inheritedRunnerId = step ? resolveStepRunnerId(step).runnerId : undefined
+    }
   }
 
   // Vé của đúng một lượt — xem `advancePipelineStepChain`.
@@ -1376,7 +1475,7 @@ export async function sendTaskFeedback(
     ...parentMetadata
   } = parent.metadata || {}
   const job = submitJob({
-    runnerId: parent.runnerId === 'unknown' ? undefined : parent.runnerId,
+    runnerId: inheritedRunnerId,
     agentRef,
     workspace: parent.workspace,
     userPrompt: feedback,

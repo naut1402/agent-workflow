@@ -10,7 +10,7 @@
 import { joinPath, mkdirSync, randomBytes, randomUUID, readTextFileSync, readdirSync } from '../../../backend/lib/fileHelper.js'
 import { emit } from '../../../backend/events/index.js'
 import { get as getProject } from '../../../backend/registry.js'
-import { submitJob, loadJob } from '../../runner/business/index.js'
+import { submitJob, loadJob, resolveStepRunnerId } from '../../runner/business/index.js'
 import type { JobRecord } from '../../runner/business/index.js'
 import { createTask, fetchUrlSafe, resolveOrchestration, runTaskStep } from '../../monitor/business/index.js'
 import { dispatchOrchestrator } from '../../orchestrator/business/index.js'
@@ -231,7 +231,8 @@ async function executeCreateAction(
   }
 
   const job = submitJob({
-    runnerId: action.runnerId ?? undefined,
+    // Action khai runner tường minh thì thắng pin của step đầu.
+    runnerId: action.runnerId ?? resolveStepRunnerId(created.firstStep).runnerId,
     agentRef,
     workspace: joinPath(target.root, 'tasks', created.taskId),
     userPrompt: created.requestContent,

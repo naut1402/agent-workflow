@@ -110,3 +110,58 @@ describe('useArtifactProposal', () => {
     expect(p.error.value).toContain('failed')
   })
 })
+
+/** Cổng mở bằng tay — giữ request treo mà không cần fake timer. */
+function gate() {
+  let release!: () => void
+  const p = new Promise<void>((r) => {
+    release = r
+  })
+  return { wait: () => p, release }
+}
+
+describe('useArtifactProposal — TC-23 · một cờ `busy` dùng chung cho mọi action ghi', () => {
+  afterEach(() => {
+    vi.mocked(approveJob).mockReset()
+  })
+
+  it('đang approve thì discard không phát sinh request; xong approve thì discard chạy được', async () => {
+    const g = gate()
+    vi.mocked(approveJob).mockImplementation(async () => {
+      await g.wait()
+      return { job: {} }
+    })
+    vi.mocked(discardJob).mockResolvedValue({ job: {} })
+    const p = useArtifactProposal({ initialJobId: 'j1' })
+
+    const approving = p.approve()
+    expect(p.busy.value).toBe(true)
+
+    // Siết chặt HƠN hiện trạng, và là thay đổi có chủ ý (design E5): ba handler
+    // dùng chung MỘT instance nên guard của hook chặn chéo. Khoá bằng test để
+    // lần review sau không ai "sửa" nó về ba instance riêng.
+    expect(await p.discard()).toBe(false)
+    expect(discardJob).not.toHaveBeenCalled()
+    expect(p.busy.value).toBe(true)
+
+    g.release()
+    expect(await approving).toBe(true)
+    expect(p.busy.value).toBe(false)
+
+    expect(await p.discard()).toBe(true)
+    expect(discardJob).toHaveBeenCalledTimes(1)
+    expect(p.busy.value).toBe(false)
+  })
+
+  it('approve lỗi vẫn nhả cờ, discard sau đó chạy bình thường', async () => {
+    vi.mocked(approveJob).mockRejectedValueOnce(new Error('409 Conflict'))
+    vi.mocked(discardJob).mockResolvedValue({ job: {} })
+    const p = useArtifactProposal({ initialJobId: 'j1' })
+
+    expect(await p.approve()).toBe(false)
+    expect(p.busy.value).toBe(false)
+    expect(p.error.value).toContain('409 Conflict')
+
+    expect(await p.discard()).toBe(true)
+  })
+})

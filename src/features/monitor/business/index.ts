@@ -10,7 +10,7 @@ export {
   knownArtifactsFor,
   sanitiseProfileName,
 } from '../../pipeline-editor/business/pipeline/index.js'
-export { profilesDir, fetchUrlSafe, isPrivateHostname } from '../../agent-editor/business/index.js'
+export { profilesDir, fetchUrlSafe } from '../../agent-editor/business/index.js'
 export { loadGithubTokensConfig } from '../../settings/business/index.js'
 export {
   submitJob,
@@ -22,6 +22,7 @@ export {
   stepIdOf,
 } from '../../runner/business/index.js'
 export { getRunner } from '../../runner/business/index.js'
+export { resolveStepRunnerId } from '../../runner/business/index.js'
 export { getConnection } from '../../runner/business/index.js'
 export { providerFamilyOf } from '../../runner/business/index.js'
 export { loadTaskSessionLedger, closeTaskSession, parseCursorJsonOutput } from '../../runner/business/index.js'

@@ -568,7 +568,14 @@ export class MonitorController extends AbstractController {
       selectionEndLine: spliceRange?.end ?? selectionEndLine,
     })
 
-    const resolvedRunnerId = runnerId ?? action.runner_id
+    // Qua cùng helper với 6 đường start job còn lại: pin trỏ runner đã xoá/tắt
+    // phải rơi về default, không mang id rác vào job record.
+    const resolvedRunnerId =
+      runnerId ??
+      monitorBusiness.resolveStepRunnerId({
+        id: `artifact-action:${actionId}`,
+        runner_id: action.runner_id,
+      }).runnerId
     const jobInput = {
       runnerId: resolvedRunnerId,
       agentRef: action.agent_ref,
@@ -679,7 +686,8 @@ export class MonitorController extends AbstractController {
         })
       }
       job = monitorBusiness.submitJob({
-        runnerId: body.runnerId ?? undefined,
+        // Caller thắng pin của step (mẫu `runnerId ?? action.runner_id` của artifact action).
+        runnerId: body.runnerId ?? monitorBusiness.resolveStepRunnerId(result.firstStep).runnerId,
         agentRef,
         workspace: path.join(root, 'tasks', result.taskId),
         userPrompt: result.requestContent,

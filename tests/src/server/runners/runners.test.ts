@@ -465,3 +465,184 @@ describe('job queue', () => {
     expect(types).not.toContain('job.started')
   })
 })
+
+// T6fabee9b · nhóm B của test-spec — cờ `create` chặn ghi đè bản ghi trùng id.
+//
+// Root cause số 1 của bug: id connection/runner suy từ `slugify(nhãn)`, nên hai
+// lần "Thêm mới" cùng tên sinh cùng id và lần sau thay chỗ lần trước **trong im
+// lặng**. Với connection thì nó đổi luôn `providerId`/`config.model`/
+// `credentialId` — tức đổi hẳn model mà runner mặc định thật sự chạy.
+//
+// `create` là cờ OPT-IN: chỉ dialog tạo mới của FE gửi, nên caller lập trình
+// (test cũ, migration, `ensureLegacyConnection`) giữ nguyên hành vi upsert.
+// Cặp TC-D09 / TC-D11 là hợp đồng bảo vệ đúng điều đó.
+describe('create flag — 409 khi tạo mới trùng id', () => {
+  function seedOtherConnection() {
+    upsertConnection({
+      id: 'conn-khac',
+      kind: 'local-console',
+      providerId: 'cursor-cli',
+      cliPath: 'agent',
+    })
+  }
+
+  test('TC-D08: upsertRunner create:true trên id đã tồn tại ⇒ 409, bản ghi cũ nguyên vẹn', () => {
+    seedOtherConnection()
+    upsertRunner({
+      id: 'x',
+      name: 'Bản gốc',
+      connectionId: DEFAULT_CONNECTION_ID,
+      enabled: true,
+      maxConcurrency: 3,
+      config: { timeoutMs: 1000 },
+    } as any)
+
+    const res = upsertRunner({
+      id: 'x',
+      name: 'Bản đè',
+      connectionId: 'conn-khac',
+      enabled: false,
+      maxConcurrency: 9,
+      config: { timeoutMs: 7777 },
+      create: true,
+    } as any)
+
+    expect(res.ok).toBe(false)
+    if (!('error' in res)) throw new Error('unreachable')
+    expect(res.status).toBe(409)
+    expect(res.error).toContain('x')
+    expect(res.error).toContain('đã tồn tại')
+
+    const kept = getRunner('x')!
+    expect(kept.name).toBe('Bản gốc')
+    expect(kept.connectionId).toBe(DEFAULT_CONNECTION_ID)
+    expect(kept.enabled).toBe(true)
+    expect(kept.maxConcurrency).toBe(3)
+    expect(kept.config).toEqual({ timeoutMs: 1000 })
+  })
+
+  test('TC-D09: KHÔNG có cờ create ⇒ upsert-merge như cũ (hợp đồng của caller lập trình)', () => {
+    upsertRunner({ id: 'x', name: 'Bản gốc', connectionId: DEFAULT_CONNECTION_ID } as any)
+
+    const res = upsertRunner({ id: 'x', name: 'Bản mới', connectionId: DEFAULT_CONNECTION_ID } as any)
+
+    expect(res.ok).toBe(true)
+    expect(getRunner('x')?.name).toBe('Bản mới')
+    expect(listRunners().runners).toHaveLength(1)
+  })
+
+  test('TC-D10: upsertConnection create:true trên id đã tồn tại ⇒ 409, model/credential cũ KHÔNG đổi', () => {
+    upsertConnection({
+      id: 'claude-api',
+      label: 'claude',
+      kind: 'ai-provider',
+      providerId: 'anthropic-api',
+      credentialId: 'claude-default',
+      config: { model: 'claude-cu', baseURL: 'https://cu.example/v1' },
+    } as any)
+
+    const res = upsertConnection({
+      id: 'claude-api',
+      label: 'Claude',
+      kind: 'ai-provider',
+      providerId: 'openai-api',
+      credentialId: 'cred-khac',
+      config: { model: 'gpt-moi', baseURL: 'https://moi.example/v1' },
+      create: true,
+    } as any)
+
+    expect(res.ok).toBe(false)
+    if (!('error' in res)) throw new Error('unreachable')
+    expect(res.status).toBe(409)
+    expect(res.error).toContain('claude-api')
+
+    // `model` sống trong connection — đây là thứ quyết định job chạy bằng gì.
+    const kept = getConnection('claude-api')!
+    expect(kept.providerId).toBe('anthropic-api')
+    expect(kept.credentialId).toBe('claude-default')
+    expect(kept.config).toEqual({ model: 'claude-cu', baseURL: 'https://cu.example/v1' })
+  })
+
+  test('TC-D11: upsertConnection KHÔNG có cờ create ⇒ replace như cũ (bảo vệ ensureLegacyConnection)', () => {
+    upsertConnection({
+      id: 'c',
+      kind: 'local-console',
+      providerId: 'cursor-cli',
+      cliPath: 'agent',
+    } as any)
+
+    const res = upsertConnection({
+      id: 'c',
+      kind: 'local-console',
+      providerId: 'codex-cli',
+      cliPath: 'codex',
+    } as any)
+
+    expect(res.ok).toBe(true)
+    expect(getConnection('c')?.providerId).toBe('codex-cli')
+  })
+
+  test('TC-D24: create:true với id CHƯA tồn tại ⇒ tạo được bình thường', () => {
+    const conn = upsertConnection({
+      id: 'conn-moi',
+      kind: 'local-console',
+      providerId: 'cursor-cli',
+      cliPath: 'agent',
+      create: true,
+    } as any)
+    expect(conn.ok).toBe(true)
+
+    const runner = upsertRunner({ id: 'r-moi', connectionId: 'conn-moi', create: true } as any)
+    expect(runner.ok).toBe(true)
+    expect(getRunner('r-moi')?.connectionId).toBe('conn-moi')
+  })
+
+  test('TC-D25: cờ create 🚫 không lọt vào bản ghi persist trên đĩa', () => {
+    upsertConnection({
+      id: 'conn-persist',
+      kind: 'local-console',
+      providerId: 'cursor-cli',
+      cliPath: 'agent',
+      create: true,
+    } as any)
+    upsertRunner({ id: 'r-persist', connectionId: 'conn-persist', create: true } as any)
+
+    const runnersRaw = JSON.parse(fs.readFileSync(path.join(home, 'runners.json'), 'utf8'))
+    const connRaw = JSON.parse(fs.readFileSync(path.join(home, 'connections.json'), 'utf8'))
+    expect(runnersRaw.runners.find((r: any) => r.id === 'r-persist')).not.toHaveProperty('create')
+    expect(connRaw.connections.find((c: any) => c.id === 'conn-persist')).not.toHaveProperty('create')
+  })
+
+  test('TC-D26: 409 🚫 không để lại tác dụng phụ nào — số runner và default giữ nguyên', () => {
+    upsertRunner({ id: 'x', connectionId: DEFAULT_CONNECTION_ID } as any)
+    expect(setDefaultRunner('x')).toEqual({ ok: true, defaultRunnerId: 'x' })
+    const before = listRunners()
+
+    expect(upsertRunner({ id: 'x', connectionId: DEFAULT_CONNECTION_ID, create: true } as any)).toMatchObject({
+      ok: false,
+      status: 409,
+    })
+
+    const after = listRunners()
+    expect(after.runners).toHaveLength(before.runners.length)
+    expect(after.defaultRunnerId).toBe('x')
+  })
+
+  test('TC-D26b: payload legacy mang create 🚫 không kịp tạo connection trước khi 409', () => {
+    // `ensureLegacyConnection` ghi đĩa, nên guard đặt sau nó sẽ để lại một
+    // connection mới rồi mới từ chối. Số connection là thứ quan sát được.
+    upsertRunner({ id: 'legacy-x', connectionId: DEFAULT_CONNECTION_ID } as any)
+    const before = listConnections().length
+
+    expect(
+      upsertRunner({
+        id: 'legacy-x',
+        provider: 'cursor-cli',
+        config: { cliPath: 'agent' },
+        create: true,
+      } as any),
+    ).toMatchObject({ ok: false, status: 409 })
+
+    expect(listConnections()).toHaveLength(before)
+  })
+})

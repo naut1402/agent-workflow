@@ -318,3 +318,31 @@ describe('composeStepBrief — Rule của project (D4, TC-09/TC-11/TC-12)', () =
     expect(fs.readFileSync(dest, 'utf8')).toContain('Rule do CLI ngoài ghi.')
   })
 })
+
+/*
+ * T6427b18c TC-44 — brief dạy nút con kênh trả kết quả.
+ *
+ * Nút điều phối chạy phiên riêng và chỉ đọc một dòng `STEP_SUMMARY` + danh sách
+ * artifact; nếu brief không nói ra điều đó thì nút con không có lý do gì để in
+ * dòng đó, và cha rơi về đuôi output ở MỌI lượt.
+ */
+describe('composeStepBrief — kênh con → cha (TC-44)', () => {
+  test('brief có mục "Khi xong" yêu cầu dòng STEP_SUMMARY và chỉ rõ chi tiết nằm ở artifact', async () => {
+    seedTask('T44', { 'request.md': '# r' })
+    const brief = await composeStepBrief({ root, taskId: 'T44', stepId: 'implementer', reason: 'advance' })
+
+    expect(brief).toContain('### Khi xong')
+    expect(brief).toContain('STEP_SUMMARY:')
+    expect(brief).toContain('artifact')
+    expect(brief).toMatch(/không nằm trong output/)
+  })
+
+  test('mọi reason đều mang mục này — kênh không phụ thuộc lý do dispatch', async () => {
+    seedTask('T45', { 'request.md': '# r' })
+    for (const reason of ['advance', 'gate_rejected', 'review_retry'] as const) {
+      const brief = await composeStepBrief({ root, taskId: 'T45', stepId: 'implementer', reason, detail: 'x' })
+      expect(brief).toContain('### Khi xong')
+      expect(brief).toContain('STEP_SUMMARY:')
+    }
+  })
+})

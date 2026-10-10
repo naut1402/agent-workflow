@@ -1,6 +1,6 @@
 /** Keys của step do canvas/UI quản lý — phần còn lại vào preserved */
 const CANVAS_STEP_KEYS = new Set([
-  'id', 'name', 'agent', 'produces', 'knowledge_inputs', 'hitl',
+  'id', 'name', 'agent', 'produces', 'knowledge_inputs', 'hitl', 'runner_id',
 ])
 
 /** Subfield hitl do StepConfigDialog quản lý — giữ lại phần còn lại (vd. retry) */
@@ -80,8 +80,13 @@ export function buildStepFromNode(
     knowledge_inputs: nodeData.knowledge_inputs || [],
     hitl: nodeData.hitl || { mode: 'none' },
   }
-  const merged = { ...(preserved || {}), ...fromNode }
+  const merged: Record<string, unknown> = { ...(preserved || {}), ...fromNode }
   merged.hitl = mergeHitl(preserved?.hitl, fromNode.hitl)
+  // Ghi có điều kiện: `runner_id` nằm trong CANVAS_STEP_KEYS nên không còn đường
+  // preserved, gỡ pin trên UI phải làm key biến mất khỏi YAML. Spread vô điều kiện
+  // sẽ làm mọi step trong pipeline.yaml mọc thêm `runner_id: ''`.
+  const pinned = typeof nodeData.runner_id === 'string' ? nodeData.runner_id.trim() : ''
+  if (pinned) merged.runner_id = pinned
   return merged
 }
 

@@ -687,3 +687,231 @@ describe('OpenAiCompatibleProvider — job log: system prompt + tool-call outcom
     expect(log).toMatch(/\[tool\] edit_file .* → FAIL:/)
   })
 })
+
+/* ═══ #379 · Tdf943817 — bridge tool MCP vào vòng tool-use (openai SDK) ═══════ */
+
+// `beforeEach` 🚫 có trong khối import đầu file — khai thêm ở ĐÂY thay vì sửa
+// dòng đó, để diff của khối này 🚫 chạm phần trên.
+import { beforeEach } from 'bun:test'
+import { mcpRegistry } from '../../../../../../src/features/mcp/business/McpRegistry.js'
+import { ToolBridgeMcpDelivery } from '../../../../../../src/features/runner/business/mcpDelivery/ToolBridgeMcpDelivery.js'
+import { RunnerCredentialResolver } from '../../../../../../src/features/runner/business/RunnerCredentialResolver.js'
+
+/** Bridge y hệt bản `registry.ts` lắp cho họ `ai-api` — provider dựng tay mặc định `NoMcpDelivery`. */
+const mcpToolBridge = new ToolBridgeMcpDelivery(new RunnerCredentialResolver())
+
+/**
+ * TC-P6-02 · TC-P6-05 · TC-P6-06 (vế openai) · TC-P6-10 · TC-P6-20.
+ *
+ * Khuôn tool của SDK này KHÁC Anthropic (`{ type:'function', function:{…} }`),
+ * nên mọi ca phải chạy riêng — assert ở suite Anthropic rồi suy sang đây đúng là
+ * thứ `test-spec.md` §2.3 cấm.
+ */
+describe('OpenAiCompatibleProvider — tool MCP (#379)', () => {
+  const MCP_CANARY = 'sk-test-LEAKCANARY-0123456789'
+  const FIXTURE = path.join(
+    import.meta.dir,
+    '../../../../features/mcp/business/fake-mcp-server.mjs',
+  )
+  const BASELINE = JSON.parse(
+    fs.readFileSync(path.join(import.meta.dir, 'aiApiTools.base-4c58b44.json'), 'utf8'),
+  ) as { baseSha: string; snapshots: Record<string, { tools: unknown; system: unknown }> }
+
+  let mcpWorkspace: string
+  let mcpHome: string
+  const prevBrave = process.env.BRAVE_SEARCH_API_KEY
+
+  beforeEach(() => {
+    mcpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-p6-openai-home-'))
+    mcpWorkspace = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-p6-openai-ws-'))
+    process.env.DEV_TEAM_DASHBOARD_HOME = mcpHome
+    delete process.env.BRAVE_SEARCH_API_KEY
+  })
+
+  afterEach(() => {
+    process.env.DEV_TEAM_DASHBOARD_HOME = home
+    if (prevBrave === undefined) delete process.env.BRAVE_SEARCH_API_KEY
+    else process.env.BRAVE_SEARCH_API_KEY = prevBrave
+    fs.rmSync(mcpHome, { recursive: true, force: true })
+    fs.rmSync(mcpWorkspace, { recursive: true, force: true })
+  })
+
+  function seedMcp(id: string, env: Record<string, string> = {}) {
+    mcpRegistry.upsert({
+      id,
+      label: id,
+      enabled: true,
+      transport: 'stdio',
+      command: process.execPath,
+      args: [FIXTURE, 'ok'],
+      env: { FAKE_MCP_SERVER_NAME: id, ...env },
+    })
+  }
+
+  /** Request đúng y hệt bản sinh baseline — 🚫 lệch một field nào. */
+  function baselineRequest(): ExecuteRequest {
+    return {
+      jobId: 'job-baseline',
+      resolvedAgent: { ref: 'agent', name: 'agent', description: '', systemPrompt: 'be helpful', skills: [] },
+      userPrompt: 'xin chào',
+      workspace: mcpWorkspace,
+    }
+  }
+
+  const finalTurn = () => jsonResponse(chatCompletion({ role: 'assistant', content: 'xong' }, 'stop', { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 }))
+
+  function systemOf(body: any): string[] {
+    return (body.messages ?? []).filter((m: any) => m.role === 'system').map((m: any) => m.content)
+  }
+
+  async function captureBody(runnerConfig: Record<string, unknown>, req = baselineRequest()) {
+    const bodies: any[] = []
+    globalThis.fetch = (async (_url: string, init?: RequestInit) => {
+      bodies.push(JSON.parse(String(init?.body ?? '{}')))
+      return finalTurn()
+    }) as unknown as typeof fetch
+    const provider = new OpenAiCompatibleProvider('openai-api', 'https://api.openai.test', mcpToolBridge)
+    const result = await provider.execute(req, { model: 'm', ...runnerConfig }, credential)
+    return { bodies, result }
+  }
+
+  // TC-P6-02 ⭐
+  test('TC-P6-02: 🚫 bật MCP, `orchestratorJob !== true` ⇒ `tools` + preamble BYTE-IDENTICAL base', async () => {
+    seedMcp('on1')
+    const { bodies, result } = await captureBody({})
+
+    expect(result.ok).toBe(true)
+    expect(BASELINE.baseSha).toBe('4c58b44')
+    expect(JSON.stringify(bodies[0].tools)).toBe(
+      JSON.stringify(BASELINE.snapshots['openai.noExtras'].tools),
+    )
+    expect(JSON.stringify(systemOf(bodies[0]))).toBe(
+      JSON.stringify(BASELINE.snapshots['openai.noExtras'].system),
+    )
+  }, 30_000)
+
+  // TC-P6-03 (vế openai)
+  test('TC-P6-03: có `extraTools` mà 🚫 MCP ⇒ vẫn byte-identical base', async () => {
+    const { bodies } = await captureBody({ extraTools: ['shell', 'git', 'search', 'web'] })
+
+    expect(JSON.stringify(bodies[0].tools)).toBe(
+      JSON.stringify(BASELINE.snapshots['openai.withExtras'].tools),
+    )
+    expect(JSON.stringify(systemOf(bodies[0]))).toBe(
+      JSON.stringify(BASELINE.snapshots['openai.withExtras'].system),
+    )
+  }, 30_000)
+
+  // TC-P6-05 ⭐ · TC-P6-06 (vế openai)
+  test('TC-P6-05 / TC-P6-06: tool MCP đúng khuôn `{type:function, function:{…}}` + preamble liệt kê', async () => {
+    seedMcp('fs-local', { FAKE_MCP_TOOLS: 'read_file,ping' })
+    const { bodies } = await captureBody({ mcpServers: ['fs-local'] })
+
+    const baseTools = BASELINE.snapshots['openai.noExtras'].tools as any[]
+    const tools = bodies[0].tools as any[]
+    expect(tools).toHaveLength(baseTools.length + 2)
+    expect(JSON.stringify(tools.slice(0, baseTools.length))).toBe(JSON.stringify(baseTools))
+
+    const added = tools.slice(baseTools.length)
+    expect(added.map((t) => t.function.name).sort()).toEqual([
+      'mcp__fs-local__ping',
+      'mcp__fs-local__read_file',
+    ])
+    for (const tool of added) {
+      expect(tool.type).toBe('function')
+      expect(Object.keys(tool).sort()).toEqual(['function', 'type'])
+      expect(Object.keys(tool.function).sort()).toEqual(['description', 'name', 'parameters'])
+      expect((tool.function.parameters as any).type).toBe('object')
+    }
+
+    const system = systemOf(bodies[0]).join('\n')
+    for (const tool of added) {
+      expect(system).toContain(`- ${tool.function.name}: `)
+      expect(system).toContain(tool.function.description)
+    }
+  }, 30_000)
+
+  // TC-P6-10 (vế openai)
+  test('TC-P6-10: tool MCP trùng tên built-in ⇒ built-in vẫn chạy built-in', async () => {
+    seedMcp('srv', { FAKE_MCP_TOOLS: 'read_file' })
+    fs.writeFileSync(path.join(mcpWorkspace, 'co-that.md'), 'noi dung that', 'utf8')
+
+    const bodies: any[] = []
+    let call = 0
+    globalThis.fetch = (async (_url: string, init?: RequestInit) => {
+      bodies.push(JSON.parse(String(init?.body ?? '{}')))
+      call++
+      if (call === 1) {
+        return jsonResponse(
+          chatCompletion(
+            {
+              role: 'assistant',
+              content: null,
+              tool_calls: [
+                { id: 'tc1', type: 'function', function: { name: 'read_file', arguments: JSON.stringify({ path: 'co-that.md' }) } },
+              ],
+            },
+            'tool_calls',
+          ),
+        )
+      }
+      return finalTurn()
+    }) as unknown as typeof fetch
+
+    const provider = new OpenAiCompatibleProvider('openai-api', 'https://api.openai.test', mcpToolBridge)
+    const result = await provider.execute(
+      baselineRequest(),
+      { model: 'm', mcpServers: ['srv'] },
+      credential,
+    )
+
+    expect(result.ok).toBe(true)
+    const names = (bodies[0].tools as any[]).map((t) => t.function.name)
+    expect(names).toContain('read_file')
+    expect(names).toContain('mcp__srv__read_file')
+
+    const toolMessages = (bodies[1].messages as any[]).filter((m: any) => m.role === 'tool')
+    expect(JSON.stringify(toolMessages)).toContain('noi dung that')
+  }, 30_000)
+
+  // TC-P6-20 (vế openai)
+  test('TC-P6-20: kết quả tool MCP chứa canary ⇒ 🚫 lọt vào ExecuteResult / log', async () => {
+    seedMcp('srv', { FAKE_MCP_TOOLS: 'echo', FAKE_MCP_TOOL_SECRET: MCP_CANARY })
+    const logPath = path.join(mcpHome, 'job.log')
+    fs.writeFileSync(logPath, '', 'utf8')
+
+    const bodies: any[] = []
+    let call = 0
+    globalThis.fetch = (async (_url: string, init?: RequestInit) => {
+      bodies.push(JSON.parse(String(init?.body ?? '{}')))
+      call++
+      if (call === 1) {
+        return jsonResponse(
+          chatCompletion(
+            {
+              role: 'assistant',
+              content: null,
+              tool_calls: [
+                { id: 'tc1', type: 'function', function: { name: 'mcp__srv__echo', arguments: JSON.stringify({ text: 'noi dung' }) } },
+              ],
+            },
+            'tool_calls',
+          ),
+        )
+      }
+      return finalTurn()
+    }) as unknown as typeof fetch
+
+    const provider = new OpenAiCompatibleProvider('openai-api', 'https://api.openai.test', mcpToolBridge)
+    const result = await provider.execute(
+      { ...baselineRequest(), metadata: { logPath } },
+      { model: 'm', mcpServers: ['srv'] },
+      credential,
+    )
+
+    expect(result.ok).toBe(true)
+    expect(JSON.stringify(result)).not.toContain(MCP_CANARY)
+    expect(fs.readFileSync(logPath, 'utf8')).not.toContain(MCP_CANARY)
+    expect(JSON.stringify(bodies[1])).not.toContain(MCP_CANARY)
+  }, 30_000)
+})

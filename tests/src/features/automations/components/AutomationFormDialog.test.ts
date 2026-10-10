@@ -52,7 +52,7 @@ function mountDialog(props: Record<string, unknown> = {}, locale: 'vi' | 'en' = 
       ...props,
     },
     attachTo: document.body,
-    global: { plugins: [createTestI18nPlugin(locale)] },
+    global: { plugins: [createTestI18nPlugin(locale)], stubs: { teleport: true } },
   })
   mounted.push(wrapper)
   return wrapper

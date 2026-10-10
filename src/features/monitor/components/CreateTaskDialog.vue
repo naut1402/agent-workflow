@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import CDialog from '../../../frontend/ui/CDialog.vue'
 import JobLogStream from '../../../frontend/ui/JobLogStream.vue'
 import KnowledgePickerDialog from '../../../frontend/ui/KnowledgePickerDialog.vue'
 import WizardStepper from '../../../frontend/ui/WizardStepper.vue'
@@ -139,326 +140,307 @@ function handleDoneAfterRun() {
   emit('close')
 }
 
-function onKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape' && !showKnowledgePicker.value) emit('close')
-}
-
 onMounted(() => {
-  window.addEventListener('keydown', onKeydown)
   void onOpen()
 })
 
 onUnmounted(() => {
-  window.removeEventListener('keydown', onKeydown)
   reset()
 })
 </script>
 
 <template>
-  <Teleport to="body">
-    <div class="modal-backdrop create-task-backdrop" @click.self="emit('close')">
-      <div
-        class="modal create-task-dialog"
-        role="dialog"
-        aria-modal="true"
-        :aria-label="t('monitor.createTask.title')"
-      >
-        <div class="modal-head">
-          <!-- Step name lives in the stepper below; keep the head to title + counter. -->
-          <span>{{ t('monitor.createTask.title') }}</span>
-          <span class="create-task-step">{{ step }}/{{ CREATE_TASK_STEPS }}</span>
+  <CDialog
+    class="create-task-dialog"
+    :title="t('monitor.createTask.title')"
+    :loading="loading"
+    :close-on-escape="!showKnowledgePicker"
+    width="min(620px, 94vw)"
+    max-height="min(720px, 92vh)"
+    @close="emit('close')"
+  >
+    <template #head>
+      <!-- Step name lives in the stepper below; keep the head to title + counter. -->
+      <span class="create-task-step">{{ step }}/{{ CREATE_TASK_STEPS }}</span>
+    </template>
+
+    <template #subhead>
+      <WizardStepper
+        v-if="!showingLog"
+        class="create-task-stepper"
+        :steps="steps"
+        :current="step"
+        :max-reachable="maxReachableStep"
+        :disabled="loading"
+        :aria-label="t('monitor.createTask.stepperLabel')"
+        @go="handleStepJump"
+      />
+    </template>
+
+    <div class="create-task-body">
+      <div v-if="error" class="err-banner">⚠ {{ error }}</div>
+
+      <!-- Step 1: source -->
+      <template v-if="step === 1">
+        <label class="cfg-label">
+          {{ t('monitor.createTask.taskId') }}
+          <input
+            v-model="form.taskId"
+            class="cfg-input"
+            :placeholder="t('monitor.createTask.taskIdPlaceholder')"
+            autocomplete="off"
+          />
+        </label>
+        <p v-if="taskIdError" class="field-err">
+          {{ t(`monitor.createTask.errors.${taskIdError}`) }}
+        </p>
+
+        <div class="create-task-tabs" role="tablist">
           <button
             type="button"
-            class="modal-close"
-            :aria-label="t('monitor.createTask.close')"
-            @click="emit('close')"
+            class="create-task-tab"
+            :class="{ active: form.source === 'prompt' }"
+            role="tab"
+            @click="form.source = 'prompt'"
           >
-            ✕
+            {{ t('monitor.createTask.tabPrompt') }}
+          </button>
+          <button
+            type="button"
+            class="create-task-tab"
+            :class="{ active: form.source === 'issue' }"
+            role="tab"
+            @click="form.source = 'issue'"
+          >
+            {{ t('monitor.createTask.tabIssue') }}
           </button>
         </div>
 
-        <WizardStepper
-          v-if="!showingLog"
-          class="create-task-stepper"
-          :steps="steps"
-          :current="step"
-          :max-reachable="maxReachableStep"
-          :disabled="loading"
-          :aria-label="t('monitor.createTask.stepperLabel')"
-          @go="handleStepJump"
-        />
+        <template v-if="form.source === 'prompt'">
+          <label class="cfg-label">
+            {{ t('monitor.createTask.prompt') }}
+            <textarea
+              v-model="form.prompt"
+              class="cfg-input create-task-prompt"
+              rows="8"
+              :placeholder="t('monitor.createTask.promptPlaceholder')"
+            />
+          </label>
+        </template>
 
-        <div class="modal-body create-task-body">
-          <div v-if="error" class="err-banner">⚠ {{ error }}</div>
+        <template v-else>
+          <label class="cfg-label">
+            {{ t('monitor.createTask.issueRepo') }}
+            <select v-model="selectedRepo" class="cfg-input">
+              <option v-for="r in repoOptions" :key="r" :value="r">{{ r }}</option>
+              <option :value="MANUAL_REPO_OPTION">{{ t('monitor.createTask.issueRepoOther') }}</option>
+            </select>
+          </label>
+          <input
+            v-if="selectedRepo === MANUAL_REPO_OPTION"
+            v-model="manualRepo"
+            class="cfg-input"
+            :placeholder="t('monitor.createTask.issueRepoManualPlaceholder')"
+          />
+          <button
+            type="button"
+            class="btn-ghost btn-sm"
+            :disabled="issuesLoading || !selectedRepo || (selectedRepo === MANUAL_REPO_OPTION && !manualRepo.trim())"
+            @click="loadOpenIssues()"
+          >
+            {{ issuesLoading ? t('monitor.createTask.issueListLoading') : t('monitor.createTask.issueListLoad') }}
+          </button>
+          <p v-if="issuesError" class="field-err">{{ issuesError }}</p>
+          <ul v-if="openIssues.length" class="create-task-issue-list">
+            <li
+              v-for="it in openIssues"
+              :key="it.number"
+              class="create-task-issue-item"
+              @click="pickIssue(it)"
+            >
+              <span class="create-task-issue-number">#{{ it.number }}</span>
+              <span class="create-task-issue-title">{{ it.title }}</span>
+            </li>
+          </ul>
+          <p v-else-if="!issuesLoading && !issuesError" class="muted">
+            {{ t('monitor.createTask.issueListEmpty') }}
+          </p>
 
-          <!-- Step 1: source -->
-          <template v-if="step === 1">
-            <label class="cfg-label">
-              {{ t('monitor.createTask.taskId') }}
-              <input
-                v-model="form.taskId"
-                class="cfg-input"
-                :placeholder="t('monitor.createTask.taskIdPlaceholder')"
-                autocomplete="off"
-              />
-            </label>
-            <p v-if="taskIdError" class="field-err">
-              {{ t(`monitor.createTask.errors.${taskIdError}`) }}
-            </p>
+          <p class="modal-hint">{{ t('monitor.createTask.issueUrlOr') }}</p>
+          <label class="cfg-label">
+            {{ t('monitor.createTask.issueUrl') }}
+            <input
+              v-model="form.issueUrl"
+              class="cfg-input"
+              type="url"
+              :placeholder="t('monitor.createTask.issueUrlPlaceholder')"
+            />
+          </label>
+          <button
+            type="button"
+            class="btn-ghost btn-sm"
+            :disabled="loading || !form.issueUrl.trim()"
+            @click="fetchIssue()"
+          >
+            {{ loading ? t('monitor.createTask.loading') : t('monitor.createTask.fetchIssue') }}
+          </button>
+          <p v-if="issuePreview" class="muted">
+            {{ issuePreview.title }}
+          </p>
+          <label v-if="issueLoaded" class="cfg-label">
+            {{ t('monitor.createTask.prompt') }}
+            <textarea v-model="form.prompt" class="cfg-input create-task-prompt" rows="8" />
+          </label>
+        </template>
+      </template>
 
-            <div class="create-task-tabs" role="tablist">
-              <button
-                type="button"
-                class="create-task-tab"
-                :class="{ active: form.source === 'prompt' }"
-                role="tab"
-                @click="form.source = 'prompt'"
-              >
-                {{ t('monitor.createTask.tabPrompt') }}
-              </button>
-              <button
-                type="button"
-                class="create-task-tab"
-                :class="{ active: form.source === 'issue' }"
-                role="tab"
-                @click="form.source = 'issue'"
-              >
-                {{ t('monitor.createTask.tabIssue') }}
-              </button>
-            </div>
-
-            <template v-if="form.source === 'prompt'">
-              <label class="cfg-label">
-                {{ t('monitor.createTask.prompt') }}
-                <textarea
-                  v-model="form.prompt"
-                  class="cfg-input create-task-prompt"
-                  rows="8"
-                  :placeholder="t('monitor.createTask.promptPlaceholder')"
-                />
-              </label>
-            </template>
-
-            <template v-else>
-              <label class="cfg-label">
-                {{ t('monitor.createTask.issueRepo') }}
-                <select v-model="selectedRepo" class="cfg-input">
-                  <option v-for="r in repoOptions" :key="r" :value="r">{{ r }}</option>
-                  <option :value="MANUAL_REPO_OPTION">{{ t('monitor.createTask.issueRepoOther') }}</option>
-                </select>
-              </label>
-              <input
-                v-if="selectedRepo === MANUAL_REPO_OPTION"
-                v-model="manualRepo"
-                class="cfg-input"
-                :placeholder="t('monitor.createTask.issueRepoManualPlaceholder')"
-              />
-              <button
-                type="button"
-                class="btn-ghost btn-sm"
-                :disabled="issuesLoading || !selectedRepo || (selectedRepo === MANUAL_REPO_OPTION && !manualRepo.trim())"
-                @click="loadOpenIssues()"
-              >
-                {{ issuesLoading ? t('monitor.createTask.issueListLoading') : t('monitor.createTask.issueListLoad') }}
-              </button>
-              <p v-if="issuesError" class="field-err">{{ issuesError }}</p>
-              <ul v-if="openIssues.length" class="create-task-issue-list">
-                <li
-                  v-for="it in openIssues"
-                  :key="it.number"
-                  class="create-task-issue-item"
-                  @click="pickIssue(it)"
-                >
-                  <span class="create-task-issue-number">#{{ it.number }}</span>
-                  <span class="create-task-issue-title">{{ it.title }}</span>
-                </li>
-              </ul>
-              <p v-else-if="!issuesLoading && !issuesError" class="muted">
-                {{ t('monitor.createTask.issueListEmpty') }}
-              </p>
-
-              <p class="modal-hint">{{ t('monitor.createTask.issueUrlOr') }}</p>
-              <label class="cfg-label">
-                {{ t('monitor.createTask.issueUrl') }}
-                <input
-                  v-model="form.issueUrl"
-                  class="cfg-input"
-                  type="url"
-                  :placeholder="t('monitor.createTask.issueUrlPlaceholder')"
-                />
-              </label>
-              <button
-                type="button"
-                class="btn-ghost btn-sm"
-                :disabled="loading || !form.issueUrl.trim()"
-                @click="fetchIssue()"
-              >
-                {{ loading ? t('monitor.createTask.loading') : t('monitor.createTask.fetchIssue') }}
-              </button>
-              <p v-if="issuePreview" class="muted">
-                {{ issuePreview.title }}
-              </p>
-              <label v-if="issueLoaded" class="cfg-label">
-                {{ t('monitor.createTask.prompt') }}
-                <textarea v-model="form.prompt" class="cfg-input create-task-prompt" rows="8" />
-              </label>
-            </template>
-          </template>
-
-          <!-- Step 2: pipeline -->
-          <template v-else-if="step === 2">
-            <p class="modal-hint">{{ t('monitor.createTask.pipelineHint') }}</p>
-            <label class="cfg-label">
-              {{ t('monitor.createTask.profile') }}
-              <select v-model="form.profileName" class="cfg-input">
-                <option value="">{{ t('monitor.createTask.profileDefault') }}</option>
-                <option v-for="p in profiles" :key="p.name" :value="p.name">
-                  {{ p.name }}
-                </option>
-              </select>
-            </label>
-            <p v-if="firstStepLabel" class="muted">
-              {{ t('monitor.createTask.firstStep', { step: firstStepLabel }) }}
-            </p>
-            <div class="create-task-flags">
-              <label class="checkbox-row">
-                <input v-model="form.autoReview" type="checkbox" />
-                {{ t('monitor.createTask.autoReview') }}
-              </label>
-              <label class="checkbox-row">
-                <input v-model="form.exportJson" type="checkbox" />
-                {{ t('monitor.createTask.exportJson') }}
-              </label>
-            </div>
-          </template>
-
-          <!-- Step 3: knowledge -->
-          <template v-else-if="step === 3">
-            <p class="modal-hint">{{ t('monitor.createTask.knowledgeHint') }}</p>
-            <ul v-if="form.knowledgeInputs.length" class="create-task-knowledge-chips">
-              <li v-for="id in form.knowledgeInputs" :key="id">
-                <code>{{ id }}</code>
-                <button
-                  type="button"
-                  class="icon-btn"
-                  :title="t('monitor.createTask.removeKnowledge')"
-                  :aria-label="t('monitor.createTask.removeKnowledge')"
-                  @click="toggleKnowledge(id)"
-                >
-                  ✕
-                </button>
-              </li>
-            </ul>
-            <p v-else class="muted">{{ t('monitor.createTask.knowledgeNone') }}</p>
-            <button type="button" class="btn-ghost btn-sm" @click="showKnowledgePicker = true">
-              {{ t('monitor.createTask.openKnowledgePicker') }}
-            </button>
-          </template>
-
-          <!-- Step 4: preview -->
-          <template v-else>
-            <template v-if="!showingLog">
-              <dl class="create-task-preview">
-                <dt>{{ t('monitor.createTask.previewTaskId') }}</dt>
-                <dd><code>{{ previewSummary.taskId }}</code></dd>
-                <dt>{{ t('monitor.createTask.previewSource') }}</dt>
-                <dd>{{ previewSummary.source }}</dd>
-                <dt v-if="previewSummary.profileName">{{ t('monitor.createTask.profile') }}</dt>
-                <dd v-if="previewSummary.profileName">{{ previewSummary.profileName }}</dd>
-                <dt>{{ t('monitor.createTask.previewKnowledge') }}</dt>
-                <dd>
-                  {{
-                    previewSummary.knowledgeCount
-                      ? previewSummary.knowledgeInputs.join(', ')
-                      : t('monitor.createTask.knowledgeNone')
-                  }}
-                </dd>
-                <dt>{{ t('monitor.createTask.prompt') }}</dt>
-                <dd><pre class="create-task-preview-prompt">{{ form.prompt }}</pre></dd>
-              </dl>
-
-              <label class="checkbox-row">
-                <input v-model="form.run" type="checkbox" />
-                {{ t('monitor.createTask.runNow') }}
-              </label>
-              <label v-if="form.run" class="cfg-label">
-                {{ t('monitor.createTask.runner') }}
-                <select v-model="form.runnerId" class="cfg-input" required>
-                  <option value="" disabled>
-                    {{ t('monitor.createTask.runnerPlaceholder') }}
-                  </option>
-                  <option v-for="r in runners" :key="r.id" :value="r.id">{{ r.name }}</option>
-                </select>
-              </label>
-              <p v-if="form.run && !runners.length" class="field-err">
-                {{ t('monitor.createTask.noRunner') }}
-              </p>
-            </template>
-
-            <JobLogStream v-else :job-id="submittedJobId" :active="true" />
-          </template>
+      <!-- Step 2: pipeline -->
+      <template v-else-if="step === 2">
+        <p class="modal-hint">{{ t('monitor.createTask.pipelineHint') }}</p>
+        <label class="cfg-label">
+          {{ t('monitor.createTask.profile') }}
+          <select v-model="form.profileName" class="cfg-input">
+            <option value="">{{ t('monitor.createTask.profileDefault') }}</option>
+            <option v-for="p in profiles" :key="p.name" :value="p.name">
+              {{ p.name }}
+            </option>
+          </select>
+        </label>
+        <p v-if="firstStepLabel" class="muted">
+          {{ t('monitor.createTask.firstStep', { step: firstStepLabel }) }}
+        </p>
+        <div class="create-task-flags">
+          <label class="checkbox-row">
+            <input v-model="form.autoReview" type="checkbox" />
+            {{ t('monitor.createTask.autoReview') }}
+          </label>
+          <label class="checkbox-row">
+            <input v-model="form.exportJson" type="checkbox" />
+            {{ t('monitor.createTask.exportJson') }}
+          </label>
         </div>
+      </template>
 
-        <div class="modal-actions create-task-foot">
-          <template v-if="showingLog">
-            <button type="button" class="btn-primary" @click="handleDoneAfterRun">
-              {{ t('monitor.createTask.done') }}
-            </button>
-          </template>
-          <template v-else>
+      <!-- Step 3: knowledge -->
+      <template v-else-if="step === 3">
+        <p class="modal-hint">{{ t('monitor.createTask.knowledgeHint') }}</p>
+        <ul v-if="form.knowledgeInputs.length" class="create-task-knowledge-chips">
+          <li v-for="id in form.knowledgeInputs" :key="id">
+            <code>{{ id }}</code>
             <button
-              v-if="step > 1"
               type="button"
-              class="btn-ghost"
-              :disabled="loading"
-              @click="back()"
+              class="icon-btn"
+              :title="t('monitor.createTask.removeKnowledge')"
+              :aria-label="t('monitor.createTask.removeKnowledge')"
+              @click="toggleKnowledge(id)"
             >
-              {{ t('monitor.createTask.back') }}
+              ✕
             </button>
-            <span class="spacer" />
-            <button type="button" class="btn-ghost" @click="emit('close')">
-              {{ t('monitor.createTask.cancel') }}
-            </button>
-            <button
-              v-if="step < CREATE_TASK_STEPS"
-              type="button"
-              class="btn-primary"
-              :disabled="!canNext || loading"
-              @click="handleNext"
-            >
-              {{ t('monitor.createTask.next') }}
-            </button>
-            <button
-              v-else
-              type="button"
-              class="btn-primary"
-              :disabled="loading || (form.run && !runners.length)"
-              @click="handleSubmit"
-            >
-              {{ loading ? t('monitor.createTask.creating') : t('monitor.createTask.create') }}
-            </button>
-          </template>
-        </div>
-      </div>
+          </li>
+        </ul>
+        <p v-else class="muted">{{ t('monitor.createTask.knowledgeNone') }}</p>
+        <button type="button" class="btn-ghost btn-sm" @click="showKnowledgePicker = true">
+          {{ t('monitor.createTask.openKnowledgePicker') }}
+        </button>
+      </template>
+
+      <!-- Step 4: preview -->
+      <template v-else>
+        <template v-if="!showingLog">
+          <dl class="create-task-preview">
+            <dt>{{ t('monitor.createTask.previewTaskId') }}</dt>
+            <dd><code>{{ previewSummary.taskId }}</code></dd>
+            <dt>{{ t('monitor.createTask.previewSource') }}</dt>
+            <dd>{{ previewSummary.source }}</dd>
+            <dt v-if="previewSummary.profileName">{{ t('monitor.createTask.profile') }}</dt>
+            <dd v-if="previewSummary.profileName">{{ previewSummary.profileName }}</dd>
+            <dt>{{ t('monitor.createTask.previewKnowledge') }}</dt>
+            <dd>
+              {{
+                previewSummary.knowledgeCount
+                  ? previewSummary.knowledgeInputs.join(', ')
+                  : t('monitor.createTask.knowledgeNone')
+              }}
+            </dd>
+            <dt>{{ t('monitor.createTask.prompt') }}</dt>
+            <dd><pre class="create-task-preview-prompt">{{ form.prompt }}</pre></dd>
+          </dl>
+
+          <label class="checkbox-row">
+            <input v-model="form.run" type="checkbox" />
+            {{ t('monitor.createTask.runNow') }}
+          </label>
+          <label v-if="form.run" class="cfg-label">
+            {{ t('monitor.createTask.runner') }}
+            <select v-model="form.runnerId" class="cfg-input" required>
+              <option value="" disabled>
+                {{ t('monitor.createTask.runnerPlaceholder') }}
+              </option>
+              <option v-for="r in runners" :key="r.id" :value="r.id">{{ r.name }}</option>
+            </select>
+          </label>
+          <p v-if="form.run && !runners.length" class="field-err">
+            {{ t('monitor.createTask.noRunner') }}
+          </p>
+        </template>
+
+        <JobLogStream v-else :job-id="submittedJobId" :active="true" />
+      </template>
     </div>
 
-    <KnowledgePickerDialog
-      v-if="showKnowledgePicker"
-      v-model="form.knowledgeInputs"
-      :project-id="projectId"
-      @close="showKnowledgePicker = false"
-    />
-  </Teleport>
+    <template #footer>
+      <div class="modal-actions create-task-foot">
+        <template v-if="showingLog">
+          <button type="button" class="btn-primary" @click="handleDoneAfterRun">
+            {{ t('monitor.createTask.done') }}
+          </button>
+        </template>
+        <template v-else>
+          <button
+            v-if="step > 1"
+            type="button"
+            class="btn-ghost"
+            :disabled="loading"
+            @click="back()"
+          >
+            {{ t('monitor.createTask.back') }}
+          </button>
+          <span class="spacer" />
+          <button type="button" class="btn-ghost" @click="emit('close')">
+            {{ t('monitor.createTask.cancel') }}
+          </button>
+          <button
+            v-if="step < CREATE_TASK_STEPS"
+            type="button"
+            class="btn-primary"
+            :disabled="!canNext || loading"
+            @click="handleNext"
+          >
+            {{ t('monitor.createTask.next') }}
+          </button>
+          <button
+            v-else
+            type="button"
+            class="btn-primary"
+            :disabled="loading || (form.run && !runners.length)"
+            @click="handleSubmit"
+          >
+            {{ loading ? t('monitor.createTask.creating') : t('monitor.createTask.create') }}
+          </button>
+        </template>
+      </div>
+    </template>
+  </CDialog>
+
+  <KnowledgePickerDialog
+    v-if="showKnowledgePicker"
+    v-model="form.knowledgeInputs"
+    :project-id="projectId"
+    @close="showKnowledgePicker = false"
+  />
 </template>
 
 <style scoped lang="scss">
-.create-task-dialog {
-  width: min(620px, 94vw);
-  max-height: min(720px, 92vh);
-  display: flex;
-  flex-direction: column;
-}
-
 .create-task-step {
   margin-left: auto;
   margin-right: 8px;
@@ -477,8 +459,6 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  overflow-y: auto;
-  min-height: 0;
 }
 
 .create-task-tabs {

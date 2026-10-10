@@ -249,3 +249,38 @@ describe('TC-09 — cổng chặn biên bắt được vi phạm mới (negative
     for (const fx of FIXTURES) expect(fs.existsSync(path.join(ROOT, fx.file))).toBe(false)
   })
 })
+
+/**
+ * Tcebe274e-P3 (#482) — ranh giới feature `mcp` sau refactor #468.
+ *
+ * Trước P3: `mcp/controller.ts` import `runner` (credential) trong khi `runner`
+ * import `mcp` ⇒ vòng BE; guard endpoint của `mcp` lấy `isPrivateHostname` từ
+ * `agent-editor` ⇒ cạnh lệch ranh giới. Assert trên đồ thị TRANSITIVE: một cạnh
+ * gián tiếp (`mcp` → lib → feature khác) cũng là tái phạm.
+ */
+describe('Tcebe274e-P3 — `mcp` không phụ thuộc `runner` / `agent-editor`', () => {
+  const MCP = FILES.filter((f) => under(f, path.join('features', 'mcp')))
+  const reaches = (feature: string) => (n: string) => under(n, path.join('features', feature))
+
+  test('có module mcp để kiểm (chống xanh giả)', () => {
+    expect(MCP.some((f) => f.endsWith(path.join('mcp', 'controller.ts')))).toBe(true)
+    expect(MCP.some((f) => f.endsWith(path.join('business', 'SelfMcpServer.ts')))).toBe(true)
+  })
+
+  for (const feature of ['runner', 'agent-editor']) {
+    test(`không đường import nào từ src/features/mcp tới src/features/${feature}`, () => {
+      const chain = pathTo(MCP, reaches(feature))
+      expect(chain === null ? 'sạch' : `đường bẩn: ${chain.join(' → ')}`).toBe('sạch')
+    })
+  }
+
+  test('isPrivateHostname nằm ở src/backend/lib/netUtils.ts, 🚫 còn định nghĩa trong feature nào', () => {
+    const defs = FILES.filter((f) => /export function isPrivateHostname\b/.test(fs.readFileSync(f, 'utf8')))
+    expect(defs.map((f) => path.relative(ROOT, f).split(path.sep).join('/'))).toEqual(['src/backend/lib/netUtils.ts'])
+  })
+
+  test('chiều ngược vẫn có: runner đăng ký adapter credential qua barrel mcp (chống xanh giả của cổng)', () => {
+    const registry = FILES.find((f) => f.endsWith(path.join('runner', 'business', 'registry.ts')))!
+    expect((GRAPH.get(registry) ?? []).some((t) => t.endsWith(path.join('features', 'mcp', 'business', 'index.ts')))).toBe(true)
+  })
+})

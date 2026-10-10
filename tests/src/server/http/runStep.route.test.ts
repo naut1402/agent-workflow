@@ -18,7 +18,7 @@ import { on } from '../../../../src/backend/events/index.js'
 // job-queue's chain-on-success hook (jobQueue.ts advancePipelineStepChain)
 // runs synchronously enough for `settle()` polling to observe it.
 
-const PROVIDER_ID = 'stub-run-step-route'
+const PROVIDER_ID = 'stub-run-step-route-api'
 
 let resolveGate: (() => void) | null = null
 let gated = false
@@ -121,6 +121,8 @@ afterAll(() => {
 })
 afterEach(() => {
   gated = false
+  // Nhả job còn chờ gate — bỏ resolver mà không gọi là để job đó treo mãi, giữ slot của runner.
+  resolveGate?.()
   resolveGate = null
 })
 
@@ -854,7 +856,16 @@ describe('runTaskStep — lọc job theo data root', () => {
     seedRoot(rootB)
   })
 
-  afterEach(() => {
+  afterEach(async () => {
+    // Step gate-less tự chuỗi sang step kế: job của ca trước có thể còn giữ
+    // slot duy nhất của runner (maxConcurrency 1) khi ca sau bắt đầu.
+    const ours = (j: JobRecord) => [rootA, rootB].some((r) => j.workspace?.startsWith(r))
+    let idle = 0
+    for (let i = 0; i < 600 && idle < 10; i++) {
+      const busy = listJobs().some((j) => ours(j) && (j.status === 'queued' || j.status === 'running'))
+      idle = busy ? 0 : idle + 1
+      await sleep(5)
+    }
     fs.rmSync(rootA, { recursive: true, force: true })
     fs.rmSync(rootB, { recursive: true, force: true })
   })

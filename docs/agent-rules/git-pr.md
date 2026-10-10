@@ -373,9 +373,26 @@ Test code sống ở dòng branch riêng (§4.3), nên nợ test có bề mặt 
 - **Loại nợ `test` trong khung §7.3 vẫn giữ** cho trường hợp còn lại: task cố ý **miễn trừ** test (chỉ đổi tài liệu, chỉ đổi tên biến nội bộ) — ghi lý do miễn trừ để người duyệt thấy, thay vì để cổng đỏ vô cớ.
 - **Miễn trừ test khai ở đâu** — [`tests/exemptions.json`](../../tests/exemptions.json) (dòng test), đọc bởi `.github/scripts/test-coverage-status.ts`. Mỗi bản ghi bắt buộc đủ `taskId` + `version` + `reason` + `approved_by`; thiếu `reason`/`approved_by`, dùng wildcard, hay trùng entry đều là **ĐỎ**. 🚫 Không đi qua `docs/todo/` (trộn lại đúng hai loại nợ mà mục này vừa cố ý tách) và 🚫 không miễn cấp version. Cách khai: [`testing.md`](testing.md) §3.1.
 
+#### 7.2.2 Root `README.md` — 🚫 cấm agent sửa trực tiếp
+
+> [!NOTE]
+> <span style="color:#4493f8">Mục này là **nguồn chân lý**, nhưng phạm vi áp dụng là **mọi bước pipeline**, không riêng bước PR. Vì mỗi bước chỉ được nạp rule theo `rule_category` của nó, bản trỏ link đặt thêm ở [`coding-guideline.md`](coding-guideline.md), [`doc-writing.md`](doc-writing.md), [`testing.md`](testing.md) và [`AGENTS.md`](../../AGENTS.md) §3–§4. Sửa nội dung thì sửa ở đây, các file kia chỉ trỏ link.</span>
+
+Root [`README.md`](../../README.md) là trang giới thiệu dự án cho người ngoài, do **người** giữ giọng văn và phạm vi. Agent 🚫 **tuyệt đối không** sửa, thêm, xoá dòng nào trong file này — kể cả sửa link gãy, sửa số liệu lệch code, hay chép thêm tài liệu tham chiếu.
+
+| Việc | Làm |
+|------|-----|
+| Thấy `README.md` cần đổi | Ghi **đề xuất** vào file nợ `docs/todo/<issue>/<task-id>.md`, **Loại nợ:** `readme` (khung §7.3) |
+| Nội dung đề xuất | Section bị ảnh hưởng · nội dung hiện tại → nội dung đề xuất · lý do (code / tài liệu nào đã đổi) |
+| Ai sửa `README.md` | **Người duyệt** — đọc đề xuất, tự sửa (hoặc bác bỏ), rồi xoá file nợ |
+| Gate | Như mọi nợ docs: PR `dev/x.y.z/main` → `main` chặn khi `docs/todo/` còn — đề xuất chưa duyệt thì chưa promote |
+
+- **Tài liệu chi tiết đặt ở `docs/`**, root `README.md` chỉ trỏ link sang. Cần mô tả hệ thống thì viết vào `docs/<chủ đề>/` — đó là chỗ agent được sửa.
+- **Review** — thấy `README.md` trong diff PR mà không phải commit của người duyệt → yêu cầu bỏ ra và chuyển thành đề xuất trong `docs/todo/`.
+
 ### 7.3 Nội dung file nợ
 
-Tối thiểu phải có: **Loại nợ** (`docs-convention` | `test` | `other`), **Vì sao hoãn**, **Việc cần làm khi đối ứng** (checklist), **Liên kết** PR/branch liên quan.
+Tối thiểu phải có: **Loại nợ** (`docs-convention` | `test` | `readme` | `other`), **Vì sao hoãn**, **Việc cần làm khi đối ứng** (checklist), **Liên kết** PR/branch liên quan.
 
 **Không nhét diff dài hay secret vào file nợ.**
 
@@ -385,7 +402,7 @@ Khung chuẩn:
 # Todo — <task-id>
 
 - **Issue / epic:** <n hoặc slug>
-- **Loại nợ:** docs-convention | test | other
+- **Loại nợ:** docs-convention | test | readme | other
 - **Branch / PR tạo nợ:** …
 - **Ngày tạo:** YYYY-MM-DD
 

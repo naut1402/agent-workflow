@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
-import { ref, computed } from 'vue'
+import { computed, inject, ref, type ComputedRef } from 'vue'
 import { Handle, Position } from '@vue-flow/core'
 
 const { t } = useI18nHelpers()
@@ -30,6 +30,21 @@ const previewLabels = computed<Record<string, string>>(() => ({
 const hasGate = computed(() => {
   const mode = props.data?.hitl?.mode
   return Boolean(mode) && mode !== 'none'
+})
+
+/**
+ * Nhãn model của pin — Vue Flow không truyền prop tuỳ ý xuống node, nên map nhãn
+ * đến từ `provide` của PipelineEditor. Không tra được thì hiện thẳng runner id.
+ */
+const modelLabels = inject<ComputedRef<Map<string, string>>>(
+  'pipelineRunnerModelLabels',
+  computed(() => new Map()),
+)
+
+const modelBadge = computed(() => {
+  const id = props.data?.runner_id
+  if (!id) return ''
+  return modelLabels.value.get(id) || String(id)
 })
 
 function startEdit() {
@@ -90,6 +105,9 @@ function commitLabel() {
     </div>
 
     <div v-if="data.agent" class="node-editor-agent">{{ data.agent }}</div>
+
+    <!-- Model pin: chỉ nhìn canvas cũng biết step nào không chạy model mặc định. -->
+    <div v-if="modelBadge" class="node-editor-model" :title="modelBadge">⚙ {{ modelBadge }}</div>
 
 
     <Handle type="source" :position="Position.Right" />
@@ -196,4 +214,15 @@ function commitLabel() {
   white-space: nowrap;
 }
 .node-editor-agent { font-size: 10px; color: var(--accent); margin-top: 3px; }
+
+/* Màu khác nhãn agent để hai dòng không lẫn nhau. Tên model dài hơn bề ngang node
+   (max-width 200px) nên cắt bằng ellipsis, giá trị đầy đủ nằm ở `title`. */
+.node-editor-model {
+  font-size: 10px;
+  color: var(--muted);
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 </style>

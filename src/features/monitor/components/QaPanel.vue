@@ -10,6 +10,8 @@ import {
 import { parseQaBlocks, applyAnswer, type QaBlock } from '../composables/useQaQuestions'
 import SectionSaveIndicator from './SectionSaveIndicator.vue'
 import MarkdownTextEditor from '../../../frontend/ui/MarkdownTextEditor.vue'
+import { useApiAction } from '../../../frontend/composables/useApiAction'
+import CLoadingOverlay from '../../../frontend/ui/CLoadingOverlay.vue'
 
 const { t } = useI18nHelpers()
 
@@ -30,7 +32,7 @@ const viewRoot = ref<HTMLElement | null>(null)
 const OTHER_VALUE = '__other__'
 /** Per quiz-block choice — keyed by `QaBlock.index`. */
 const selections = reactive<Record<number, { choice: string | null; other: string }>>({})
-const submitting = ref(false)
+const { pending: submitting, run: runSubmit } = useApiAction()
 const submitError = ref('')
 
 const blocks = computed<QaBlock[]>(() => parseQaBlocks(content.value))
@@ -72,50 +74,49 @@ const canSubmit = computed(
 
 async function onSubmit() {
   if (!props.taskId || !canSubmit.value) return
-  submitting.value = true
-  submitError.value = ''
-  try {
-    let next = content.value
-    const answered: string[] = []
-    for (const b of blocks.value) {
-      if (!b.choices.length) continue
-      const sel = selections[b.index]
-      const answerText =
-        sel.choice === OTHER_VALUE
-          ? sel.other.trim()
-          : (b.choices.find((c) => c.label === sel.choice)?.text ?? '')
-      next = applyAnswer(next, b.index, answerText)
-      answered.push(`${b.questionId ?? `#${b.index}`}: ${answerText}`)
-    }
-    const saved = await saveArtifact(
-      props.taskId,
-      'qa.md',
-      next,
-      props.projectId ?? undefined,
-      loadedMtime.value ?? undefined,
-    )
-    content.value = saved.content
-    loadedMtime.value = saved.mtime
+  await runSubmit(async () => {
+    submitError.value = ''
+    try {
+      let next = content.value
+      const answered: string[] = []
+      for (const b of blocks.value) {
+        if (!b.choices.length) continue
+        const sel = selections[b.index]
+        const answerText =
+          sel.choice === OTHER_VALUE
+            ? sel.other.trim()
+            : (b.choices.find((c) => c.label === sel.choice)?.text ?? '')
+        next = applyAnswer(next, b.index, answerText)
+        answered.push(`${b.questionId ?? `#${b.index}`}: ${answerText}`)
+      }
+      const saved = await saveArtifact(
+        props.taskId,
+        'qa.md',
+        next,
+        props.projectId ?? undefined,
+        loadedMtime.value ?? undefined,
+      )
+      content.value = saved.content
+      loadedMtime.value = saved.mtime
 
-    const feedbackMessage = `Đã trả lời Q&A:\n${answered.map((a) => `- ${a}`).join('\n')}\n\nVui lòng đọc lại qa.md đã cập nhật và tiếp tục.`
-    await sendTaskFeedback(
-      props.taskId,
-      feedbackMessage,
-      { stepId: props.stepId || undefined },
-      props.projectId ?? undefined,
-    )
-    for (const key of Object.keys(selections)) delete selections[Number(key)]
-    emit('saved')
-  } catch (e: any) {
-    submitError.value =
-      e?.status === 409
-        ? t('monitor.qa.submitError409')
-        : e?.status === 400
-          ? t('monitor.qa.submitError400')
-          : String(e?.message || e)
-  } finally {
-    submitting.value = false
-  }
+      const feedbackMessage = `Đã trả lời Q&A:\n${answered.map((a) => `- ${a}`).join('\n')}\n\nVui lòng đọc lại qa.md đã cập nhật và tiếp tục.`
+      await sendTaskFeedback(
+        props.taskId,
+        feedbackMessage,
+        { stepId: props.stepId || undefined },
+        props.projectId ?? undefined,
+      )
+      for (const key of Object.keys(selections)) delete selections[Number(key)]
+      emit('saved')
+    } catch (e: any) {
+      submitError.value =
+        e?.status === 409
+          ? t('monitor.qa.submitError409')
+          : e?.status === 400
+            ? t('monitor.qa.submitError400')
+            : String(e?.message || e)
+    }
+  })
 }
 
 const {
@@ -194,6 +195,7 @@ onUpdated(() => scheduleMermaid())
 
 <template>
   <section class="qa-panel">
+    <CLoadingOverlay :active="submitting" />
     <div class="qa-head">{{ t('monitor.qa.head') }}</div>
     <div class="qa-hint">
       {{ t('monitor.qa.hintBefore') }}
@@ -284,7 +286,11 @@ onUpdated(() => scheduleMermaid())
 </template>
 
 <style scoped lang="scss">
+/* `position: relative` là containing block cho `CLoadingOverlay` (xem hợp đồng
+   ở đầu CLoadingOverlay.vue) — thiếu nó thì overlay leo lên tổ tiên định vị
+   gần nhất và phủ cả trang. */
 .qa-panel {
+  position: relative;
   background: rgba(227,179,65,0.08);
   border: 1px solid var(--waiting);
   border-radius: 12px;

@@ -5,7 +5,13 @@ import path from 'node:path'
 import { runAutomation } from '../../../../src/features/automations/business/runAction.js'
 import { listRuns } from '../../../../src/features/automations/business/runLedger.js'
 import type { AutomationRun, AutomationRuleRecord } from '../../../../src/features/automations/schemas/automation.js'
-import { registerProvider, upsertConnection, upsertRunner } from '../../../../src/features/runner/business/index.js'
+import {
+  loadJob,
+  registerProvider,
+  setDefaultRunner,
+  upsertConnection,
+  upsertRunner,
+} from '../../../../src/features/runner/business/index.js'
 import type { ExecuteRequest, ExecuteResult, RunnerProvider } from '../../../../src/features/runner/business/types.js'
 
 // executeSequence dispatch theo `action.kind` (#233 + httpRequest/runCommand
@@ -379,5 +385,109 @@ describe('runTask action — project đích', () => {
 
     expect(listRuns('p1', 50).some((r) => r.runId === run.runId)).toBe(true)
     expect(listRuns(PROJ_B, 50).some((r) => r.runId === run.runId)).toBe(false)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Tbfb52394 · TC-C07 / TC-C08 của test-spec — automation tạo task mới là đường
+// start job thứ 5, nên nó cũng phải đọc `steps[].runner_id` của step đầu.
+//
+// Cùng hợp đồng với run-step: action khai `runnerId` thì THẮNG pin (automation
+// đã tự chọn runner là một quyết định tường minh); không khai thì lấy pin.
+// ---------------------------------------------------------------------------
+
+describe('runTask action — model pin của step đầu', () => {
+  const AI_PROVIDER_ID = 'stub-automation-pin-api'
+  const AI_RUNNER = 'stub-automation-pin-runner'
+  const CONSOLE_RUNNER = 'stub-run-command-runner'
+  const AGENT = 'stub-automation-pin-agent'
+
+  /** Provider họ `ai-api` (id kết thúc `-api`) — pin chỉ nhận runner chạy-AI-được. */
+  const aiProvider: RunnerProvider = {
+    ...stubProvider,
+    providerId: AI_PROVIDER_ID,
+    family: 'ai-api',
+  }
+
+  function seedPinnedPipeline(dataRoot: string, runnerId?: string): void {
+    fs.mkdirSync(path.join(dataRoot, 'custom-agents'), { recursive: true })
+    fs.writeFileSync(
+      path.join(dataRoot, 'custom-agents', `${AGENT}.md`),
+      `---\nname: ${AGENT}\ndescription: agent stub cho test\n---\n\n## Vai trò\n\nStub.\n`,
+    )
+    fs.writeFileSync(
+      path.join(dataRoot, 'pipeline.yaml'),
+      [
+        'version: 1',
+        'steps:',
+        '  - id: step-1',
+        '    name: Step 1',
+        `    agent: dashboard:${AGENT}`,
+        ...(runnerId ? [`    runner_id: '${runnerId}'`] : []),
+        '    hitl:',
+        '      mode: none',
+        '',
+      ].join('\n'),
+      'utf8',
+    )
+  }
+
+  beforeAll(() => {
+    registerProvider(aiProvider)
+    upsertConnection({
+      id: 'stub-automation-pin-conn',
+      kind: 'local-console',
+      providerId: AI_PROVIDER_ID,
+      cliPath: 'stub',
+    })
+    upsertRunner({ id: AI_RUNNER, connectionId: 'stub-automation-pin-conn', config: {} })
+    // T6fabee9b: chốt default TƯỜNG MINH. Runner console được seed trước ở
+    // `beforeAll` ngoài, nên `loadRunners()` đã tự suy `defaultRunnerId` =
+    // runner console — một runner KHÔNG chạy agent được. Ca "pin hỏng ⇒ rơi về
+    // runner mặc định" dưới đây chỉ từng xanh nhờ vế `find(isEligible)` thứ hai
+    // của `getDefaultRunner()`, tức nhờ đúng cái bug task này đi sửa: hệ thống
+    // âm thầm chạy một runner người dùng chưa bao giờ chọn. Dòng dưới đưa store
+    // về đúng tình huống mà comment của ca đó mô tả.
+    setDefaultRunner(AI_RUNNER)
+  })
+
+  async function runCreateAction(ruleId: string, action: Record<string, unknown>) {
+    const rule = baseRule({
+      id: ruleId,
+      actions: [{ kind: 'runTask', mode: 'create', prompt: 'làm việc', ...action } as any],
+    })
+    const run = runAutomation({ root, projectId: 'p1', rule, source: 'manual' })
+    return waitForOutcome(run.runId, 'p1')
+  }
+
+  test('TC-C07: step đầu đã pin, action KHÔNG khai runnerId ⇒ job dùng pin', async () => {
+    seedPinnedPipeline(root, AI_RUNNER)
+    const final = await runCreateAction('pin-no-runner', {})
+
+    expect(final.steps![0].jobId).toBeTruthy()
+    expect(loadJob(final.steps![0].jobId!)!.runnerId).toBe(AI_RUNNER)
+  })
+
+  test('TC-C08: action khai runnerId ⇒ runner của action THẮNG pin', async () => {
+    seedPinnedPipeline(root, AI_RUNNER)
+    const final = await runCreateAction('pin-with-runner', { runnerId: CONSOLE_RUNNER })
+
+    expect(loadJob(final.steps![0].jobId!)!.runnerId).toBe(CONSOLE_RUNNER)
+  })
+
+  test('step đầu không pin ⇒ hành vi nguyên trạng, runner của action được dùng (AC-6)', async () => {
+    seedPinnedPipeline(root)
+    const final = await runCreateAction('no-pin', { runnerId: CONSOLE_RUNNER })
+
+    expect(loadJob(final.steps![0].jobId!)!.runnerId).toBe(CONSOLE_RUNNER)
+  })
+
+  test('pin hỏng + action không khai runnerId ⇒ không đứng, rơi về runner mặc định', async () => {
+    seedPinnedPipeline(root, 'khong-ton-tai')
+    const final = await runCreateAction('pin-hong', {})
+
+    const job = loadJob(final.steps![0].jobId!)!
+    // Runner mặc định của hệ là runner AI duy nhất đủ điều kiện.
+    expect(job.runnerId).toBe(AI_RUNNER)
   })
 })

@@ -161,11 +161,36 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-si
   font-size: 15px;
   flex-shrink: 0;
 }
+/* 🚫 KHÔNG thêm `position: relative` vào đây để làm chỗ neo cho
+   `CLoadingOverlay`: `.modal-body` là vùng CUỘN, xem `.c-loading-host` bên
+   dưới để biết vì sao neo vào scroller là sai. */
 .modal-body {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
+}
+
+/* Chỗ neo của `CLoadingOverlay`: một lớp bọc KHÔNG cuộn, nằm NGOÀI scroller.
+
+   Vì sao không neo thẳng vào `.modal-body`: containing block của một phần tử
+   `position: absolute` là PADDING BOX của tổ tiên định vị gần nhất, và padding
+   box của một scroll container nằm trong hệ toạ độ ĐÃ CUỘN. Nên `inset: 0`
+   cho ra đúng kích thước khung nhìn nhưng neo vào GỐC NỘI DUNG: `scrollTop = 0`
+   thì phủ đúng, người dùng cuộn xuống rồi bấm action thì overlay đã trôi lên
+   trên khung nhìn — không scrim, không icon xoay, không chặn con trỏ. Muốn ghim
+   vào khung nhìn của scroller thì phải `position: sticky`, hoặc — như ở đây —
+   đặt chỗ neo ra một hộp không cuộn.
+
+   Dùng cho mọi vùng bận mà phần nội dung bên trong tự cuộn. Vùng KHÔNG cuộn
+   (`.qa-panel`, `.project-bar`, `.task-entry`…) không cần lớp này, chỉ cần
+   `position: relative` tại chỗ. */
+.c-loading-host {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 .modal-close {
   background: none;
@@ -193,6 +218,28 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-si
 }
 /* Action phá huỷ tách hẳn về mép trái, không đứng cạnh CTA xác nhận. */
 .modal-foot > .btn-danger { margin-right: auto; }
+
+/* Animation xoay dùng chung. `Icon.vue` cố ý chỉ vẽ hình, caller sở hữu hiệu
+   ứng — xem comment ở nhánh `spinner` của Icon.vue. Lên tầng shell vì có ≥2
+   component dùng: `CLoadingOverlay` (frontend/ui) và `ChatWindow` (nl-chat).
+   Khai GLOBAL ở đây là an toàn cho `<style scoped>`: compiler-sfc chỉ rewrite
+   tên keyframes được khai trong CHÍNH block đó, tên lạ giữ nguyên. */
+.c-spin {
+  animation: c-spin 0.9s linear infinite;
+}
+@keyframes c-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .c-spin {
+    animation: none;
+  }
+}
 
 .btn-ghost {
   background: none;

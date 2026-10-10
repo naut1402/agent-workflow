@@ -10,7 +10,7 @@
 import { dirname, joinPath, readTextFile } from '../../../../backend/lib/fileHelper.js'
 import { isRunnableTarget } from '../../lib/pipelineRunGuards.js'
 import { loadPipelineConfig } from '../peers.js'
-import { listJobs, submitJob } from '../index.js'
+import { listJobs, resolveStepRunnerId, submitJob } from '../index.js'
 import type { JobRecord } from '../index.js'
 import { readState } from './index.js'
 import { assertStartAllowed, type StartOrigin } from './startAuthority.js'
@@ -183,7 +183,8 @@ export async function runTaskStep(
     }
 
     const job = submitJob({
-      runnerId: input.runnerId ?? undefined,
+      // Caller thắng step: automation / nút run có chọn runner phải ép được runner.
+      runnerId: input.runnerId ?? resolveStepRunnerId(step).runnerId,
       agentRef: step.agent,
       workspace: joinPath(root, 'tasks', taskId),
       userPrompt,

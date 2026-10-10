@@ -1,0 +1,70 @@
+{
+  "baseSha": "4c58b44",
+  "cases": [
+    {
+      "name": "flags rỗng",
+      "args": [
+        "-p",
+        "--output-format",
+        "json",
+        "--sandbox",
+        "disabled",
+        "--force",
+        "--trust"
+      ]
+    },
+    {
+      "name": "flags người dùng",
+      "args": [
+        "--model",
+        "auto",
+        "-p",
+        "--output-format",
+        "json",
+        "--sandbox",
+        "disabled",
+        "--force",
+        "--trust"
+      ]
+    },
+    {
+      "name": "có resume",
+      "args": [
+        "-p",
+        "--output-format",
+        "json",
+        "--sandbox",
+        "disabled",
+        "--force",
+        "--trust",
+        "--resume",
+        "s-1"
+      ]
+    },
+    {
+      "name": "người dùng tự gõ --approve-mcps",
+      "args": [
+        "--approve-mcps",
+        "-p",
+        "--output-format",
+        "json",
+        "--sandbox",
+        "disabled",
+        "--force",
+        "--trust"
+      ]
+    },
+    {
+      "name": "người dùng đã khai --sandbox/--force/--trust",
+      "args": [
+        "--sandbox",
+        "danger",
+        "--force",
+        "--trust",
+        "-p",
+        "--output-format",
+        "json"
+      ]
+    }
+  ]
+}

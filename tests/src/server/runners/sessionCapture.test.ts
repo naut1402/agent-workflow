@@ -1,11 +1,18 @@
-import { describe, expect, test } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 import { buildClaudeInvocation } from '../../../../src/features/runner/business/providers/claude-code-cli.js'
 import {
   buildCursorJsonArgs,
   buildCursorJsonInvocation,
+  getUsageCursor,
   mintSessionId,
   parseCursorJsonOutput,
   prepareSessionInvocation,
+  saveTaskSessionLedger,
+  setUsageCursor,
+  type SessionEntry,
 } from '../../../../src/features/runner/business/sessionLedger.js'
 
 describe('sessionCapture', () => {
@@ -166,5 +173,81 @@ describe('sessionCapture', () => {
         resumeSessionId: 'b',
       }),
     ).toEqual({ sessionId: 'a', resumeSessionId: 'b' })
+  })
+})
+
+/*
+ * T6427b18c TC-R4 — cursor tìm đúng entry khi ledger có NHIỀU entry.
+ *
+ * Cách ly phiên theo node làm số entry trong một file ledger tăng hẳn (tối đa
+ * một `open` cho mỗi node, cộng các entry `stale` cũ). `usageCursor` tra theo
+ * `sessionId`, nên phải chứng minh nó không lây sang entry hàng xóm.
+ *
+ * Nửa `toolCallCursor` của TC-R4 hiện KHÔNG chạy được — xem case (c) bên dưới.
+ */
+describe('cursor theo sessionId trên ledger nhiều entry (TC-R4)', () => {
+  const PROJECT = 'P-cursor'
+  const TASK = 'CUR-1'
+  let home: string
+  const savedHome = process.env.DEV_TEAM_DASHBOARD_HOME
+
+  function entry(over: Partial<SessionEntry> & { sessionId: string }): SessionEntry {
+    return {
+      providerId: 'claude-code-cli',
+      runnerId: 'r1',
+      connectionId: 'c1',
+      workspace: '/tmp/ws',
+      host: os.hostname(),
+      stepIds: [],
+      status: 'stale',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      lastUsedAt: '2026-01-01T00:00:00.000Z',
+      ...over,
+    }
+  }
+
+  beforeAll(() => {
+    home = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-cursor-'))
+    process.env.DEV_TEAM_DASHBOARD_HOME = home
+    saveTaskSessionLedger(PROJECT, {
+      version: 1,
+      taskId: TASK,
+      sessionPolicy: 'single',
+      sessions: [
+        entry({ sessionId: 's-old1' }),
+        entry({ sessionId: 's-old2', usageCursor: { mainLines: 99, subagentFiles: ['x.jsonl'] } }),
+        entry({ sessionId: 's-orch', status: 'open', stepIds: ['__orchestrator__'], usageCursor: { mainLines: 7, subagentFiles: [] } }),
+        entry({ sessionId: 's-old3' }),
+        entry({ sessionId: 's-a', status: 'open', stepIds: ['investigator'] }),
+      ],
+    })
+  })
+  afterAll(() => {
+    if (savedHome === undefined) delete process.env.DEV_TEAM_DASHBOARD_HOME
+    else process.env.DEV_TEAM_DASHBOARD_HOME = savedHome
+    fs.rmSync(home, { recursive: true, force: true })
+  })
+
+  test('(a) ghi rồi đọc cursor của s-a trả đúng giá trị vừa ghi', () => {
+    setUsageCursor(PROJECT, TASK, 's-a', { mainLines: 42, subagentFiles: [] })
+    expect(getUsageCursor(PROJECT, TASK, 's-a')).toEqual({ mainLines: 42, subagentFiles: [] })
+  })
+
+  test('(b) cursor của phiên điều phối KHÔNG bị lây giá trị của s-a', () => {
+    expect(getUsageCursor(PROJECT, TASK, 's-orch')).toEqual({ mainLines: 7, subagentFiles: [] })
+    expect(getUsageCursor(PROJECT, TASK, 's-old2')).toEqual({ mainLines: 99, subagentFiles: ['x.jsonl'] })
+  })
+
+  // SKIP: `getToolCallCursor`/`setToolCallCursor` không tồn tại ở BẤT KỲ ref nào
+  // (branch test, `05bfa9e`, `dev/1.2.0/main`) — cả cụm tool-call capture đã bị gỡ
+  // khỏi `sessionLedger`, trong khi `test-spec.md` §1.1 vẫn kê nó ở `sessionCapture`:
+  // spec và code lệch nhau ở đây, không phải test sai. 🚫 Không stub một hàm không
+  // tồn tại để test xanh. Khôi phục case này khi API có thật; nó phải assert
+  // `toolCallCursor` trỏ đúng entry theo `sessionId` và KHÔNG đụng `usageCursor`
+  // của cùng entry (hai khoá cố ý tách rời).
+  test.skip('(c) toolCallCursor trỏ đúng entry, tách hẳn khỏi usageCursor', () => {})
+
+  test('sessionId không có trong ledger ⇒ null, không throw', () => {
+    expect(getUsageCursor(PROJECT, TASK, 'khong-ton-tai')).toBeNull()
   })
 })

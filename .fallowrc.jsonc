@@ -77,5 +77,28 @@
       "file": "src/features/monitor/business/tasks/startAuthority.ts",
       "exports": ["setOrchestratorEnabledFlag"]
     }
-  ]
+  ],
+
+  // ── 4. CRAP: không đo được coverage ở bước này ──────────────────────────
+  // Cùng gốc với nguồn false positive #2 (dòng source gitignore `/tests/`),
+  // nhưng ở chiều khác: `high-crap-score` cần coverage, mà bước Fallow không
+  // chạy test và không được truyền `--coverage`, nên fallow *ước lượng* —
+  // `coverage_source: "estimated"`, `coverage_tier: "none"` cho MỌI hàm
+  // (`coverage_source_consistency: "uniform"` trong output JSON).
+  //
+  // Với coverage = 0, công thức Savoia–Evans `CC^2 * (1 - cov)^3 + CC` rút
+  // gọn thành `CC^2 + CC`. Ở ngưỡng mặc định 30, rule đó KHÔNG còn nói gì về
+  // test — nó chỉ là một cổng cyclomatic thứ hai, ngưỡng hiệu dụng CC >= 5,
+  // trong khi cổng cyclomatic thật đang là 20. Hệ quả: mọi hàm có nhánh
+  // vừa phải đều đỏ, và tín hiệu "phức tạp thật" chìm trong đó.
+  //
+  // `20^2 + 20 = 420` là điểm mà CRAP vừa đúng KHÔNG còn bind trước cổng
+  // cyclomatic ở coverage = 0: nó chỉ kêu khi `maxCyclomatic` đã kêu. Không
+  // phải con số chọn bừa, và không tắt hẳn dimension.
+  //
+  // ⚠️ Hạ lại về 30 ngay khi bước Fallow được truyền `--coverage` (Istanbul
+  // `coverage-final.json`) — lúc đó CRAP mới đo đúng thứ nó định đo. Còn
+  // `maxCyclomatic` / `maxCognitive` giữ nguyên mặc định: hai dimension đó
+  // không phụ thuộc coverage nên vẫn bắt được phức tạp thật.
+  "health": { "maxCrap": 420 }
 }

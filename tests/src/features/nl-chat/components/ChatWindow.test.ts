@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { flushPromises } from '@vue/test-utils'
 import { mountWithI18n } from '../../../helpers/i18n'
 
 /**
@@ -152,7 +153,10 @@ describe('ChatWindow header — status lives in the title', () => {
 
     expect(wrapper.findAll('.nl-chat-badge')).toHaveLength(0)
     expect(wrapper.findAll('.nl-chat-status')).toHaveLength(0)
-    expect(wrapper.findAll('.nl-chat-spinner')).toHaveLength(0)
+    // Selector cũ ở dòng này là `.nl-chat-spinner` — class thật chưa bao giờ có
+    // chữ "er", nên nó trả 0 ở MỌI trạng thái và không bảo vệ gì. Icon xoay nay
+    // dùng class chung `c-spin`; ca dương ở describe bên dưới là phần còn thiếu.
+    expect(wrapper.findAll('.c-spin')).toHaveLength(0)
     expect(wrapper.find('.nl-chat-header').findAll('.dot')).toHaveLength(0)
   })
 })
@@ -288,5 +292,84 @@ describe('ChatWindow header — the + button moved out', () => {
     // Minimize and close stayed behind.
     expect(titles).toContain('Thu nhỏ')
     expect(titles).toContain('Đóng')
+  })
+})
+
+describe('ChatWindow header — icon xoay (TC-27)', () => {
+  it('trạng thái busy render đúng MỘT icon spinner mang class `c-spin`', async () => {
+    const wrapper = mountWindow({ connected: true })
+    await setStatus(wrapper, { kind: 'busy', text: 'Agent đang suy nghĩ…' })
+
+    const spinning = wrapper.findAll('.c-spin')
+    expect(spinning).toHaveLength(1)
+    // Class dùng chung `c-spin` (kèm cặp `@keyframes` gom về một chỗ) thay cho
+    // `nl-chat-spin` riêng của feature — icon vẫn phải là `spinner`.
+    expect(spinning[0].element.tagName.toLowerCase()).toBe('svg')
+    expect(wrapper.find('.nl-chat-info button svg').classes()).toContain('c-spin')
+  })
+
+  it('rời khỏi busy thì icon xoay biến mất', async () => {
+    const wrapper = mountWindow({ connected: true })
+    await setStatus(wrapper, { kind: 'busy', text: 'Agent đang suy nghĩ…' })
+    expect(wrapper.findAll('.c-spin')).toHaveLength(1)
+
+    await setStatus(wrapper, { kind: 'error', text: 'Có lỗi' })
+    expect(wrapper.findAll('.c-spin')).toHaveLength(0)
+
+    await setStatus(wrapper, { kind: 'done', text: 'Hoàn tất' })
+    expect(wrapper.findAll('.c-spin')).toHaveLength(0)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// T6fabee9b TC-D40 — popover builder nêu runner mà job sẽ chạy, 🚫 không đoán.
+//
+// Trước fix, chỗ này tự tính default bằng một luật RIÊNG ("runner enabled đầu
+// tiên") khác hẳn luật của `submitJob`. Kết quả: popover nêu một runner, job
+// chạy bằng runner khác — hoặc không chạy. Nay nó đọc thẳng
+// `effectiveDefaultRunnerId` của BE, và `null` nghĩa là bỏ hẳn dòng runner.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('ChatWindow — dòng runner của popover builder', () => {
+  function stubRunnersPayload(payload: Record<string, unknown>) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: true, status: 200, json: async () => payload })),
+    )
+  }
+
+  const RUNNERS = [
+    { id: 'a', name: 'Runner A', enabled: false },
+    { id: 'b', name: 'Runner B', enabled: true },
+  ]
+
+  async function openPopover() {
+    const wrapper = mountWindow()
+    await wrapper.find('.nl-chat-info').trigger('pointerenter')
+    await flushPromises()
+    return wrapper
+  }
+
+  it('TC-D40: effectiveDefaultRunnerId = null ⇒ bỏ dòng runner, 🚫 không đoán runner khác', async () => {
+    stubRunnersPayload({ runners: RUNNERS, defaultRunnerId: 'a', effectiveDefaultRunnerId: null })
+
+    const wrapper = await openPopover()
+
+    const labels = wrapper.findAll('.nl-chat-info-label').map((l) => l.text())
+    expect(labels).not.toContain('Runner')
+    // Vế phủ định: 🚫 không rơi về `defaultRunnerId`, 🚫 không lấy runner enabled
+    // đầu tiên — cả hai đều là đoán, chỉ đoán bằng hai giá trị khác nhau.
+    const text = wrapper.find('.nl-chat-info-popover').text()
+    expect(text).not.toContain('Runner A')
+    expect(text).not.toContain('Runner B')
+  })
+
+  it('effectiveDefaultRunnerId có giá trị ⇒ hiện đúng runner đó', async () => {
+    stubRunnersPayload({ runners: RUNNERS, defaultRunnerId: 'a', effectiveDefaultRunnerId: 'b' })
+
+    const wrapper = await openPopover()
+
+    const labels = wrapper.findAll('.nl-chat-info-label').map((l) => l.text())
+    expect(labels).toContain('Runner')
+    expect(wrapper.find('.nl-chat-info-popover').text()).toContain('Runner B')
   })
 })

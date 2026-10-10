@@ -5,6 +5,10 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile
+      args:
+        # Build-time: đổi giá trị bắt buộc kèm rebuild.
+        RTK_VERSION: "${RTK_VERSION:-}"
+        RTK_REFRESH: "${RTK_REFRESH:-}"
     image: dev-team-dashboard:local
     ports:
       # Default: loopback only. Opt-in LAN: DEV_TEAM_DASHBOARD_BIND=0.0.0.0
@@ -27,10 +31,14 @@ services:
       CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:-}
       GH_TOKEN: ${GH_TOKEN:-}
       GITHUB_TOKEN: ${GITHUB_TOKEN:-${GH_TOKEN:-}}
+      RTK_TELEMETRY_DISABLED: "${RTK_TELEMETRY_DISABLED:-1}"
+      RTK_HOOK_ENABLED: "${RTK_HOOK_ENABLED:-1}"
     volumes:
       - ${DEV_TEAM_PROJECT_PATH:-${HOME}/workspace}:/data/project
       - dashboard-home:/data/dashboard-home
+      - rtk-data:/home/dashboard/.local/share/rtk
     restart: unless-stopped
 
 volumes:
   dashboard-home:
+  rtk-data:
