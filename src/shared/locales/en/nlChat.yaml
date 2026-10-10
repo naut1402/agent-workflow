@@ -1,0 +1,103 @@
+window:
+  builderTitle: Creation assistant
+  statusReady: Ready
+  statusBusy: Working
+  statusDone: Finished
+  statusError: Error
+  newSession: New chat session
+  prevSession: Previous session
+  nextSession: Next session
+  minimize: Minimize
+  close: Close
+  connected: Dashboard connected
+  disconnected: Dashboard disconnected
+  infoTitle: Context info
+  infoProject: Project
+  infoShellMode: Dashboard mode
+  infoShellTask: Selected task
+  infoTask: Task
+  infoStep: Step
+  infoChatMode: Chat mode
+  infoRunner: Runner
+  infoConnection: Connection
+  chatModeBuilder: Create by chatting (no task bound)
+  runnerRunning: running
+  runnerReady: ready
+  runnerDisabled: disabled
+  statusErrorWithMessage: 'Error: {error}'
+message:
+  copy: Copy message
+  expand: Show more
+  collapse: Show less
+attachment:
+  pick: Attach files
+  remove: Remove file
+  dropHint: Drop files here to attach
+  tooMany: At most {max} files per message.
+  tooLarge: '{name} exceeds {max}.'
+  unsupported: '{name} is an unsupported file type.'
+  uploadFailed: 'Could not upload the files: {error}'
+knowledge:
+  pick: Pick knowledge
+  resolveFailed: 'Could not read the knowledge, message sent without it: {error}'
+composer:
+  enterToSend: Enter sends, Shift+Enter for a new line
+  enterToNewline: Enter for a new line, Ctrl/⌘+Enter sends
+  addMenu: Add
+  send: Send
+builder:
+  done: Created successfully.
+  hint: Describe what you want — I'll ask follow-up questions if anything is missing, then draft a Task, Pipeline or Agent for you.
+  nudge: Could you describe it more briefly?
+  roleAssistant: Assistant
+  roleUser: You
+  inputPlaceholder: Type a message...
+  statusCreating: Creating… {seconds}s
+  statusThinking: Agent is thinking… {seconds}s
+  checkingAgents: Checking the list of valid agents...
+  unknownAgents: 'Agents not found in the catalog: {agents}'
+  invalidDraftJson: The draft JSON is invalid — please fix it before confirming.
+  draftBadge: Draft {entity}
+  entity:
+    task: Task
+    pipeline: Pipeline
+    agent: Agent
+    automation: Automation
+  pipelineName: Pipeline name
+  pipelineNamePlaceholder: Pipeline profile name
+  agentScope: Agent scope
+  agentScopeProject: Current project only
+  agentScopeGlobal: Global (all projects)
+  agentScopeNoProject: No project selected in the header — pick a project or switch the agent scope to "Global".
+  confirm: Confirm & create
+  cancel: Cancel
+  entityUnclear: I am not sure whether you want to create a Task, Pipeline, Agent or Automation — could you clarify?
+  catalogLoadFailed: Could not load the agent list for validation — please try again.
+  catalogUnchecked: The list of valid agents has not been checked yet — please try again.
+  pipelineUnknownAgents: 'The pipeline references agents not found in the catalog: {agents}'
+  profilesLoadFailed: Could not load the pipeline profile list for validation — please try again.
+  checkingProfiles: Checking the list of pipeline profiles...
+  unknownProfiles: 'Pipeline profile not found: {profiles} — fix it or leave it empty to use the default pipeline.'
+  noProjectSelected: No project selected — pick a project in the header or switch the agent scope to "Global".
+  jobMissing: job missing
+  noJobId: no job id returned
+  jobTimeout: timeout waiting for job
+  jobEnded: job {status}
+taskChat:
+  roleUserPending: You · sending
+  roleRunner: Runner
+  loading: Loading the runner conversation…
+  noSession: This step has no CLI session yet — run the step first, then come back here.
+  transcriptMissing: Could not find the transcript of session {sessionId} on this machine.
+  emptySession: The session has no conversation yet.
+  inputPlaceholder: Message the runner…
+  cannotSend: Cannot send yet
+  statusSending: Sending…
+  statusRunning: Runner is running
+  statusRunningStep: 'Runner is running: {step}'
+  staleSession: This session is stale ({reason}) — a new message may open a different session, and the agent will not remember the earlier context.
+  noCompletedJob: No job has finished for this task yet, so there is no conversation to continue.
+  stepBusy: The step is running — wait for it to finish before sending a message.
+  queued: New messages will be sent once the current step finishes.
+floating:
+  open: Create by chatting

@@ -28,6 +28,8 @@ export interface TranscriptTurn {
   at?: string
   /** Tool name, for `role: 'tool'` activity turns. */
   tool?: string
+  /** `text` was cut at `MAX_TURN_CHARS`. */
+  truncated?: boolean
 }
 
 /** Per-turn text cap — a single agent reply can be enormous. */
@@ -75,9 +77,10 @@ export function findTranscriptFile(sessionId: string, workspace?: string): strin
   return null
 }
 
-function clip(text: string): string {
+function clip(text: string): { text: string; truncated?: boolean } {
   const t = text.trim()
-  return t.length > MAX_TURN_CHARS ? `${t.slice(0, MAX_TURN_CHARS)}\n…(đã cắt bớt)` : t
+  if (t.length <= MAX_TURN_CHARS) return { text: t }
+  return { text: t.slice(0, MAX_TURN_CHARS), truncated: true }
 }
 
 /** One-line summary of a tool call — the "agent đang làm gì" signal. */
@@ -155,7 +158,7 @@ export function readTranscript(file: string, opts: ReadTranscriptOptions = {}): 
     const { text, tools } = textOfContent(message?.content)
 
     if (text.trim()) {
-      all.push({ index: all.length, role: type, text: clip(text), at })
+      all.push({ index: all.length, role: type, ...clip(text), at })
     }
     if (includeTools) {
       for (const t of tools) {

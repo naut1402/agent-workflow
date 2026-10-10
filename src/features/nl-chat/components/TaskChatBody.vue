@@ -37,8 +37,13 @@ const messagesRef = ref<HTMLElement | null>(null)
 const displayTurns = computed(() =>
   chat.timeline.value.map((turn) => ({
     ...turn,
+    text: turn.truncated ? `${turn.text}\n${t('orchestrator.transcript.truncated')}` : turn.text,
     clampable: turn.role === 'user' && turn.text.length > COLLAPSE_CHARS,
-    roleLabel: turn.pending ? 'Bạn · đang gửi' : turn.role === 'user' ? 'Bạn' : 'Runner',
+    roleLabel: turn.pending
+      ? t('nlChat.taskChat.roleUserPending')
+      : turn.role === 'user'
+        ? t('nlChat.builder.roleUser')
+        : t('nlChat.taskChat.roleRunner'),
     bubbleRole: turn.role === 'assistant' ? ('assistant' as const) : ('user' as const),
   })),
 )
@@ -47,21 +52,21 @@ const displayTurns = computed(() =>
 function transcriptMissingHint(): string {
   return (
     chat.transcriptMissingReason.value ||
-    `Không tìm thấy transcript của phiên ${chat.sessionId.value} trên máy này.`
+    t('nlChat.taskChat.transcriptMissing', { sessionId: chat.sessionId.value })
   )
 }
 
 /** Reasons an existing-but-empty list stays empty. Only reached with zero turns. */
 function noTurnsHint(): string | null {
-  if (!chat.sessionId.value) return 'Step này chưa có phiên CLI nào — chạy step trước rồi quay lại đây.'
+  if (!chat.sessionId.value) return t('nlChat.taskChat.noSession')
   if (!chat.transcriptFound.value) return transcriptMissingHint()
-  if (chat.pending.value.length === 0) return 'Phiên chưa có nội dung hội thoại nào.'
+  if (chat.pending.value.length === 0) return t('nlChat.taskChat.emptySession')
   return null
 }
 
 /** The one line shown in place of a transcript, or null when there is one — resolves the mutually exclusive reasons here so the template keeps a single `v-if`. */
 const emptyHint = computed<string | null>(() => {
-  if (chat.loading.value) return 'Đang tải hội thoại của runner…'
+  if (chat.loading.value) return t('nlChat.taskChat.loading')
   if (chat.turns.value.length > 0) return null
   return noTurnsHint()
 })
@@ -94,22 +99,30 @@ const composer = useChatComposer({
 const { isOverDropZone } = composer
 
 const placeholder = computed(() => {
-  if (!chat.canSend.value) return chat.blockedText.value || 'Chưa gửi được'
-  if (chat.queued.value) return chat.blockedText.value || 'Nhập tin nhắn cho runner…'
-  return 'Nhập tin nhắn cho runner…'
+  if (!chat.canSend.value) return chat.blockedText.value || t('nlChat.taskChat.cannotSend')
+  if (chat.queued.value) return chat.blockedText.value || t('nlChat.taskChat.inputPlaceholder')
+  return t('nlChat.taskChat.inputPlaceholder')
 })
 
 // Header status: a running step is the interesting state — that is the whole
 // point of watching a runner live.
 const status = computed<{ kind: 'idle' | 'busy' | 'done' | 'error'; text: string }>(() => {
   // The message itself, not just "Có lỗi": the title's tooltip is the only place the error is described.
-  if (chat.error.value) return { kind: 'error', text: `Có lỗi: ${chat.error.value}` }
-  if (chat.sending.value) return { kind: 'busy', text: 'Đang gửi…' }
+  if (chat.error.value) {
+    return { kind: 'error', text: t('nlChat.window.statusErrorWithMessage', { error: chat.error.value }) }
+  }
+  if (chat.sending.value) return { kind: 'busy', text: t('nlChat.taskChat.statusSending') }
   if (chat.running.value) {
     const step = chat.running.value.stepId
-    return { kind: 'busy', text: step ? `Runner đang chạy: ${step}` : 'Runner đang chạy' }
+    return {
+      kind: 'busy',
+      text: step ? t('nlChat.taskChat.statusRunningStep', { step }) : t('nlChat.taskChat.statusRunning'),
+    }
   }
-  return { kind: 'idle', text: chat.canSend.value ? 'Sẵn sàng' : 'Chưa gửi được' }
+  return {
+    kind: 'idle',
+    text: chat.canSend.value ? t('nlChat.window.statusReady') : t('nlChat.taskChat.cannotSend'),
+  }
 })
 
 watch(status, (s) => emit('status', s), { immediate: true })
@@ -169,7 +182,7 @@ onUnmounted(() => chat.stop())
 
       <p v-if="chat.error.value" class="nl-chat-error">{{ chat.error.value }}</p>
       <p v-if="chat.staleReason.value" class="nl-chat-nudge">
-        Phiên đã cũ ({{ chat.staleReason.value }}) — tin nhắn mới có thể mở phiên khác, agent sẽ không nhớ ngữ cảnh trước.
+        {{ t('nlChat.taskChat.staleSession', { reason: chat.staleReason.value }) }}
       </p>
     </div>
 

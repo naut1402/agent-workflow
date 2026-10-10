@@ -32,7 +32,6 @@ export {
   getLocaleRegistry,
   I18N_REGISTRY_KEY,
   I18N_HELPERS_KEY,
-  SUPPORTED_LOCALES,
   DEFAULT_LOCALE,
   type AppLocale,
   type LocaleRegistry,
