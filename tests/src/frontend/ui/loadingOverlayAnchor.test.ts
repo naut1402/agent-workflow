@@ -14,7 +14,9 @@ import McpServerDialog from '@/features/mcp/components/McpServerDialog.vue'
 import AgentFormDialog from '@/features/agent-editor/components/AgentFormDialog.vue'
 import AutomationFormDialog from '@/features/automations/components/AutomationFormDialog.vue'
 import QuickActionPanel from '@/features/quick-action/components/QuickActionPanel.vue'
-import quickActionVi from '@/features/quick-action/locales/vi'
+import { localeMessages } from '../../helpers/localeYaml'
+
+const quickActionVi = localeMessages('vi', 'quickAction')
 
 vi.mock('@/features/runner/scripts/ConnectionDialogApi', () => ({
   fetchCredentials: vi.fn(async () => ({ profiles: [] })),

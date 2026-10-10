@@ -3,7 +3,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, DOMWrapper } from '@vue/test-utils'
 import RunnerDialog from '@/features/runner/components/RunnerDialog.vue'
 import type { ConnectionOption, ProviderEntry } from '@/features/runner/types'
-import runnerVi from '@/features/runner/locales/vi'
+import { localeMessages } from '../../../helpers/localeYaml'
+
+const runnerVi = localeMessages('vi', 'runner')
 
 vi.mock('@/features/runner/scripts/RunnerDialogApi', () => ({
   saveRunner: vi.fn(async () => ({ ok: true })),

@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { createTestI18n } from '../../helpers/i18n'
-import vi from '@/features/monitor/locales/vi'
-import en from '@/features/monitor/locales/en'
+import { localeMessages } from '../../helpers/localeYaml'
+
+const vi = localeMessages('vi', 'monitor')
+const en = localeMessages('en', 'monitor')
 
 // Td16ee130 — nhóm D của `test-spec.md`: nhãn của hai dialog (duyệt nội dung,
 // reset step) phải đi qua i18n ở CẢ hai locale, và tập key hai bên phải bằng

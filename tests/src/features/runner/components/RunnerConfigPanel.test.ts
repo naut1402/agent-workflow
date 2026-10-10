@@ -4,9 +4,11 @@ import { mountWithI18n as mount } from '../../../helpers/i18n'
 import RunnerConfigPanel from '@/features/runner/components/RunnerConfigPanel.vue'
 import McpPanel from '@/features/mcp/components/McpPanel.vue'
 import McpServerDialog from '@/features/mcp/components/McpServerDialog.vue'
-import runnerVi from '@/features/runner/locales/vi'
-import runnerEn from '@/features/runner/locales/en'
-import mcpVi from '@/features/mcp/locales/vi'
+import { localeMessages } from '../../../helpers/localeYaml'
+
+const runnerVi = localeMessages('vi', 'runner')
+const runnerEn = localeMessages('en', 'runner')
+const mcpVi = localeMessages('vi', 'mcp')
 
 /**
  * TC-80…TC-83 — cấu trúc tab của màn Runner Config. Đây là bề mặt kiểm **AC-2**

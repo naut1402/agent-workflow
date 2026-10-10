@@ -4,11 +4,14 @@ import { mountWithI18n as mount } from '../../../helpers/i18n'
 import ConnectionDialog from '@/features/runner/components/ConnectionDialog.vue'
 import ProviderDialog from '@/features/runner/components/ProviderDialog.vue'
 import type { ProviderConfigOption, ProviderEntry } from '@/features/runner/types'
+import { localeMessages } from '../../../helpers/localeYaml'
+
 // `mountWithI18n` defaults to the 'vi' locale; read expected strings straight
 // from the same message catalog the component renders from (`t()` isn't
 // reachable off `wrapper.vm` here — Vue doesn't expose `<script setup>`
 // bindings on the public instance without `defineExpose`).
-import runnerVi from '@/features/runner/locales/vi'
+const runnerVi = localeMessages('vi', 'runner')
+const runnerEn = localeMessages('en', 'runner')
 
 // Both dialogs render through <Teleport to="body"> — @vue/test-utils'
 // wrapper.find()/findAll() only see the mount anchor, not the teleported
@@ -1237,7 +1240,6 @@ describe('ConnectionDialog — overlay chặn thao tác lúc lưu', () => {
 
 /* ═══ #378 · #379 · Tdf943817 — cảnh báo theo cách giao MCP của provider ══════ */
 
-import runnerEn from '@/features/runner/locales/en'
 import { listProviderCatalog } from '@/features/runner/business/registry'
 
 /**

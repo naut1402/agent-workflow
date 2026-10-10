@@ -48,7 +48,7 @@ Quy ước: [`docs/agent-rules/testing.md`](../docs/agent-rules/testing.md) §3�
 | `tests/src/features/monitor/composables` | vitest | `features/monitor/composables`, `features/runner/scripts`, `features/monitor/scripts` | 6 | `npx vitest run tests/src/features/monitor/composables` |
 | `tests/src/features/monitor/lib` | vitest | `features/monitor/lib` | 5 | `npx vitest run tests/src/features/monitor/lib` |
 | `tests/src/features/monitor/schemas` | vitest | `features/monitor/schemas` | 2 | `npx vitest run tests/src/features/monitor/schemas` |
-| `tests/src/features/nl-chat/components` | vitest | `features/nl-chat/components`, `features/nl-chat/composables`, `frontend/composables` | 4 | `npx vitest run tests/src/features/nl-chat/components` |
+| `tests/src/features/nl-chat/components` | vitest | `features/nl-chat/components`, `features/nl-chat/composables`, `frontend/composables` | 6 | `npx vitest run tests/src/features/nl-chat/components` |
 | `tests/src/features/nl-chat/composables` | vitest | `features/nl-chat/composables`, `frontend/lib` | 3 | `npx vitest run tests/src/features/nl-chat/composables` |
 | `tests/src/features/nl-chat/lib` | vitest | `features/nl-chat/lib` | 3 | `npx vitest run tests/src/features/nl-chat/lib` |
 | `tests/src/features/notifications/components` | vitest | `features/notifications/components`, `features/notifications/lib` | 3 | `npx vitest run tests/src/features/notifications/components` |
@@ -77,11 +77,11 @@ Quy ước: [`docs/agent-rules/testing.md`](../docs/agent-rules/testing.md) §3�
 | `tests/src/features/statistics/components` | vitest | `features/statistics/components`, `features/statistics/lib` | 2 | `npx vitest run tests/src/features/statistics/components` |
 | `tests/src/features/statistics/lib` | vitest | `features/statistics/lib` | 2 | `npx vitest run tests/src/features/statistics/lib` |
 | `tests/src/frontend` | vitest | `frontend/shell`, `features/logs/components`, `features/monitor/components` | 2 | `npx vitest run tests/src/frontend/*.test.ts` |
-| `tests/src/frontend/composables` | vitest | `frontend/composables`, `features/logs/scripts`, `frontend/lib` | 7 | `npx vitest run tests/src/frontend/composables` |
+| `tests/src/frontend/composables` | vitest | `frontend/composables`, `frontend/plugins`, `features/logs/scripts` | 9 | `npx vitest run tests/src/frontend/composables` |
 | `tests/src/frontend/configs` | vitest | `frontend/configs` | 1 | `npx vitest run tests/src/frontend/configs` |
 | `tests/src/frontend/container` | vitest | `frontend/container` | 1 | `npx vitest run tests/src/frontend/container` |
 | `tests/src/frontend/lib` | vitest | `frontend/lib`, `backend/configs`, `features/monitor/composables` | 10 | `npx vitest run tests/src/frontend/lib` |
-| `tests/src/frontend/plugins` | vitest | `frontend/composables`, `frontend/configs`, `frontend/plugins` | 1 | `npx vitest run tests/src/frontend/plugins` |
+| `tests/src/frontend/plugins` | vitest | `frontend/composables`, `frontend/plugins`, `frontend/configs` | 3 | `npx vitest run tests/src/frontend/plugins` |
 | `tests/src/frontend/shell` | vitest | `frontend/shell` | 3 | `npx vitest run tests/src/frontend/shell` |
 | `tests/src/frontend/ui` | vitest | `frontend/ui`, `features/knowledge/components`, `features/runner/components` | 9 | `npx vitest run tests/src/frontend/ui` |
 | `tests/src/server` | bun | `features/settings/business`, `backend/lib`, `backend/registry.ts` | 3 | `bun test tests/src/server/*.test.ts` |
@@ -93,6 +93,7 @@ Quy ước: [`docs/agent-rules/testing.md`](../docs/agent-rules/testing.md) §3�
 | `tests/src/server/features` | bun | `backend/apiServer.ts`, `backend/events`, `backend/http` | 1 | `bun test tests/src/server/features` |
 | `tests/src/server/github` | bun | `features/monitor/business`, `backend/apiServer.ts`, `backend/registry.ts` | 2 | `bun test tests/src/server/github` |
 | `tests/src/server/http` | bun | `backend/apiServer.ts`, `backend/http`, `features/runner/business` | 42 | `bun test tests/src/server/http` |
+| `tests/src/server/i18n` | bun | `backend/apiServer.ts`, `backend/registry.ts`, `features/i18n/business` | 3 | `bun test tests/src/server/i18n` |
 | `tests/src/server/knowledge` | bun | `backend/apiServer.ts`, `backend/db`, `backend/events` | 1 | `bun test tests/src/server/knowledge` |
 | `tests/src/server/lib` | bun | `backend/lib` | 1 | `bun test tests/src/server/lib` |
 | `tests/src/server/orchestrator` | bun | `features/orchestrator/business`, `features/runner/business`, `backend/events` | 10 | `bun test tests/src/server/orchestrator` |

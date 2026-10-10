@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { createTestI18n } from '../../helpers/i18n'
-import vi from '@/features/pipeline-editor/locales/vi'
-import en from '@/features/pipeline-editor/locales/en'
+import { localeMessages } from '../../helpers/localeYaml'
+
+const vi = localeMessages('vi', 'pipelineEditor')
+const en = localeMessages('en', 'pipelineEditor')
 
 // Tbfb52394 · nhóm G của test-spec (TC-G14 / TC-G15) — 4 khoá i18n mới của
 // control "Model" phải có bản dịch RIÊNG ở cả `vi` lẫn `en`.

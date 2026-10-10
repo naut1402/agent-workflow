@@ -4,10 +4,12 @@ import { mount } from '@vue/test-utils'
 import { createTestI18nPlugin } from '../../../helpers/i18n'
 import McpPanel from '@/features/mcp/components/McpPanel.vue'
 import McpServerDialog from '@/features/mcp/components/McpServerDialog.vue'
-import mcpVi from '@/features/mcp/locales/vi'
-import mcpEn from '@/features/mcp/locales/en'
 import { SecretMasker } from '@/features/mcp/business/SecretMasker'
 import type { McpServerConfig } from '@/features/mcp/schemas/mcpServer'
+import { localeMessages } from '../../../helpers/localeYaml'
+
+const mcpVi = localeMessages('vi', 'mcp')
+const mcpEn = localeMessages('en', 'mcp')
 
 /**
  * TC-75…TC-79 (+ TC-101) — panel danh sách MCP.
