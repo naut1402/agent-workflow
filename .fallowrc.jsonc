@@ -74,6 +74,11 @@
       // của task state.
       "file": "src/features/monitor/business/tasks/startAuthority.ts",
       "exports": ["setOrchestratorEnabledFlag"]
+    },
+    {
+      // Test đọc thẳng tầng đĩa của i18n (bundle chưa memo, ETag, gốc repo).
+      "file": "src/features/i18n/business/index.ts",
+      "exports": ["REPO_LOCALES", "localeEtag", "readLocaleBundle"]
     }
   ],
 

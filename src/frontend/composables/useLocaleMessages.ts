@@ -1,8 +1,7 @@
 import { ref, type Ref } from 'vue'
 import { apiFetch } from '../http/client'
-import { getLocaleRegistry, registerLocale, i18n } from '../plugins/i18n'
+import { DEFAULT_LOCALE, getLocaleRegistry, registerLocale, i18n } from '../plugins/i18n'
 import {
-  DEFAULT_LOCALE,
   resolveLocale,
   type AppSettings,
   type LocalePreference,

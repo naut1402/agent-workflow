@@ -91,7 +91,7 @@ export function resolveThemePreference(
   return 'system'
 }
 
-export const DEFAULT_LOCALE: LocalePreference = 'vi'
+const DEFAULT_LOCALE: LocalePreference = 'vi'
 
 /** Effective UI locale: missing / invalid / not in `allowed` → 'vi' (default locale). */
 export function resolveLocale(
