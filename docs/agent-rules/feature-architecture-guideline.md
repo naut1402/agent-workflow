@@ -10,10 +10,12 @@ Xác định **feature sở hữu** trước, rồi đặt artifact đúng lớp
 
 | Loại thay đổi | Đặt ở |
 |---------------|--------|
-| Route HTTP | `src/features/<f>/api.ts` (+ method trên `controller.ts`) |
-| Parse request / `c.json` / status | `controller.ts` — **không** nhét filesystem vào đây |
+| Route HTTP | `src/features/<f>/controller.ts` — `@Controller` + `@Get/@Post/@Put/@Patch/@Delete(path, XRequest)` ngay trên method; feature lớn tách `controllers/<resource>.ts` (§2.5) |
+| Validate request (DTO request, map tên trên dây, luật chéo field) | `XRequest extends FormRequest` trong `controller.ts` — tách `requests.ts` khi controller lớn |
+| Status / lỗi HTTP | handler trả object (200) · `this.fail(status, error)` · `this.json(status, body)` — **không** nhét filesystem vào controller |
 | Domain thuần (đọc/ghi root, rule nghiệp vụ) | `business/` |
-| Zod schema domain | `schemas/` của feature |
+| DTO / model dùng chung lúc chạy (FE · feature khác · `mcp/`) | `schemas/` của feature, khai qua `defineDto` |
+| Wrapper zod (`Dto<S>`, `defineDto`) · kiểu nguyên thuỷ toàn repo | `src/shared/type/` — chỉ khi có importer thật ở cả hai phía |
 | UI Vue / composable | `components/`, `composables/` |
 | FE gọi API | `scripts/*Api.ts` (dùng `apiGet` / `apiPost` từ `src/frontend/http/client`) |
 | Chuỗi UI | `src/shared/locales/vi/<namespace>.yaml` (+ `en/` khuyến nghị) — [`coding-guideline.md`](coding-guideline.md) §6 |
@@ -24,6 +26,7 @@ Xác định **feature sở hữu** trước, rồi đặt artifact đúng lớp
 | Helper kiểu dữ liệu / wrap package / FS | `src/backend/lib/` (Node) hoặc `src/frontend/lib/` (browser) |
 | Ghi audit / request log | `src/backend/log/` — feature `logs` chỉ đọc/stream |
 
+- **Giai đoạn chuyển:** `api.ts` + `bind()` + `AbstractController` (kiểu cũ) vẫn hợp lệ cho feature chưa chuyển — loader nạp song song cả hai kiểu, sắp chung theo order. Feature mới / feature đang sửa controller dùng kiểu decorator; kiểu cũ bị xoá ở lượt quét cuối.
 - **Không tạo cây song song** kiểu `server/<domain>` hay helper "misc" ngoài convention.
 - **Feature tự mang `styles/index.scss`** — glob eager ở `src/frontend/main.ts` tự nạp, không liệt kê tay, không sửa hub wiring.
 - **Chuỗi UI không nằm trong feature** — khai ở `src/shared/locales/<locale>/<namespace>.yaml`, tên file là namespace; thêm file là đủ, không đăng ký tay.
@@ -83,6 +86,41 @@ Logic đơn lẻ (một hiện thực, không phải biên I/O) gom theo nghiệ
 - **`business/` không import Hono**, không biết `c.req`.
 - **Nhận `root` / dữ liệu đã parse**, trả data thuần hoặc `{ status, error }` / discriminated result.
 - **Facade `XxxBusiness extends AbstractBusiness` mỏng** — `requireRoot` → gọi hàm domain.
+
+**Controller kiểu decorator** (nền ở `src/backend/http/`; decorator chuẩn TC39 — 🚫 `experimentalDecorators`, 🚫 `reflect-metadata`):
+
+```ts
+class UsageStatsRequest extends FormRequest<typeof UsageStatsQuerySchema> {
+  static schema = UsageStatsQuerySchema            // source mặc định 'query' · 'body' · 'params'
+  static invalid = 'invalid usage stats query'     // chuỗi 400 khi schema fail
+  prepare(raw) { return { taskId: raw.task || undefined /* … */ } }   // tên trên dây → DTO
+  after() { return null }                          // luật chéo field: chuỗi → 400
+}
+
+@Controller({ order: 65, inject: (scope) => new StatisticsBusiness(scope.root) })
+export class StatisticsController extends AbstractHttpController {
+  constructor(private readonly biz: StatisticsBusiness) { super() }
+
+  @Get('/api/statistics/usage', UsageStatsRequest)
+  usageStats(req: UsageStatsRequest) { return this.biz.usageStats(req.data) }
+}
+```
+
+| Bước (`registerControllers`) | Hành vi |
+|---|---|
+| Root | Route `root: 'required'` (ở `@Controller` hoặc tham số thứ 3 của decorator route) thiếu root → 404 `{ error: 'unknown project', project }` |
+| Validate | Đọc theo `source` → `prepare(raw)` → `safeParse` → 400 `{ error: invalid }`; body không phải JSON → 400 `invalid JSON` |
+| `after()` | Trả chuỗi → 400 `{ error: <chuỗi> }` |
+| Inject | `inject({ root, projectId, ctx })` dựng business, truyền vào constructor; handler đọc phạm vi qua `this.scope` |
+| Kết quả | Object → 200 JSON · `this.fail(status, error, extra?)` / `this.json(status, body)` → status riêng · `Response` trả nguyên; JSON luôn `Cache-Control: no-store` |
+| 405 | Mỗi path đã khai tự có `app.all` → 405 `{ error: 'method not allowed' }`, gắn sau route của mọi feature — 🚫 viết tay |
+| `@Raw` | SSE, multipart, `Response` thô: handler nhận Hono `c` làm đối số đầu — `(c)` hoặc `(c, req)` |
+
+- **Một nơi khai request** — URL, FormRequest, DTO request nằm trong `controller.ts`; tsc ép chữ ký method khớp Request đã khai (lệch → TS1241).
+- **Thứ tự route = thứ tự khai** — path cụ thể (`/api/x/stream`) khai trước path có `:param` (`/api/x/:id`).
+- **Đặt DTO theo nơi dùng lúc chạy** — chỉ controller dùng → `controller.ts`; FE · feature khác · `mcp/` dùng giá trị → `schemas/`; business nhận làm kiểu → `schemas/` (business 🚫 import controller).
+- **FE và `mcp/` chỉ `import type` từ controller**; FE cũng chỉ `import type` từ `business/` — lint `@typescript-eslint/no-restricted-imports` + `allowTypeImports` chặn. `import type` bị xoá khi build nên không kéo Hono vào bundle.
+- **Loader** — `apiServer` nạp `api.ts` (kiểu cũ), `controller.ts` và `controllers/*.ts` của mọi feature (`loadEntriesUnder`), lấy mọi class export có `@Controller`; 🚫 liệt kê tay.
 
 ### 2.6 Cross-feature (peer)
 
