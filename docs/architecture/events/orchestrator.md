@@ -34,7 +34,7 @@ flowchart TD
 | Event | Khi nào | Payload | Nơi emit |
 |-------|---------|---------|----------|
 | `orchestrator.dispatched` | Mỗi quyết định điều phối — kể cả `action: 'summary'` (ghi nhận kết quả, không chạy step) và `action: 'idle'` khi pipeline đã `completed` (mốc kết thúc trong lịch sử) | `taskId`, `projectId`, `devTeamRoot`, `stepId` (không có với `summary`/`idle`), `action` (`start` \| `resume` \| `summary` \| `idle`), `reason` (lượt lưới an toàn mang tiền tố `agent_fallback:`) | `orchestrator/business/decisionLoop.ts` |
-| `orchestrator.halted` | Người bấm Stop, agent trả `halt`, output quyết định không hợp lệ, hoặc job của chính orchestrator failed | `taskId`, `projectId`, `devTeamRoot`, `reason` | `decisionLoop.ts` `haltTask` · `monitor/controller.ts` `putTaskOrchestrator` |
+| `orchestrator.halted` | Người bấm Stop, agent trả `halt`, output quyết định không hợp lệ, hoặc job của chính orchestrator failed | `taskId`, `projectId`, `devTeamRoot`, `reason` | `decisionLoop.ts` `announceHalt` — gọi từ `haltTask` và Stop ở `monitor/controller.ts` `putTaskOrchestrator` |
 | `orchestrator.start_requested` | Automation `mode: existing` trỏ vào task đang được điều phối — bị từ chối (403) và ghi `skipped` thay vì `failed` | `taskId`, `projectId`, `devTeamRoot`, `automationId` | `automations/business/runAction.ts` |
 
 Ghi chú:
