@@ -9,6 +9,8 @@ import type { DashboardEvent } from '../../../../../src/backend/events/index.js'
 import { resetLogDriver, setLogDriver } from '../../../../../src/backend/log/driver.js'
 import { AuditLogEntry, type LogEntry } from '../../../../../src/shared/log/schema.js'
 import { MCP_MAX_TIMEOUT_MS } from '../../../../../src/features/mcp/schemas/mcpServer.js'
+import { upsertCredential } from '../../../../../src/features/runner/business/index.js'
+import { startFakeMcpHttp } from '../../../features/mcp/business/fake-mcp-http.mjs'
 
 /**
  * TC-32…TC-43 — contract HTTP `/api/mcp-servers`. Đây là bề mặt quan sát chính
@@ -682,4 +684,60 @@ describe('Secret literal trong `stdio.args` — biên API (#385)', () => {
     expect(body.server.args).not.toContain('***')
     expect(fs.readFileSync(storeFile(), 'utf8')).not.toContain('"***"')
   })
+})
+
+/**
+ * Tcebe274e-P3 — controller `mcp` lấy credential qua cổng `credentialResolver()`
+ * thay vì import `runner`. `createApp` nạp cả feature `runner`, và
+ * `runner/business/registry.ts` đăng ký `RunnerCredentialResolver` lúc nạp — nên
+ * qua HTTP, *Kiểm tra kết nối* phải giải được credential y như trước refactor.
+ *
+ * Quan sát bằng server HTTP thật (`fake-mcp-http.mjs`): header nào thật sự tới
+ * server mới là câu trả lời, 🚫 không suy từ code.
+ */
+describe('POST /api/mcp-servers/test — credential qua cổng đăng ký (Tcebe274e-P3)', () => {
+  const SECRET = 'p3-credential-secret-0123456789'
+  const prevSecretEnv = process.env.P3_MCP_CRED_TOKEN
+
+  afterAll(() => {
+    if (prevSecretEnv === undefined) delete process.env.P3_MCP_CRED_TOKEN
+    else process.env.P3_MCP_CRED_TOKEN = prevSecretEnv
+  })
+
+  function remoteDraft(url: string, credentialId: string) {
+    return { id: 'remote-cred', label: 'remote-cred', enabled: true, transport: 'http', url, credentialId }
+  }
+
+  test('TC-P3-API-01: credential giải được ⇒ header `Authorization: Bearer <secret>` tới server, 🚫 cảnh báo, 🚫 lộ secret', async () => {
+    process.env.P3_MCP_CRED_TOKEN = SECRET
+    expect(upsertCredential({ id: 'mcp-cred', provider: 'openai-api', secretRef: 'env:P3_MCP_CRED_TOKEN' }).ok).toBe(true)
+    const srv = await startFakeMcpHttp({ mode: 'http' })
+    try {
+      const res = await post('/api/mcp-servers/test', { server: remoteDraft(srv.url(), 'mcp-cred') })
+      expect(res.status).toBe(200)
+      const text = await res.text()
+      const body = JSON.parse(text)
+      expect(body.ok).toBe(true)
+      expect(srv.hops.length).toBeGreaterThan(0)
+      expect(srv.hops[0].headers.authorization).toBe(`Bearer ${SECRET}`)
+      expect(body.warnings.some((w: string) => w.includes('không giải được secret'))).toBe(false)
+      expect(text).not.toContain(SECRET)
+    } finally {
+      await srv.close()
+    }
+  }, 30_000)
+
+  test('TC-P3-API-02: credential không tồn tại ⇒ cảnh báo nguyên văn, server nhận request KHÔNG header xác thực', async () => {
+    const srv = await startFakeMcpHttp({ mode: 'http' })
+    try {
+      const res = await post('/api/mcp-servers/test', { server: remoteDraft(srv.url(), 'ghost') })
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.warnings).toContain('credential ghost: không giải được secret — bỏ header xác thực')
+      expect(srv.hops.length).toBeGreaterThan(0)
+      expect(srv.hops[0].headers.authorization).toBeUndefined()
+    } finally {
+      await srv.close()
+    }
+  }, 30_000)
 })

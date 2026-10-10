@@ -26,7 +26,7 @@ Quy ước: [`docs/agent-rules/testing.md`](../docs/agent-rules/testing.md) §3�
 | `tests/src/backend/db` | bun | `backend/db`, `features/knowledge/business` | 1 | `bun test tests/src/backend/db` |
 | `tests/src/backend/events` | bun | `backend/events` | 1 | `bun test tests/src/backend/events` |
 | `tests/src/backend/http` | vitest | `backend/http` | 1 | `npx vitest run tests/src/backend/http` |
-| `tests/src/backend/lib` | vitest | `backend/lib`, `shared/lib` | 3 | `npx vitest run tests/src/backend/lib` |
+| `tests/src/backend/lib` | vitest | `backend/lib`, `shared/lib` | 4 | `npx vitest run tests/src/backend/lib` |
 | `tests/src/backend/log` | bun | `backend/log`, `features/logs/business`, `backend/events` | 3 | `bun test tests/src/backend/log` |
 | `tests/src/features/agent-editor/business` | bun | `features/agent-editor/business` | 3 | `bun test tests/src/features/agent-editor/business` |
 | `tests/src/features/agent-editor/components` | vitest | `features/agent-editor/components`, `features/agent-editor/scripts`, `features/agent-editor/locales` | 4 | `npx vitest run tests/src/features/agent-editor/components` |
@@ -40,8 +40,8 @@ Quy ước: [`docs/agent-rules/testing.md`](../docs/agent-rules/testing.md) §3�
 | `tests/src/features/logs/composables` | vitest | `features/logs/composables`, `shared/log`, `backend/log` | 3 | `npx vitest run tests/src/features/logs/composables` |
 | `tests/src/features/logs/scripts` | vitest | `features/logs/scripts` | 1 | `npx vitest run tests/src/features/logs/scripts` |
 | `tests/src/features/mcp` | vitest | `features/mcp/locales` | 1 | `npx vitest run tests/src/features/mcp/*.test.ts` |
-| `tests/src/features/mcp/business` | bun | `features/mcp/business`, `features/agent-editor/business` | 6 | `bun test tests/src/features/mcp/business` |
-| `tests/src/features/mcp/components` | vitest | `features/mcp/locales`, `features/mcp/components`, `features/mcp/business` | 2 | `npx vitest run tests/src/features/mcp/components` |
+| `tests/src/features/mcp/business` | bun | `features/mcp/business`, `features/mcp/schemas`, `backend/lib` | 8 | `bun test tests/src/features/mcp/business` |
+| `tests/src/features/mcp/components` | vitest | `features/mcp/locales`, `features/mcp/business`, `features/mcp/components` | 2 | `npx vitest run tests/src/features/mcp/components` |
 | `tests/src/features/monitor` | vitest | `features/monitor/locales`, `features/monitor/composables` | 3 | `npx vitest run tests/src/features/monitor/*.test.ts` |
 | `tests/src/features/monitor/business` | bun | `features/monitor/business`, `backend/lib`, `features/runner/business` | 6 | `bun test tests/src/features/monitor/business` |
 | `tests/src/features/monitor/components` | vitest | `features/monitor/components`, `features/monitor/locales`, `features/monitor/scripts` | 12 | `npx vitest run tests/src/features/monitor/components` |
@@ -63,7 +63,7 @@ Quy ước: [`docs/agent-rules/testing.md`](../docs/agent-rules/testing.md) §3�
 | `tests/src/features/quick-action/components` | vitest | `features/quick-action/components`, `features/quick-action/scripts`, `features/runner/scripts` | 1 | `npx vitest run tests/src/features/quick-action/components` |
 | `tests/src/features/quick-action/composables` | vitest | `features/quick-action/composables` | 1 | `npx vitest run tests/src/features/quick-action/composables` |
 | `tests/src/features/quick-action/lib` | vitest | `features/quick-action/lib` | 1 | `npx vitest run tests/src/features/quick-action/lib` |
-| `tests/src/features/runner/business` | bun | `features/runner/business`, `features/mcp/business` | 13 | `bun test tests/src/features/runner/business` |
+| `tests/src/features/runner/business` | bun | `features/runner/business`, `features/mcp/business`, `features/mcp/schemas` | 13 | `bun test tests/src/features/runner/business` |
 | `tests/src/features/runner/components` | vitest | `features/runner/scripts`, `features/runner/locales`, `features/runner/components` | 3 | `npx vitest run tests/src/features/runner/components` |
 | `tests/src/features/runner/lib` | vitest | `features/runner/lib` | 1 | `npx vitest run tests/src/features/runner/lib` |
 | `tests/src/features/runner/scripts` | vitest | `features/runner/scripts` | 1 | `npx vitest run tests/src/features/runner/scripts` |
@@ -84,7 +84,7 @@ Quy ước: [`docs/agent-rules/testing.md`](../docs/agent-rules/testing.md) §3�
 | `tests/src/frontend/plugins` | vitest | `frontend/composables`, `frontend/configs`, `frontend/plugins` | 1 | `npx vitest run tests/src/frontend/plugins` |
 | `tests/src/frontend/shell` | vitest | `frontend/shell` | 3 | `npx vitest run tests/src/frontend/shell` |
 | `tests/src/frontend/ui` | vitest | `frontend/ui`, `features/knowledge/components`, `features/runner/components` | 9 | `npx vitest run tests/src/frontend/ui` |
-| `tests/src/server` | bun | `features/settings/business`, `backend/registry.ts`, `backend/apiServer.ts` | 3 | `bun test tests/src/server/*.test.ts` |
+| `tests/src/server` | bun | `features/settings/business`, `backend/lib`, `backend/registry.ts` | 3 | `bun test tests/src/server/*.test.ts` |
 | `tests/src/server/agents` | bun | `features/agent-editor/business` | 5 | `bun test tests/src/server/agents` |
 | `tests/src/server/artifactActions` | bun | `features/monitor/business`, `features/monitor/schemas` | 1 | `bun test tests/src/server/artifactActions` |
 | `tests/src/server/automations` | bun | `features/automations/business`, `backend/events`, `features/automations/schemas` | 10 | `bun test tests/src/server/automations` |
@@ -98,7 +98,7 @@ Quy ước: [`docs/agent-rules/testing.md`](../docs/agent-rules/testing.md) §3�
 | `tests/src/server/orchestrator` | bun | `features/orchestrator/business`, `features/runner/business`, `backend/events` | 10 | `bun test tests/src/server/orchestrator` |
 | `tests/src/server/pipeline` | bun | `features/pipeline-editor/business`, `shared/lib` | 2 | `bun test tests/src/server/pipeline` |
 | `tests/src/server/rules` | bun | `features/pipeline-editor/business` | 1 | `bun test tests/src/server/rules` |
-| `tests/src/server/runners` | bun | `features/runner/business`, `features/mcp/business`, `backend/events` | 29 | `bun test tests/src/server/runners` |
+| `tests/src/server/runners` | bun | `features/runner/business`, `backend/events`, `backend/registry.ts` | 29 | `bun test tests/src/server/runners` |
 | `tests/src/server/settings` | bun | `features/settings/business` | 2 | `bun test tests/src/server/settings` |
 | `tests/src/server/tasks` | bun | `features/monitor/business`, `features/runner/business`, `backend/events` | 4 | `bun test tests/src/server/tasks` |
 | `tests/src/shared/lib` | bun | `frontend/http`, `shared/lib` | 1 | `bun test tests/src/shared/lib` |
