@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { encodeWorkspacePath } from '../../../../src/features/monitor/business/sessionTranscript'
+import { encodeWorkspacePath } from '../../../../src/features/monitor/business/transcripts/ClaudeTranscriptReader'
 import { getTaskChatState, resolveChatSession } from '../../../../src/features/monitor/business/taskChat'
 import { recordSessionUsage, saveTaskSessionLedger, type SessionEntry } from '../../../../src/features/runner/business/sessionLedger'
 import { upsertConnection, upsertRunner } from '../../../../src/features/runner/business/index'
