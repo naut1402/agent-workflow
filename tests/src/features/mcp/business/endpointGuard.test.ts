@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { RemoteMcpServer } from '../../../../../src/features/mcp/business/RemoteMcpServer.js'
-import { fetchUrlSafe, isPrivateHostname } from '../../../../../src/features/agent-editor/business/index.js'
+import { fetchUrlSafe } from '../../../../../src/features/agent-editor/business/index.js'
+import { isPrivateHostname } from '../../../../../src/backend/lib/netUtils.js'
 
 /**
  * TC-11…TC-18 — chốt URL riêng của MCP (`RemoteMcpServer.assertEndpoint`).
