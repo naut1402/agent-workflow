@@ -68,7 +68,7 @@ Logic đơn lẻ (một hiện thực, không phải biên I/O) gom theo nghiệ
 |-----|--------|
 | `agents.ts` (CRUD + path + seed template + fetch URL an toàn) | `store.ts` + `paths.ts` + `fetch.ts` + `templates.ts` tách chỉ vì khác I/O |
 | `dashboardSettings.ts` / `autoscan.ts` | `autoscan/config.ts` + `scan.ts` khi cùng một cụm settings nhỏ |
-| Tách `catalog/scan.ts` khi scan đã lớn và biên rõ với `buildCatalog` | Tách `builtins.ts` / `dedupe.ts` 20 dòng chỉ vì "loại helper" |
+| Tách `catalog/catalogMarkdown.ts` khi phần đọc markdown đã lớn và biên rõ với `buildCatalog` | Tách `builtins.ts` / `dedupe.ts` 20 dòng chỉ vì "loại helper" |
 
 - **Ít file, ít phân tán** — chỉ tách khi biên rõ với người đọc domain, hoặc file đủ lớn / đủ độc lập để review và test riêng.
 - **Helper nhỏ** (sanitize tên, parse một format) gắn vào module đang dùng nó — không tạo file riêng chỉ vì "là sanitize" / "là parse".
