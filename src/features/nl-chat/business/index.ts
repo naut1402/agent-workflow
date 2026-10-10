@@ -13,9 +13,9 @@ export {
   // fallow-ignore-next-line unused-export
   listPipelineProfileNames,
 } from '../../agent-editor/business/index.js'
-export { buildCatalog } from '../../pipeline-editor/business/catalog/index.js'
+export { buildCatalog } from '../../pipeline-editor/business/index.js'
 // fallow-ignore-next-line unused-type
-export type { CatalogScanPatterns } from '../../pipeline-editor/business/catalog/index.js'
+export type { CatalogScanPatterns } from '../../pipeline-editor/business/index.js'
 export { loadScanPatternsConfig } from '../../settings/business/index.js'
 // Barrel `automations/business` khởi động scheduler/event-trigger ở top-level
 // (chắn bằng `!process.env.BUN_TEST`) — an toàn ở đây vì không file FE nào
