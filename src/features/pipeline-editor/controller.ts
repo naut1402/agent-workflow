@@ -4,15 +4,8 @@ import { loadYaml, dumpYaml } from '../../backend/lib/yamlLib.js'
 import { AbstractController } from '../../backend/http/AbstractController.js'
 import { statSafe, writeTextFileAtomicSync } from '../../backend/lib/fileHelper.js'
 import * as pipelineEditorBusiness from './business/index.js'
-import { draftFromAgentMarkdown } from '../agent-editor/business/agentMarkdown.js'
-import { parseFrontmatter } from '../../backend/lib/yamlLib.js'
+import { PipelineEditorBusiness } from './business/PipelineEditorBusiness.js'
 import { emitAudit } from '../../backend/log/store.js'
-import {
-  buildCatalog,
-  parseCatalogItemId,
-  resolveCatalogAgentPath,
-  resolveCatalogSkillPath,
-} from './business/catalog/index.js'
 import { buildRules, resolveRuleContentPathWithPatterns } from './business/rules/index.js'
 
 /**
@@ -204,97 +197,39 @@ export class PipelineEditorController extends AbstractController {
     return this.ok({ written: true, scope, target })
   }
 
+  private biz() {
+    return new PipelineEditorBusiness(this.root)
+  }
+
   async getCatalog() {
     const gate = this.requireRoot()
     if ('error' in gate) return gate.error
-    const { root } = gate
 
-    return this.ok(await buildCatalog(root, {
-      scanCustomAgents: pipelineEditorBusiness.scanCustomAgents,
-      scanPatterns: pipelineEditorBusiness.loadScanPatternsConfig(),
-    }))
+    const r = await this.biz().getCatalog()
+    if ('error' in r) return this.json(r.status, { error: r.error })
+    return this.ok(r)
   }
 
   async getCatalogAgent() {
     const gate = this.requireRoot()
     if ('error' in gate) return gate.error
-    const { root } = gate
 
     const id = this.c.req.query('id')
     if (!id) return this.badRequest('missing id')
-    const projectRoot = path.dirname(root)
-    let agentPath = await resolveCatalogAgentPath(projectRoot, root, id, {
-      customAgentsDir: pipelineEditorBusiness.customAgentsDir,
-      scanPatterns: pipelineEditorBusiness.loadScanPatternsConfig().agents,
-    })
-    if (!agentPath) {
-      const parsed = parseCatalogItemId(id)
-      if (parsed?.source?.startsWith('repo:')) {
-        const pluginName = parsed.source.slice('repo:'.length)
-        const builtin = path.join(projectRoot, 'plugins', pluginName, 'agents', `${parsed.name}.md`)
-        try {
-          await fs.access(builtin)
-          agentPath = builtin
-        } catch {
-          /* not found */
-        }
-      }
-    }
-    if (!agentPath) return this.notFound('agent file not found')
-    try {
-      const raw = await fs.readFile(agentPath, 'utf8')
-      const meta = parseCatalogItemId(id)
-      const draft = draftFromAgentMarkdown(raw, { name: meta?.name, description: '' })
-      const fm = parseFrontmatter(raw)
-      if (fm.description) draft.description = fm.description
-      if (Array.isArray(fm.skills) && fm.skills.length) draft.skills = [...fm.skills]
-      return this.ok({ id, path: agentPath, content: raw, draft })
-    } catch (e: any) {
-      if (e?.code === 'ENOENT') return this.notFound('agent file not found')
-      return this.json(500, { error: String(e.message || e) })
-    }
+    const r = await this.biz().getCatalogAgent(id)
+    if ('error' in r) return this.json(r.status, { error: r.error })
+    return this.ok(r)
   }
 
   async getSkillContent() {
     const gate = this.requireRoot()
     if ('error' in gate) return gate.error
-    const { root } = gate
 
     const id = this.c.req.query('id')
     if (!id) return this.badRequest('missing id')
-    const projectRoot = path.dirname(root)
-    let skillPath = await resolveCatalogSkillPath(projectRoot, id, {
-      sanitiseName: pipelineEditorBusiness.sanitiseAgentName,
-      scanPatterns: pipelineEditorBusiness.loadScanPatternsConfig().skills,
-    })
-    if (!skillPath) {
-      const parsed = parseCatalogItemId(id)
-      // `pluginName` đi thẳng vào `path.join` như `name` nên cũng phải qua whitelist
-      // ký tự (AGENTS.md §4), nếu không `id=repo:../../..:x` thoát khỏi `plugins/`.
-      // Resolve + `startsWith` bên dưới là lớp chặn thứ hai, độc lập với whitelist.
-      if (parsed?.source?.startsWith('repo:') && pipelineEditorBusiness.sanitiseAgentName(parsed.name) === parsed.name) {
-        const pluginName = parsed.source.slice('repo:'.length)
-        if (pipelineEditorBusiness.sanitiseAgentName(pluginName) === pluginName) {
-          const pluginsDir = path.resolve(projectRoot, 'plugins')
-          const builtin = path.resolve(pluginsDir, pluginName, 'skills', parsed.name, 'SKILL.md')
-          if (builtin.startsWith(pluginsDir + path.sep)) {
-            try {
-              await fs.access(builtin)
-              skillPath = builtin
-            } catch {
-              /* not found */
-            }
-          }
-        }
-      }
-    }
-    if (!skillPath) return this.notFound('skill file not found')
-    try {
-      const raw = await fs.readFile(skillPath, 'utf8')
-      return this.ok({ id, content: raw })
-    } catch (e: any) {
-      return this.json(500, { error: String(e.message || e) })
-    }
+    const r = await this.biz().getSkillContent(id)
+    if ('error' in r) return this.json(r.status, { error: r.error })
+    return this.ok(r)
   }
 
   async getRules() {
