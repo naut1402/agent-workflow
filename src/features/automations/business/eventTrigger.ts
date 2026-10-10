@@ -11,9 +11,9 @@
 
 import { on, type DashboardEvent } from '../../../backend/events/index.js'
 import { loadRegistry } from '../../../backend/registry.js'
+import { getBoundAutomationRunner } from './AutomationRunner.js'
 import { getRuleState } from './runLedger.js'
 import { listAutomations } from './rules.js'
-import { getBoundAutomationRunner } from './scheduler.js'
 
 export const MIN_EVENT_REFIRE_MS = 10_000
 
