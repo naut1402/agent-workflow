@@ -1,10 +1,11 @@
 #!/usr/bin/env bun
 // Ghi file YAML phẳng người biên dịch trả về ngược vào
 // `src/shared/locales/<locale>/<namespace>.yaml`, tách theo segment đầu (namespace).
-// Chỉ ghi đè khoá có trong file đầu vào; namespace lạ bị bỏ qua; file hỏng thì không ghi gì.
+// Chỉ ghi đè khoá có trong file đầu vào; namespace lạ, segment `__proto__`/`constructor`/`prototype`
+// và khoá đi xuyên qua một chuỗi sẵn có bị bỏ qua; file hỏng thì không ghi gì.
 //
 //   bun run i18n:import --locale=en out/i18n/en.yaml
-import { readdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs'
+import { readdirSync, readFileSync, writeFileSync, renameSync, existsSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { dumpYaml, loadYaml } from '../src/shared/lib/yamlLib'
 
@@ -41,14 +42,22 @@ const known = new Set(
     .map((f) => f.slice(0, -'.yaml'.length)),
 )
 
-function setPath(tree: Record<string, unknown>, path: string[], value: string): void {
+const UNSAFE_SEGMENTS = new Set(['__proto__', 'constructor', 'prototype'])
+
+/** `false` khi đường dẫn đi qua một giá trị không phải object — giữ nguyên cây. */
+function setPath(tree: Record<string, unknown>, path: string[], value: string): boolean {
   let node = tree
   for (const seg of path.slice(0, -1)) {
+    if (!Object.hasOwn(node, seg)) node[seg] = {}
     const next = node[seg]
-    if (!next || typeof next !== 'object' || Array.isArray(next)) node[seg] = {}
-    node = node[seg] as Record<string, unknown>
+    if (!next || typeof next !== 'object' || Array.isArray(next)) return false
+    node = next as Record<string, unknown>
   }
-  node[path[path.length - 1]] = value
+  const last = path[path.length - 1]
+  const prev = Object.hasOwn(node, last) ? node[last] : undefined
+  if (prev && typeof prev === 'object') return false
+  node[last] = value
+  return true
 }
 
 const byNamespace = new Map<string, Record<string, unknown>>()
@@ -58,7 +67,7 @@ let applied = 0
 for (const [flatKey, value] of Object.entries(flat)) {
   const segments = flatKey.split('.')
   const namespace = segments[0]
-  if (segments.length < 2 || !known.has(namespace)) {
+  if (segments.length < 2 || !known.has(namespace) || segments.some((s) => UNSAFE_SEGMENTS.has(s))) {
     skipped.push(flatKey)
     continue
   }
@@ -66,16 +75,22 @@ for (const [flatKey, value] of Object.entries(flat)) {
     const raw = loadYaml(readFileSync(join(localeDir, `${namespace}.yaml`), 'utf8'))
     byNamespace.set(namespace, (raw ?? {}) as Record<string, unknown>)
   }
-  setPath(byNamespace.get(namespace)!, segments.slice(1), String(value))
+  if (!setPath(byNamespace.get(namespace)!, segments.slice(1), String(value))) {
+    skipped.push(flatKey)
+    continue
+  }
   applied++
 }
 
 for (const [namespace, tree] of byNamespace) {
-  writeFileSync(join(localeDir, `${namespace}.yaml`), dumpYaml(tree, { lineWidth: -1 }))
+  const target = join(localeDir, `${namespace}.yaml`)
+  const temporary = `${target}.${process.pid}.tmp`
+  writeFileSync(temporary, dumpYaml(tree, { lineWidth: -1 }))
+  renameSync(temporary, target)
 }
 
 console.log(
   `[i18n:import] ${localeArg}: ${applied} khoá vào ${byNamespace.size} namespace` +
-    (skipped.length ? `; bỏ qua ${skipped.length} khoá namespace lạ` : ''),
+    (skipped.length ? `; bỏ qua ${skipped.length} khoá` : ''),
 )
-for (const key of skipped) console.warn(`[i18n:import] bỏ qua khoá namespace lạ: ${key}`)
+for (const key of skipped) console.warn(`[i18n:import] bỏ qua khoá: ${key}`)

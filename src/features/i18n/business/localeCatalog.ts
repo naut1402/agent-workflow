@@ -35,10 +35,18 @@ function orderLocales(codes: string[]): string[] {
   return [...PINNED_ORDER.filter((c) => codes.includes(c)), ...rest]
 }
 
+/** Thư mục locale có ít nhất một file namespace `.yaml`. */
 async function readLocaleDirNames(dir: string | null): Promise<string[]> {
   if (!dir) return []
-  const entries = await safeReadDir(dir)
-  return entries.filter((e) => e.isDirectory()).map((e) => e.name)
+  const names: string[] = []
+  for (const entry of await safeReadDir(dir)) {
+    if (!entry.isDirectory() || !isSafeLocaleCode(entry.name)) continue
+    const localeDir = resolvePathUnder(dir, entry.name)
+    if (!localeDir) continue
+    const files = await safeReadDir(localeDir)
+    if (files.some((f) => f.isFile() && f.name.endsWith('.yaml'))) names.push(entry.name)
+  }
+  return names
 }
 
 export async function listLocales(
@@ -47,17 +55,16 @@ export async function listLocales(
 ): Promise<string[]> {
   const repo = await readLocaleDirNames(baseDir)
   const over = await readLocaleDirNames(overlayDir(defaultRoot))
-  return orderLocales([...new Set([...repo, ...over])].filter(isSafeLocaleCode))
+  return orderLocales([...new Set([...repo, ...over])])
 }
 
-/** `null` khi thư mục không tồn tại hoặc rỗng; file hỏng / không phải object bị bỏ qua. */
+/** `null` khi thư mục không có file `.yaml` nào; file hỏng / không phải object bị bỏ qua. */
 async function readNamespaceDir(dir: string | null): Promise<LocaleBundle | null> {
   if (!dir) return null
-  const entries = await safeReadDir(dir)
+  const entries = (await safeReadDir(dir)).filter((e) => e.isFile() && e.name.endsWith('.yaml'))
   if (entries.length === 0) return null
   const out: LocaleBundle = {}
   for (const entry of entries) {
-    if (!entry.isFile() || !entry.name.endsWith('.yaml')) continue
     const namespace = entry.name.slice(0, -'.yaml'.length)
     const file = resolvePathUnder(dir, entry.name)
     if (!file) continue

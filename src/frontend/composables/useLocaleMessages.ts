@@ -19,6 +19,7 @@ type CacheShape = Record<string, CacheEntry>
 const loadedLocales: Ref<string[]> = ref([])
 const pending: Ref<string | null> = ref(null)
 const lastError: Ref<string | null> = ref(null)
+const manifestError: Ref<string | null> = ref(null)
 const inflight = new Map<string, Promise<boolean>>()
 
 function readCache(): CacheShape {
@@ -93,6 +94,7 @@ export async function ensureLocale(
 
   const task = (async (): Promise<boolean> => {
     pending.value = locale
+    lastError.value = null
     try {
       const headers: Record<string, string> = {}
       if (cached?.etag) headers['If-None-Match'] = cached.etag
@@ -107,12 +109,11 @@ export async function ensureLocale(
       registerLocale(locale, messages)
       writeCache(locale, { etag, messages })
       markLoaded(locale)
-      lastError.value = null
       return true
     } catch (err) {
-      lastError.value = err instanceof Error ? err.message : String(err)
       const ok = hasMessages(locale)
       if (ok) markLoaded(locale)
+      else lastError.value = err instanceof Error ? err.message : String(err)
       return ok
     } finally {
       pending.value = null
@@ -134,8 +135,9 @@ export async function ensureManifest(): Promise<void> {
     for (const code of locales) {
       if (typeof code === 'string' && code) registerLocale(code, {})
     }
+    manifestError.value = null
   } catch (err) {
-    lastError.value = err instanceof Error ? err.message : String(err)
+    manifestError.value = err instanceof Error ? err.message : String(err)
   }
 }
 
@@ -168,6 +170,7 @@ export function useLocaleMessages() {
     loadedLocales,
     pending,
     lastError,
+    manifestError,
     primeFromCache,
     ensureLocale,
     ensureManifest,

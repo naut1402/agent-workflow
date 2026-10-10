@@ -40,7 +40,9 @@ export function useLocale(): {
       return
     }
 
-    const ok = loadedLocales.value.includes(next) ? true : await ensureLocale(next)
+    let ok = true
+    if (loadedLocales.value.includes(next)) lastError.value = null
+    else ok = await ensureLocale(next)
 
     if (requestedLocale !== next) return
     requestedLocale = null
