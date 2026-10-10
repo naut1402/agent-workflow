@@ -1,37 +1,59 @@
-import { AbstractController } from '../../backend/http/AbstractController.js'
+import { AbstractHttpController } from '../../backend/http/AbstractHttpController.js'
+import { Controller, Get } from '../../backend/http/decorators.js'
+import { FormRequest } from '../../backend/http/FormRequest.js'
 import * as statisticsBusiness from './business/index.js'
 import { UsageStatsQuerySchema } from './schemas/usageStats.js'
 
-export class StatisticsController extends AbstractController {
-  private biz() {
-    return new statisticsBusiness.StatisticsBusiness(this.root)
+/**
+ * `GET /api/statistics/usage?project=&task=&step=&from=&to=&groupBy=`
+ *
+ * Tên trên dây `task` / `step` → `taskId` / `stepId` của DTO. Chuỗi rỗng coi như không gửi.
+ * `UsageStatsQuerySchema` ở lại `schemas/` vì business nhận đúng kiểu đó (`UsageStatsQuery`).
+ */
+export class UsageStatsRequest extends FormRequest<typeof UsageStatsQuerySchema> {
+  static schema = UsageStatsQuerySchema
+  static invalid = 'invalid usage stats query'
+
+  /** Mốc thời gian đã parse ở `after()` — chỉ có khi request hợp lệ. */
+  bounds: { fromMs?: number; toMs?: number } = {}
+
+  prepare(raw: Record<string, unknown>) {
+    const pick = (key: string) => (raw[key] as string | undefined) || undefined
+    return {
+      project: pick('project'),
+      taskId: pick('task'),
+      stepId: pick('step'),
+      from: pick('from'),
+      to: pick('to'),
+      groupBy: pick('groupBy'),
+    }
   }
 
-  /** GET /api/statistics/usage?project=&task=&step=&from=&to=&groupBy= */
-  async usageStats() {
-    const parsed = UsageStatsQuerySchema.safeParse({
-      project: this.c.req.query('project') || undefined,
-      taskId: this.c.req.query('task') || undefined,
-      stepId: this.c.req.query('step') || undefined,
-      from: this.c.req.query('from') || undefined,
-      to: this.c.req.query('to') || undefined,
-      groupBy: this.c.req.query('groupBy') || undefined,
-    })
-    if (!parsed.success) return this.badRequest('invalid usage stats query')
-    const query = parsed.data
-
-    const bounds: { fromMs?: number; toMs?: number } = {}
-    if (query.from !== undefined) {
-      const ms = statisticsBusiness.parseTimeBoundMs(query.from)
-      if (ms === null) return this.badRequest('invalid from')
-      bounds.fromMs = ms
+  after(): string | null {
+    const { from, to } = this.data
+    if (from !== undefined) {
+      const ms = statisticsBusiness.parseTimeBoundMs(from)
+      if (ms === null) return 'invalid from'
+      this.bounds.fromMs = ms
     }
-    if (query.to !== undefined) {
-      const ms = statisticsBusiness.parseTimeBoundMs(query.to)
-      if (ms === null) return this.badRequest('invalid to')
-      bounds.toMs = ms
+    if (to !== undefined) {
+      const ms = statisticsBusiness.parseTimeBoundMs(to)
+      if (ms === null) return 'invalid to'
+      this.bounds.toMs = ms
     }
+    return null
+  }
+}
 
-    return this.ok(await this.biz().usageStats(query, bounds))
+/** Sau logs (60) — không có route `:param` tranh chấp, giữ thứ tự ổn định. */
+@Controller({ order: 65, inject: (scope) => new statisticsBusiness.StatisticsBusiness(scope.root) })
+export class StatisticsController extends AbstractHttpController {
+  constructor(private readonly biz: statisticsBusiness.StatisticsBusiness) {
+    super()
+  }
+
+  @Get('/api/statistics/usage', UsageStatsRequest)
+  usageStats(req: UsageStatsRequest) {
+    return this.biz.usageStats(req.data, req.bounds)
   }
 }
