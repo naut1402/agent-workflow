@@ -4,11 +4,13 @@ import { createTestI18nPlugin } from '../../../helpers/i18n'
 import { mount } from '@vue/test-utils'
 import McpServerDialog from '@/features/mcp/components/McpServerDialog.vue'
 import CSelect from '@/frontend/ui/CSelect.vue'
-import mcpVi from '@/features/mcp/locales/vi'
-import mcpEn from '@/features/mcp/locales/en'
 import { MCP_DEFAULT_TIMEOUT_MS, MCP_MIN_TIMEOUT_MS } from '@/features/mcp/schemas/mcpServer'
 import { McpServer } from '@/features/mcp/business/McpServer'
 import { SecretMasker } from '@/features/mcp/business/SecretMasker'
+import { localeMessages } from '../../../helpers/localeYaml'
+
+const mcpVi = localeMessages('vi', 'mcp')
+const mcpEn = localeMessages('en', 'mcp')
 
 /**
  * TC-65…TC-74 (khai báo MCP server) + TC-A01…TC-A22 · TC-B01/B02/B11 ·

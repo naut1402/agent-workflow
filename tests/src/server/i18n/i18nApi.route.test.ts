@@ -173,6 +173,23 @@ describe('GET /api/i18n/:locale — overlay', () => {
     expect(over.headers.get('ETag')).not.toBe(plain.headers.get('ETag'))
   })
 
+  test('TC-B11b: sửa overlay giữa hai request cùng app ⇒ ETag mới, ETag cũ không còn 304', async () => {
+    writeFxRoot(tmp)
+    const app = await appWith(tmp)
+    const first = await app.request('/api/i18n/vi')
+    const oldEtag = first.headers.get('ETag')!
+
+    const file = path.join(tmp, 'locales', 'vi', 'common.yaml')
+    fs.writeFileSync(file, dumpYaml({ language: { names: { vi: 'OVERLAY-VI-2' } } }))
+    const later = new Date(Date.now() + 10_000)
+    fs.utimesSync(file, later, later)
+
+    const res = await app.request('/api/i18n/vi', { headers: { 'If-None-Match': oldEtag } })
+    expect(res.status).toBe(200)
+    expect(res.headers.get('ETag')).not.toBe(oldEtag)
+    expect((await res.json()).messages.common.language.names.vi).toBe('OVERLAY-VI-2')
+  })
+
   test('TC-B12: overlay dir không tồn tại ⇒ vẫn 200 (G-C8)', async () => {
     const res = await (await appWith(tmp)).request('/api/i18n/vi')
     expect(res.status).toBe(200)

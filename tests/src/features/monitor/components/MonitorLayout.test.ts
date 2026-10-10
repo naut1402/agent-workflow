@@ -3,8 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import MonitorLayout from '@/features/monitor/components/MonitorLayout.vue'
 import { STORAGE_KEY, useAppSettings } from '@/frontend/composables/useAppSettings'
-import viMonitor from '@/features/monitor/locales/vi'
-import enMonitor from '@/features/monitor/locales/en'
+import { localeMessages } from '../../../helpers/localeYaml'
+
+const viMonitor = localeMessages('vi', 'monitor')
+const enMonitor = localeMessages('en', 'monitor')
 
 const tasks = [
   {

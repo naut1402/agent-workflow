@@ -268,6 +268,17 @@ describe('useLocale.setLocale (nhóm H)', () => {
     expect(calls.map((c) => c.url)).toEqual(['/api/i18n/en'])
   })
 
+  it('TC-H08: locale đã lưu không có trong registry ⇒ `locale` là vi; đăng ký vào thì nhận lại', () => {
+    expect(supportedLocales()).not.toContain('ko')
+    useAppSettings().update({ locale: 'ko' })
+
+    const { locale } = useLocale()
+    expect(locale.value).toBe('vi')
+
+    registerLocale('ko', { common: { ok: 'KO' } })
+    expect(locale.value).toBe('ko')
+  })
+
   it('TC-H03b: cache của store tách khỏi settings — hai key localStorage riêng', async () => {
     stubFetch(() =>
       jsonResponse({ locale: 'en', messages: { common: { ok: 'OK' } } }, {

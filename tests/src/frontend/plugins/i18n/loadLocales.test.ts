@@ -99,18 +99,8 @@ describe('loadLocaleMessages — shape và nguồn dữ liệu', () => {
   })
 })
 
-/**
- * TC-E06 — MỘT NGUỒN SỰ THẬT.
- *
- * 🔒 Ca ĐẢO CHIỀU, cố ý để `.skip`: nó đỏ chừng nào 30 file `.ts` cũ còn tồn tại, và
- * chúng CÒN TỒN TẠI theo cổng chặn `test-spec.md` §8.1 (hạng mục #10 của `design.md`
- * §7 gate việc xoá sau cùng; nợ đã ghi ở `docs/todo/adhoc/T94b6ee41.md` mục A).
- *
- * Bật `.skip` này trong CHÍNH commit xoá 30 file đó — không sớm hơn, không muộn hơn.
- * Viết sẵn ở đây vì viết sau thì không ai nhớ.
- */
 describe('TC-E06: một nguồn sự thật cho chuỗi dịch', () => {
-  it.skip('🚫 không còn file locale `.ts` nào (bật cùng commit xoá — §8.1)', () => {
+  it('không còn file locale `.ts` nào', () => {
     const legacy: string[] = []
 
     const featuresDir = path.join(REPO_ROOT, 'src/features')

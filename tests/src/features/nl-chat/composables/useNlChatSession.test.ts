@@ -593,3 +593,97 @@ describe('useNlChatSession', () => {
     expect(s.messages.value).toEqual([])
   })
 })
+
+/**
+ * Characterization của đợt i18n hoá: thông điệp hiển thị do composable sinh ra giữ
+ * nguyên từng ký tự bản `vi` cũ (hằng chép từ `useNlChatSession.ts` trước migrate).
+ * Composable chạy ngoài component nên đi qua `t` của plugin, locale mặc định `vi`.
+ */
+const VI_BEFORE = {
+  entityUnclear: 'Mình chưa rõ bạn muốn tạo Task, Pipeline, Agent hay Automation — bạn nói rõ giúp mình nhé?',
+  catalogLoadFailed: 'Không tải được danh sách agent để kiểm tra — vui lòng thử lại.',
+  pipelineUnknownAgents: (list: string) => `Pipeline tham chiếu agent không tồn tại trong catalog: ${list}`,
+  profilesLoadFailed: 'Không tải được danh sách pipeline profile để kiểm tra — vui lòng thử lại.',
+  checkingProfiles: 'Đang kiểm tra danh sách pipeline profile...',
+  unknownProfiles: (list: string) =>
+    `Pipeline profile không tồn tại: ${list} — sửa lại hoặc bỏ trống để dùng pipeline mặc định.`,
+  noProjectSelected: 'Chưa chọn project — chọn project ở header hoặc đổi phạm vi agent sang "Toàn cục".',
+  jobEnded: (status: string) => `job ${status}`,
+}
+
+describe('useNlChatSession — thông điệp đã i18n hoá giữ nguyên bản `vi`', () => {
+  it('draft không rõ loại đối tượng hỏi lại bằng đúng câu cũ', async () => {
+    stubApi({ turn: { status: 'ready', kind: 'draft', draft: { name: 'x' } } })
+    const s = make()
+    await s.sendMessage('làm gì đó')
+    expect(s.messages.value[1]).toEqual({ role: 'assistant', text: VI_BEFORE.entityUnclear })
+  })
+
+  it('lỗi nạp catalog agent và ref agent sai', async () => {
+    stubApi({
+      turn: { status: 'ready', kind: 'draft', entityType: 'pipeline', draft: { steps: [{ agent: 'ghost' }] } },
+      catalogSeq: ['fail'],
+    })
+    const failing = make()
+    await failing.sendMessage('tạo pipeline')
+    await new Promise((r) => setTimeout(r, 5))
+    expect(failing.catalogError.value).toBe(VI_BEFORE.catalogLoadFailed)
+
+    stubApi({ turn: { status: 'ready', kind: 'draft', entityType: 'pipeline', draft: { steps: [] } } })
+    const s = make()
+    s.pipelineName.value = 'p'
+    await s.sendMessage('tạo pipeline')
+    await s.confirm({ steps: [{ agent: 'ghost' }, { agent: 'ma' }] })
+    expect(s.error.value).toBe(VI_BEFORE.pipelineUnknownAgents('ghost, ma'))
+  })
+
+  it('profileName: đang kiểm tra, không tồn tại, nạp hỏng', async () => {
+    const pending = make()
+    expect(pending.profileNameError({ profileName: 'x' }, 'task')).toBe(VI_BEFORE.checkingProfiles)
+
+    stubApi({ turn: { status: 'ready', kind: 'draft', entityType: 'task', draft: { prompt: 'p' } } })
+    const s = make()
+    await s.sendMessage('tạo task')
+    await s.confirm({ prompt: 'p', profileName: 'b' })
+    expect(s.profileNameError({ profileName: 'a', x: 1 }, 'task')).toBe(VI_BEFORE.unknownProfiles('a'))
+    expect(s.error.value).toBe(VI_BEFORE.unknownProfiles('b'))
+
+    stubApi({ turn: { status: 'ready', kind: 'draft', entityType: 'task', draft: { prompt: 'p' } }, profilesFail: true })
+    const failing = make()
+    await failing.sendMessage('tạo task')
+    await failing.confirm({ prompt: 'p', profileName: 'a' })
+    expect(failing.error.value).toBe(VI_BEFORE.profilesLoadFailed)
+  })
+
+  it('agent phạm vi project mà chưa chọn project', async () => {
+    stubApi({ turn: { status: 'ready', kind: 'draft', entityType: 'agent', draft: { name: 'a' } } })
+    const s = make()
+    await s.sendMessage('tạo agent')
+    await s.confirm({ name: 'a' })
+    expect(s.error.value).toBe(VI_BEFORE.noProjectSelected)
+  })
+
+  it('job kết thúc không kèm lỗi báo trạng thái của job', async () => {
+    stubApi({ jobStates: [{ id: 'jobZ', status: 'cancelled' }] })
+    const s = make()
+    await s.sendMessage('xin chào')
+    expect(s.error.value).toBe(VI_BEFORE.jobEnded('cancelled'))
+  })
+
+  it('🚫 không lộ khoá thô `nlChat.*` trong thông điệp', async () => {
+    stubApi({ turn: { status: 'ready', kind: 'draft', draft: {} } })
+    const unclear = make()
+    await unclear.sendMessage('?')
+
+    stubApi({ turn: { status: 'ready', kind: 'draft', entityType: 'task', draft: { prompt: 'p' } }, profilesFail: true })
+    const failing = make()
+    await failing.sendMessage('tạo task')
+    await failing.confirm({ prompt: 'p', profileName: 'x' })
+
+    const texts = [unclear.messages.value[1]?.text, failing.error.value, make().profileNameError({ profileName: 'x' }, 'task')]
+    for (const text of texts) {
+      expect(text).toBeTruthy()
+      expect(String(text)).not.toMatch(/nlChat\./)
+    }
+  })
+})

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { i18n, setI18nLocale, supportedLocales, t } from '@/frontend/plugins/i18n'
 import {
   I18N_CACHE_KEY,
+  LOCALE_FETCH_TIMEOUT_MS,
   ensureLocale,
   ensureManifest,
   primeFromCache,
@@ -292,6 +293,128 @@ describe('ensureLocale — dedupe và tách biệt', () => {
 
     expect(localStorage.getItem(STORAGE_KEY)).toBe(settingsBefore)
     expect(localStorage.getItem(I18N_CACHE_KEY)).not.toBeNull()
+  })
+})
+
+/** Response điều khiển tay: request treo tới khi test gọi `resolve`. */
+function deferredFetch() {
+  const waiters: Array<(res: Response) => void> = []
+  stubFetch(() => new Promise<Response>((resolve) => waiters.push(resolve)))
+  return waiters
+}
+
+/** Chờ các microtask đang xếp hàng chạy xong. */
+async function flush() {
+  for (let i = 0; i < 5; i++) await Promise.resolve()
+}
+
+describe('ensureLocale — inflight, force, pending nhiều locale', () => {
+  it('lượt gọi lồng từ trong lúc gửi request ⇒ dùng chung lượt đang bay, ĐÚNG 1 request', async () => {
+    let nested: Promise<boolean> | null = null
+    stubFetch(() => {
+      nested ??= ensureLocale('en')
+      return jsonResponse({ locale: 'en', messages: {} })
+    })
+
+    expect(await ensureLocale('en')).toBe(true)
+    expect(await nested).toBe(true)
+    expect(calls).toHaveLength(1)
+  })
+
+  it('`force` khi lượt thường đang bay ⇒ request thứ 2 bay ra, không gửi `If-None-Match`', async () => {
+    seedCache()
+    const waiters = deferredFetch()
+
+    const normal = ensureLocale('en')
+    await flush()
+    const forced = ensureLocale('en', { force: true })
+    await flush()
+
+    expect(calls).toHaveLength(2)
+    expect(sentHeader(calls[0], 'If-None-Match')).toBe('"abc"')
+    expect(sentHeader(calls[1], 'If-None-Match')).toBeNull()
+
+    waiters[0](new Response(null, { status: 304 }))
+    waiters[1](jsonResponse({ locale: 'en', messages: { common: { ok: 'MOI' } } }, { ETag: '"e2"' }))
+    expect(await Promise.all([normal, forced])).toEqual([true, true])
+    expect(readCache().en.etag).toBe('"e2"')
+  })
+
+  it('lượt `force` đang bay ⇒ lượt force và lượt thường sau đó dùng chung, không thêm request', async () => {
+    const waiters = deferredFetch()
+
+    const first = ensureLocale('en', { force: true })
+    await flush()
+    const again = ensureLocale('en', { force: true })
+    const normal = ensureLocale('en')
+    await flush()
+    expect(calls).toHaveLength(1)
+
+    waiters[0](jsonResponse({ locale: 'en', messages: {} }))
+    expect(await Promise.all([first, again, normal])).toEqual([true, true, true])
+  })
+
+  it('hai locale nạp song song ⇒ `pending` giữ locale còn đang bay, chỉ về null khi cả hai xong', async () => {
+    const store = useLocaleMessages()
+    const waiters = deferredFetch()
+
+    const en = ensureLocale('en')
+    const fr = ensureLocale('fr')
+    await flush()
+    expect(store.pending.value).toBe('fr')
+
+    waiters[1](jsonResponse({ locale: 'fr', messages: { common: { ok: 'FR' } } }))
+    await fr
+    expect(store.pending.value).toBe('en')
+
+    waiters[0](jsonResponse({ locale: 'en', messages: {} }))
+    await en
+    expect(store.pending.value).toBeNull()
+  })
+})
+
+describe('ensureLocale — timeout', () => {
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => vi.useRealTimers())
+
+  it('request quá hạn ⇒ abort signal, rơi về bản build-time, `inflight` được dọn', async () => {
+    let signal: AbortSignal | undefined
+    stubFetch(
+      (_url, init) =>
+        new Promise<Response>((_, reject) => {
+          signal = init?.signal ?? undefined
+          signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))
+        }),
+    )
+
+    const p = ensureLocale('en')
+    await vi.advanceTimersByTimeAsync(LOCALE_FETCH_TIMEOUT_MS)
+
+    expect(await p).toBe(true)
+    expect(signal?.aborted).toBe(true)
+    expect(useLocaleMessages().lastError.value).toBeNull()
+    expect(useLocaleMessages().pending.value).toBeNull()
+
+    stubFetch(() => jsonResponse({ locale: 'en', messages: {} }))
+    expect(await ensureLocale('en')).toBe(true)
+    expect(calls).toHaveLength(2)
+  })
+
+  it('fetch bỏ qua signal và treo mãi ⇒ vẫn trả sau timeout; locale chưa có gì ⇒ false + lỗi timeout', async () => {
+    stubFetch(() => new Promise<Response>(() => {}))
+
+    const p = ensureLocale('it')
+    await vi.advanceTimersByTimeAsync(LOCALE_FETCH_TIMEOUT_MS - 1)
+    expect(useLocaleMessages().pending.value).toBe('it')
+    await vi.advanceTimersByTimeAsync(1)
+
+    expect(await p).toBe(false)
+    expect(useLocaleMessages().lastError.value).toContain('timeout')
+    expect(useLocaleMessages().pending.value).toBeNull()
+
+    stubFetch(() => new Response('boom', { status: 500 }))
+    expect(await ensureLocale('it')).toBe(false)
+    expect(calls).toHaveLength(2)
   })
 })
 

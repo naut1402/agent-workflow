@@ -7,6 +7,7 @@ import {
   listLocales,
   localeEtag,
   readLocaleBundle,
+  readLocaleBundleCached,
 } from '../../../../src/features/i18n/business/index.js'
 import { dumpYaml } from '../../../../src/shared/lib/yamlLib'
 
@@ -294,6 +295,101 @@ describe('localeEtag — hash nội dung, ổn định', () => {
     const vi = await readLocaleBundle('vi', null)
     const en = await readLocaleBundle('en', null)
     expect(localeEtag(vi)).not.toBe(localeEtag(en))
+  })
+})
+
+describe('readLocaleBundleCached — memo theo mtime repo + overlay', () => {
+  let repo: string
+  let root: string
+
+  /** Đẩy mtime của file/thư mục lên `sec` giây sau hiện tại, không phụ thuộc độ phân giải mtime. */
+  function bump(p: string, sec = 10): void {
+    const t = new Date(Date.now() + sec * 1000)
+    fs.utimesSync(p, t, t)
+  }
+
+  beforeEach(() => {
+    repo = path.join(tmp, 'repo')
+    root = path.join(tmp, 'root')
+    fs.mkdirSync(path.join(repo, 'vi'), { recursive: true })
+    writeNs(path.join(repo, 'vi', 'common.yaml'), { ok: 'REPO' })
+  })
+
+  test('khớp `readLocaleBundle` + `localeEtag`', async () => {
+    writeFxRoot(root)
+    const entry = await readLocaleBundleCached('vi', root, repo)
+    const bundle = await readLocaleBundle('vi', root, repo)
+    expect(entry!.bundle).toEqual(bundle!)
+    expect(entry!.etag).toBe(localeEtag(bundle))
+  })
+
+  test('không đổi file ⇒ trả lại đúng entry đã memo, cùng ETag', async () => {
+    const a = await readLocaleBundleCached('vi', null, repo)
+    const b = await readLocaleBundleCached('vi', null, repo)
+    expect(b).toBe(a)
+    expect(b!.etag).toBe(a!.etag)
+  })
+
+  test('sửa file repo (mtime đổi) ⇒ bundle và ETag mới', async () => {
+    const a = await readLocaleBundleCached('vi', null, repo)
+    const file = path.join(repo, 'vi', 'common.yaml')
+    writeNs(file, { ok: 'REPO-2' })
+    bump(file)
+
+    const b = await readLocaleBundleCached('vi', null, repo)
+    expect(b).not.toBe(a)
+    expect(b!.bundle.common.ok).toBe('REPO-2')
+    expect(b!.etag).not.toBe(a!.etag)
+  })
+
+  test('thêm rồi sửa file overlay ⇒ mỗi lượt đều đọc lại', async () => {
+    const a = await readLocaleBundleCached('vi', root, repo)
+    expect(a!.bundle.common.ok).toBe('REPO')
+
+    fs.mkdirSync(path.join(root, 'locales', 'vi'), { recursive: true })
+    const file = path.join(root, 'locales', 'vi', 'common.yaml')
+    writeNs(file, { ok: 'OVERLAY' })
+    const b = await readLocaleBundleCached('vi', root, repo)
+    expect(b!.bundle.common.ok).toBe('OVERLAY')
+    expect(b!.etag).not.toBe(a!.etag)
+
+    writeNs(file, { ok: 'OVERLAY-2' })
+    bump(file)
+    const c = await readLocaleBundleCached('vi', root, repo)
+    expect(c!.bundle.common.ok).toBe('OVERLAY-2')
+    expect(c!.etag).not.toBe(b!.etag)
+  })
+
+  test('xoá file namespace ⇒ namespace biến mất khỏi bundle', async () => {
+    writeNs(path.join(repo, 'vi', 'extra.yaml'), { x: '1' })
+    const a = await readLocaleBundleCached('vi', null, repo)
+    expect(a!.bundle.extra).toBeDefined()
+
+    fs.rmSync(path.join(repo, 'vi', 'extra.yaml'))
+    const b = await readLocaleBundleCached('vi', null, repo)
+    expect(b!.bundle.extra).toBeUndefined()
+    expect(b!.etag).not.toBe(a!.etag)
+  })
+
+  test('locale chưa có ⇒ null; tạo thư mục sau đó ⇒ có bundle, không kẹt null', async () => {
+    expect(await readLocaleBundleCached('ja', null, repo)).toBeNull()
+
+    fs.mkdirSync(path.join(repo, 'ja'))
+    writeNs(path.join(repo, 'ja', 'common.yaml'), { ok: 'JA' })
+    const entry = await readLocaleBundleCached('ja', null, repo)
+    expect(entry!.bundle.common.ok).toBe('JA')
+  })
+
+  test('mã locale không an toàn ⇒ null', async () => {
+    expect(await readLocaleBundleCached('../vi', null, repo)).toBeNull()
+  })
+
+  test('memo tách theo data root: cùng locale, overlay khác ⇒ ETag khác', async () => {
+    writeFxRoot(root)
+    const plain = await readLocaleBundleCached('vi', null, repo)
+    const over = await readLocaleBundleCached('vi', root, repo)
+    expect(over!.etag).not.toBe(plain!.etag)
+    expect(await readLocaleBundleCached('vi', null, repo)).toBe(plain)
   })
 })
 

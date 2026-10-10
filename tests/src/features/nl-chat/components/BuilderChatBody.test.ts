@@ -34,7 +34,7 @@ const session = {
   cancel: vi.fn(),
   reset: vi.fn(),
   findInvalidPipelineAgentRefs: vi.fn(() => [] as string[]),
-  profileNameError: ref<string | null>(null),
+  profileNameError: vi.fn((): string | null => null),
 }
 
 vi.mock('@/features/nl-chat/composables/useNlChatSession', () => ({
@@ -64,9 +64,16 @@ function resetSession() {
   session.step.value = 'chatting'
   session.messages.value = []
   session.sending.value = false
+  session.confirming.value = false
   session.showLongChatNudge.value = false
   session.error.value = null
   session.draft.value = null
+  session.entityType.value = null
+  session.pipelineName.value = ''
+  session.agentScope.value = null
+  session.catalogAgentIds.value = null
+  session.catalogError.value = null
+  session.findInvalidPipelineAgentRefs.mockImplementation(() => [])
 }
 
 /** Bật đủ 5 nhánh v-if để cả 5 vị trí chữ cùng có mặt trong một lượt render. */
@@ -80,9 +87,9 @@ function allBranchesOn() {
   session.step.value = 'done'
 }
 
-function mountAt(locale: 'vi' | 'en') {
+function mountAt(locale: 'vi' | 'en', projectId: string | null = 'P1') {
   return mount(BuilderChatBody, {
-    props: { projectId: 'P1' },
+    props: { projectId },
     global: { plugins: [createTestI18nPlugin(locale)] },
   })
 }
@@ -94,8 +101,8 @@ afterEach(() => {
   resetSession()
 })
 
-function render(locale: 'vi' | 'en') {
-  const wrapper = mountAt(locale)
+function render(locale: 'vi' | 'en', projectId: string | null = 'P1') {
+  const wrapper = mountAt(locale, projectId)
   mounted.push(wrapper)
   return wrapper
 }
@@ -167,6 +174,195 @@ describe('BuilderChatBody — 5 vị trí chữ đã i18n hoá', () => {
 })
 
 /**
+ * Phần còn lại của `BuilderChatBody` (khung preview draft, placeholder, trạng thái gửi
+ * lên header) cùng các thông điệp do `useNlChatSession` sinh ra. Cùng nguyên tắc
+ * characterization: hằng chép từ bản trước migrate, không chép từ `nlChat.yaml`.
+ */
+const VI_BEFORE_REST = {
+  inputPlaceholder: 'Nhập tin nhắn...',
+  draftBadge: (entity: string) => `Draft ${entity}`,
+  pipelineName: 'Tên pipeline',
+  pipelineNamePlaceholder: 'Tên profile pipeline',
+  agentScope: 'Phạm vi agent',
+  agentScopeProject: 'Chỉ project hiện tại',
+  agentScopeGlobal: 'Toàn cục (mọi project)',
+  agentScopeNoProject: 'Chưa chọn project ở header — chọn project hoặc đổi phạm vi agent sang "Toàn cục".',
+  confirm: 'Xác nhận & tạo',
+  cancel: 'Huỷ',
+  checkingAgents: 'Đang kiểm tra danh sách agent hợp lệ...',
+  unknownAgents: (list: string) => `Agent không tồn tại trong catalog: ${list}`,
+  invalidDraftJson: 'Draft JSON không hợp lệ — vui lòng sửa lại trước khi xác nhận.',
+  statusCreating: (s: number) => `Đang tạo… ${s}s`,
+  statusThinking: (s: number) => `Agent đang suy nghĩ… ${s}s`,
+  statusErrorWith: (msg: string) => `Có lỗi: ${msg}`,
+  statusError: 'Có lỗi',
+  statusDone: 'Hoàn tất',
+  statusReady: 'Sẵn sàng',
+}
+
+type Wrapper = ReturnType<typeof render>
+
+function lastStatus(w: Wrapper): { kind: string; text: string } {
+  const all = w.emitted('status') ?? []
+  return all[all.length - 1]![0] as { kind: string; text: string }
+}
+
+function previewDraft(entity: 'task' | 'pipeline' | 'agent' | 'automation') {
+  session.step.value = 'previewDraft'
+  session.entityType.value = entity
+  session.agentScope.value = 'project'
+}
+
+/** Mọi nhánh của khung preview cùng hiện: pipeline (tên + lỗi agent) và agent (phạm vi + thiếu project). */
+async function previewTexts(locale: 'vi' | 'en') {
+  previewDraft('pipeline')
+  const pipeline = render(locale)
+  const checking = pipeline.find('.nl-chat-error').text()
+  session.catalogAgentIds.value = new Set(['ok'])
+  session.findInvalidPipelineAgentRefs.mockImplementation(() => ['x', 'y'])
+  await pipeline.find('.nl-chat-draft-textarea').setValue('{"steps":[]}')
+  const out = {
+    badge: pipeline.find('.nl-chat-entity-badge').text(),
+    pipelineLabel: pipeline.find('.nl-chat-pipeline-name').text(),
+    pipelinePlaceholder: pipeline.find('.nl-chat-pipeline-name input').attributes('placeholder'),
+    checking,
+    unknownAgents: pipeline.find('.nl-chat-error').text(),
+    buttons: pipeline.findAll('.nl-chat-preview-actions button').map((b) => b.text()),
+    html: pipeline.html(),
+  }
+  mounted.pop()!.unmount()
+  resetSession()
+
+  previewDraft('agent')
+  const agent = render(locale, null)
+  const result = {
+    ...out,
+    agentBadge: agent.find('.nl-chat-entity-badge').text(),
+    agentLabel: agent.find('.nl-chat-agent-scope').text(),
+    agentOptions: agent.findAll('.nl-chat-agent-scope option').map((o) => o.text()),
+    noProject: agent.find('.nl-chat-error').text(),
+    agentHtml: agent.html(),
+  }
+  mounted.pop()!.unmount()
+  resetSession()
+  return result
+}
+
+describe('BuilderChatBody — khung preview, placeholder và trạng thái đã i18n hoá', () => {
+  it('bản `vi` của khung preview giống HỆT chuỗi cứng cũ', async () => {
+    const p = await previewTexts('vi')
+    expect(p.badge).toBe(VI_BEFORE_REST.draftBadge('Pipeline'))
+    expect(p.agentBadge).toBe(VI_BEFORE_REST.draftBadge('Agent'))
+    expect(p.pipelineLabel).toBe(VI_BEFORE_REST.pipelineName)
+    expect(p.pipelinePlaceholder).toBe(VI_BEFORE_REST.pipelineNamePlaceholder)
+    expect(p.checking).toBe(VI_BEFORE_REST.checkingAgents)
+    expect(p.unknownAgents).toBe(VI_BEFORE_REST.unknownAgents('x, y'))
+    expect(p.buttons).toEqual([VI_BEFORE_REST.confirm, VI_BEFORE_REST.cancel])
+    expect(p.agentLabel.startsWith(VI_BEFORE_REST.agentScope)).toBe(true)
+    expect(p.agentOptions).toEqual([VI_BEFORE_REST.agentScopeProject, VI_BEFORE_REST.agentScopeGlobal])
+    expect(p.noProject).toBe(VI_BEFORE_REST.agentScopeNoProject)
+  })
+
+  it('bản `vi` của lỗi JSON draft giống HỆT chuỗi cứng cũ', async () => {
+    previewDraft('task')
+    const w = render('vi')
+    await w.find('.nl-chat-draft-textarea').setValue('{không phải json')
+    await w.findAll('.nl-chat-preview-actions button')[0]!.trigger('click')
+    expect(w.find('.nl-chat-error').text()).toBe(VI_BEFORE_REST.invalidDraftJson)
+    expect(session.confirm).not.toHaveBeenCalled()
+  })
+
+  it('bản `vi` của placeholder và trạng thái gửi lên header giống HỆT chuỗi cứng cũ', async () => {
+    const w = render('vi')
+    expect(w.find('textarea').attributes('placeholder')).toBe(VI_BEFORE_REST.inputPlaceholder)
+    expect(lastStatus(w)).toEqual({ kind: 'idle', text: VI_BEFORE_REST.statusReady })
+
+    session.sending.value = true
+    await w.vm.$nextTick()
+    expect(lastStatus(w)).toEqual({ kind: 'busy', text: VI_BEFORE_REST.statusThinking(0) })
+
+    session.sending.value = false
+    session.confirming.value = true
+    await w.vm.$nextTick()
+    expect(lastStatus(w)).toEqual({ kind: 'busy', text: VI_BEFORE_REST.statusCreating(0) })
+
+    session.confirming.value = false
+    session.error.value = 'boom'
+    await w.vm.$nextTick()
+    expect(lastStatus(w)).toEqual({ kind: 'error', text: VI_BEFORE_REST.statusErrorWith('boom') })
+
+    session.error.value = null
+    session.step.value = 'error'
+    await w.vm.$nextTick()
+    expect(lastStatus(w)).toEqual({ kind: 'error', text: VI_BEFORE_REST.statusError })
+
+    session.step.value = 'done'
+    await w.vm.$nextTick()
+    expect(lastStatus(w)).toEqual({ kind: 'done', text: VI_BEFORE_REST.statusDone })
+  })
+
+  it('đổi locale thì khung preview, placeholder và trạng thái đổi theo', async () => {
+    const vi = await previewTexts('vi')
+    const en = await previewTexts('en')
+    expect(en.pipelineLabel).not.toBe(vi.pipelineLabel)
+    expect(en.pipelinePlaceholder).not.toBe(vi.pipelinePlaceholder)
+    expect(en.checking).not.toBe(vi.checking)
+    expect(en.unknownAgents).not.toBe(vi.unknownAgents)
+    expect(en.unknownAgents).toContain('x, y')
+    expect(en.buttons).not.toEqual(vi.buttons)
+    expect(en.agentLabel).not.toBe(vi.agentLabel)
+    expect(en.agentOptions).not.toEqual(vi.agentOptions)
+    expect(en.noProject).not.toBe(vi.noProject)
+
+    session.sending.value = true
+    const viW = render('vi')
+    const enW = render('en')
+    expect(enW.find('textarea').attributes('placeholder')).not.toBe(viW.find('textarea').attributes('placeholder'))
+    expect(lastStatus(enW).text).not.toBe(lastStatus(viW).text)
+  })
+
+  it('🚫 không lộ khoá thô `nlChat.*` ra DOM hay trạng thái ở cả hai locale', async () => {
+    for (const locale of ['vi', 'en'] as const) {
+      const p = await previewTexts(locale)
+      expect(p.html).not.toMatch(/nlChat\./)
+      expect(p.agentHtml).not.toMatch(/nlChat\./)
+
+      for (const entity of ['task', 'automation'] as const) {
+        previewDraft(entity)
+        expect(render(locale).html()).not.toMatch(/nlChat\./)
+        mounted.pop()!.unmount()
+        resetSession()
+      }
+
+      const w = render(locale)
+      expect(w.html()).not.toMatch(/nlChat\./)
+      for (const patch of [
+        () => (session.sending.value = true),
+        () => (session.confirming.value = true),
+        () => (session.error.value = 'boom'),
+        () => (session.step.value = 'error'),
+        () => (session.step.value = 'done'),
+      ]) {
+        patch()
+        await w.vm.$nextTick()
+        expect(lastStatus(w).text).not.toMatch(/nlChat\./)
+      }
+      mounted.pop()!.unmount()
+      resetSession()
+    }
+  })
+
+  it('chuỗi cứng cũ đã rời khỏi template', () => {
+    for (const value of Object.values(VI_BEFORE_REST)) {
+      if (typeof value === 'string') expect(COMPONENT_SOURCE).not.toContain(value)
+    }
+    for (const literal of ['Đang tạo…', 'Agent đang suy nghĩ…', 'Agent không tồn tại trong catalog']) {
+      expect(COMPONENT_SOURCE).not.toContain(literal)
+    }
+  })
+})
+
+/**
  * TC-M04 — chặn hồi quy NGƯỢC chiều.
  *
  * Ranh giới D3: prompt gửi LLM 🚫 không được dịch. Lập luận đó mà chỉ nằm trong rule thì
@@ -177,6 +373,9 @@ describe('TC-M04: prompt gửi LLM KHÔNG bị i18n hoá (ranh giới D3)', () =
   const PROMPT_FILES = [
     'src/features/orchestrator/business/brief.ts',
     'src/features/nl-chat/business/nlChatCatalog.ts',
+    'src/features/nl-chat/business/nlChatSession.ts',
+    'src/features/nl-chat/lib/attachmentPrompt.ts',
+    'src/features/nl-chat/lib/knowledgePrompt.ts',
     'src/features/monitor/business/artifactActions/index.ts',
   ]
 

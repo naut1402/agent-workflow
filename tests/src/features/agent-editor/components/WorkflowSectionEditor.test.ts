@@ -4,7 +4,9 @@ import { flushPromises } from '@vue/test-utils'
 import { defineComponent, h } from 'vue'
 import { compileWorkflowMarkdown, parseWorkflowMarkdown } from '@/frontend/lib/workflowSteps'
 import WorkflowSectionEditor from '@/features/agent-editor/components/WorkflowSectionEditor.vue'
-import agentEditorVi from '@/features/agent-editor/locales/vi'
+import { localeMessages } from '../../../helpers/localeYaml'
+
+const agentEditorVi = localeMessages('vi', 'agentEditor')
 
 // Luồng "Lưu template" đi qua module API chứ không qua `fetch` trần — mock ở
 // tầng module để `stubApi` bên dưới chỉ còn phải lo `/api/pipeline`.
