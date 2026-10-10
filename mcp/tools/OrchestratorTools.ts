@@ -16,14 +16,16 @@ const FALLBACK_HINT = 'Ra lệnh bằng dòng cuối output: `ORCHESTRATOR_DECIS
  * Tool ra lệnh điều phối, thay cho việc in dòng `ORCHESTRATOR_DECISION` ở cuối
  * output.
  *
- * Lớp vỏ mỏng `fetch` tới `POST /api/orchestrator/decide` — endpoint đó đã có
- * token guard và chốt chống thi hành hai lần.
+ * Lớp vỏ mỏng `fetch` tới `POST /api/orchestrator/decide`
+ * (`SelfMcpServer.DECIDE_PATH`) — endpoint đó đã có token guard và chốt chống
+ * thi hành hai lần.
  *
  * 🚫 KHÔNG import gì từ `src/features/orchestrator/business/`: tiến trình MCP là
  * tiến trình KHÁC với dashboard, nên gọi `applyDecision` in-process sẽ thi hành
  * vào một job queue khác hẳn và làm stdio server treo không thoát. Chỉ mượn
- * `schemas/` cho raw shape (zod thuần, không side effect), và tên hai biến env
- * từ `SelfMcpServer` (barrel `mcp`, không side effect lúc nạp).
+ * `schemas/` cho raw shape (zod thuần, không side effect), và hằng hợp đồng
+ * (hai biến env, header token, path decide) từ `SelfMcpServer` (barrel `mcp`,
+ * không side effect lúc nạp).
  */
 export class OrchestratorTools extends AbstractMcpTools {
   definitions(): ToolDef[] {
@@ -72,11 +74,11 @@ export class OrchestratorTools extends AbstractMcpTools {
 
     let res: Response
     try {
-      res = await fetch(new URL('/api/orchestrator/decide', base), {
+      res = await fetch(new URL(SelfMcpServer.DECIDE_PATH, base), {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
-          'X-Dashboard-Orchestrator-Token': token,
+          [SelfMcpServer.TOKEN_HEADER]: token,
         },
         body: JSON.stringify(args ?? {}),
         signal: AbortSignal.timeout(DECIDE_TIMEOUT_MS),
