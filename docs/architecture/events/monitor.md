@@ -66,5 +66,5 @@ Không emit `pipeline.created` / `step.started` / `task.reset` trên bus hiện 
 
 | Event | Khi nào | Payload gợi ý | Nơi emit |
 |-------|---------|---------------|----------|
-| `entity.created` (`entity: project`) | Thêm / clone project | `id`, `projectId` | `monitor/controller.ts` |
-| `entity.deleted` (`entity: project`) | Xóa project khỏi registry | `id`, `projectId` | `monitor/controller.ts` |
+| `entity.created` (`entity: project`) | Thêm / clone project | `id`, `projectId` | `monitor/controller.ts` · `mcp/tools/ProjectTools.ts` (`add_project`, mode `full`) |
+| `entity.deleted` (`entity: project`) | Xóa project khỏi registry | `id`, `projectId` | `monitor/controller.ts` · `mcp/tools/ProjectTools.ts` (`remove_project`, mode `full`) |

@@ -1,0 +1,74 @@
+import { APP_VERSION } from '../src/backend/configs/appVersion.js'
+import { initLogDriverFromPrefs, installEventLogSubscriber } from '../src/backend/log/index.js'
+import { resolveProjectRoot } from '../src/backend/registry.js'
+import { SelfMcpServer } from '../src/features/mcp/business/index.js'
+import { AbstractMcpServer, type McpMode, type ModeSource } from './AbstractMcpServer.js'
+import type { AbstractMcpTools, RootResolver } from './AbstractMcpTools.js'
+import { KnowledgeTools } from './tools/KnowledgeTools.js'
+import { OrchestratorTools } from './tools/OrchestratorTools.js'
+import { ProjectTools } from './tools/ProjectTools.js'
+import { TaskTools } from './tools/TaskTools.js'
+
+export class DashboardMcpServer extends AbstractMcpServer {
+  // Hợp đồng với dashboard — bên ghi entry `--mcp-config` cho job điều phối.
+  // Đọc từ `SelfMcpServer` để hai tiến trình không thể lệch tên.
+  static readonly SERVER_NAME = SelfMcpServer.SERVER_ID
+  static readonly MODE_ENV_VAR = SelfMcpServer.MODE_ENV_VAR
+
+  static resolveMode(opts: ModeSource = {}): McpMode {
+    return super.resolveMode({
+      ...opts,
+      envVar: DashboardMcpServer.MODE_ENV_VAR,
+      label: DashboardMcpServer.SERVER_NAME,
+    })
+  }
+
+  static readonly resolveRoot: RootResolver = (project) => {
+    const root = resolveProjectRoot(project ?? null)
+    if (root) return { root }
+    return {
+      error: project
+        ? `unknown project: ${project}`
+        : 'no default project — call list_projects, or set DEV_TEAM_ROOT / DEV_TEAM_DASHBOARD_HOME for this process',
+    }
+  }
+
+  protected readonly name = DashboardMcpServer.SERVER_NAME
+  protected readonly version = APP_VERSION
+
+  protected toolGroups(): AbstractMcpTools[] {
+    const resolveRoot = DashboardMcpServer.resolveRoot
+    return [
+      new TaskTools(resolveRoot),
+      new KnowledgeTools(resolveRoot),
+      new ProjectTools(resolveRoot),
+      // Không dùng `requireRoot` (token của lượt đã xác định task), vẫn nhận
+      // `resolveRoot` cho đồng dạng với ba nhóm trên.
+      new OrchestratorTools(resolveRoot),
+    ]
+  }
+
+  protected instructionsPreamble(): string[] {
+    return [
+      'Server state của dev-team-dashboard: task, artifact, knowledge của pipeline agent.',
+      'Có tool tương đương thì gọi nó thay vì Bash: tool nhận `taskId` (và `project` tuỳ chọn) '
+        + 'nên không phải `cd`, và kết quả là JSON có cấu trúc thay vì text phải tự parse.',
+    ]
+  }
+
+  protected startupWarnings(): string[] {
+    const missing = ['create_qa', 'orchestrator_decide'].filter((name) => !this.hasTool(name))
+    if (!missing.length) return []
+    return [
+      `mode=${this.mode}: ${missing.join(', ')} KHÔNG được đăng ký, `
+        + 'nhưng docs/template/agents/* và prompt điều phối hướng dẫn agent gọi chúng. '
+        + `Đặt ${DashboardMcpServer.MODE_ENV_VAR}=full nếu chạy pipeline agent.`,
+    ]
+  }
+
+  // xem docs/mcp/server.md §8.4
+  protected onStart(): void {
+    initLogDriverFromPrefs()
+    installEventLogSubscriber()
+  }
+}

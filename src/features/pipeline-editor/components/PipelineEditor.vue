@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
-import { ref, computed, markRaw, onMounted, watch } from 'vue'
+import { ref, computed, markRaw, onMounted, provide, watch } from 'vue'
 import { VueFlow, useVueFlow } from '@vue-flow/core'
 import '@vue-flow/core/dist/style.css'
 import {
@@ -14,6 +14,7 @@ import {
 } from '../scripts/pipelineEditorApi'
 import CMarkdownView from '../../../frontend/ui/CMarkdownView.vue'
 import { useLocalToggle } from '../../../frontend/composables/useLocalToggle'
+import { useApiAction } from '../../../frontend/composables/useApiAction'
 import PipelineEditorNode from './PipelineEditorNode.vue'
 import CatalogPanel from './CatalogPanel.vue'
 import RulesPanel from './RulesPanel.vue'
@@ -39,6 +40,8 @@ import {
   type PipelineMeta,
   type StepPreservedMap,
 } from '../lib/pipelineRoundTrip'
+import { fetchRunners } from '../../runner/scripts/runnerApi'
+import { buildRunnerModelOptions } from '../../runner/lib/runnerModelOptions'
 
 const { t } = useI18nHelpers()
 
@@ -234,6 +237,29 @@ async function loadCatalog() {
   }
 }
 
+/**
+ * Danh mục runner để dựng control "Model" của StepConfigDialog. Nạp lỗi ⇒ danh
+ * sách rỗng ⇒ control tự ẩn (dialog ẩn khi ≤ 1 option), không chặn editor.
+ */
+const runnerCatalog = ref<any>({ runners: [], connections: [], providers: [] })
+
+async function loadRunners() {
+  try {
+    runnerCatalog.value = await fetchRunners()
+  } catch {
+    // no-op
+  }
+}
+
+const runnerModelOptions = computed(() => buildRunnerModelOptions(runnerCatalog.value))
+
+// Vue Flow chỉ truyền `data` xuống node, không truyền prop tuỳ ý — `provide` là
+// đường duy nhất để badge trên node đọc được nhãn model.
+provide(
+  'pipelineRunnerModelLabels',
+  computed(() => new Map(runnerModelOptions.value.map((o) => [o.value, o.label]))),
+)
+
 async function loadRules() {
   try {
     rulesData.value = await fetchRules(props.projectId ?? undefined)
@@ -318,6 +344,7 @@ function buildFlowFromPipeline(pipeline) {
       produces: Array.isArray(step.produces) ? step.produces : [],
       knowledge_inputs: Array.isArray(step.knowledge_inputs) ? step.knowledge_inputs : [],
       hitl: step.hitl || { mode: 'none' },
+      runner_id: typeof step.runner_id === 'string' ? step.runner_id : '',
     },
   }))
 
@@ -382,7 +409,7 @@ onConnect((params) => {
 })
 
 onMounted(async () => {
-  await Promise.all([loadCatalog(), loadRules(), loadConfig(), refreshProfiles()])
+  await Promise.all([loadCatalog(), loadRules(), loadConfig(), refreshProfiles(), loadRunners()])
   setTimeout(() => fitView(), 100)
 })
 
@@ -466,6 +493,7 @@ function onDropOnCanvas(event) {
       produces: [],
       knowledge_inputs: [],
       hitl: { mode: 'none' },
+      runner_id: '',
     },
   }
   setStepNodes([...stepNodesOf(getNodes.value), newNode])
@@ -738,7 +766,9 @@ watch(() => props.projectId, () => {
   taskProfileName.value = ''
 })
 
-const saving = ref(false)
+// Một instance dùng chung cho `handleSave` và `handleSetDefault` — giữ đúng
+// ngữ nghĩa cờ `saving` cũ (hai nút này vốn chia nhau một cờ).
+const { pending: saving, run: runSave } = useApiAction()
 const saveMsg = ref('')
 
 function flashSaved(msg: string) {
@@ -750,43 +780,42 @@ function flashSaved(msg: string) {
 
 /** "Save" và "Save to file" gộp làm một, rẽ nhánh theo tab đang mở. */
 async function handleSave() {
-  saving.value = true
-  saveMsg.value = ''
-  try {
-    if (tab.value === 'profile') {
-      const name = profileName.value.trim()
-      if (!name) {
-        saveMsg.value = t('pipelineEditor.target.needProfileName')
-        return
+  await runSave(async () => {
+    saveMsg.value = ''
+    try {
+      if (tab.value === 'profile') {
+        const name = profileName.value.trim()
+        if (!name) {
+          saveMsg.value = t('pipelineEditor.target.needProfileName')
+          return
+        }
+        const ok = await saveProfile(name, buildFullPipeline())
+        if (!ok) {
+          saveMsg.value = `✗ ${profileError.value}`
+          return
+        }
+        await refreshProfiles()
+        lastLoadedSnapshot.value = snapshotCanvas()
+        // Canvas ĐANG là nội dung vừa ghi — nạp lại từ server chỉ tốn một vòng
+        // request và làm mất vị trí node người dùng vừa sắp.
+        if (profileSelected.value !== name) setSelectionSilently(profileSelected, name)
+      } else {
+        if (taskWriteBlocked.value) {
+          saveMsg.value = t('pipelineEditor.target.taskWriteBlocked')
+          return
+        }
+        if (!props.taskId?.trim()) {
+          saveMsg.value = t('pipelineEditor.target.needTask')
+          return
+        }
+        await writePipelineConfig('task', buildFullPipeline(), props.taskId, props.projectId ?? undefined)
+        lastLoadedSnapshot.value = snapshotCanvas()
       }
-      const ok = await saveProfile(name, buildFullPipeline())
-      if (!ok) {
-        saveMsg.value = `✗ ${profileError.value}`
-        return
-      }
-      await refreshProfiles()
-      lastLoadedSnapshot.value = snapshotCanvas()
-      // Canvas ĐANG là nội dung vừa ghi — nạp lại từ server chỉ tốn một vòng
-      // request và làm mất vị trí node người dùng vừa sắp.
-      if (profileSelected.value !== name) setSelectionSilently(profileSelected, name)
-    } else {
-      if (taskWriteBlocked.value) {
-        saveMsg.value = t('pipelineEditor.target.taskWriteBlocked')
-        return
-      }
-      if (!props.taskId?.trim()) {
-        saveMsg.value = t('pipelineEditor.target.needTask')
-        return
-      }
-      await writePipelineConfig('task', buildFullPipeline(), props.taskId, props.projectId ?? undefined)
-      lastLoadedSnapshot.value = snapshotCanvas()
+      flashSaved(t('pipelineEditor.target.saved'))
+    } catch (e) {
+      saveMsg.value = `✗ ${e.message}`
     }
-    flashSaved(t('pipelineEditor.target.saved'))
-  } catch (e) {
-    saveMsg.value = `✗ ${e.message}`
-  } finally {
-    saving.value = false
-  }
+  })
 }
 
 async function handleDeleteProfile() {
@@ -847,16 +876,15 @@ async function handleImportProfileFile(e: Event) {
 async function handleSetDefault() {
   if (!currentSteps.value.length) return
   if (!confirm(t('pipelineEditor.target.confirmSetDefault'))) return
-  saving.value = true
-  saveMsg.value = ''
-  try {
-    await writePipelineConfig('global', buildFullPipeline(), undefined, props.projectId ?? undefined)
-    flashSaved(t('pipelineEditor.target.defaultSet'))
-  } catch (e) {
-    saveMsg.value = `✗ ${e.message}`
-  } finally {
-    saving.value = false
-  }
+  await runSave(async () => {
+    saveMsg.value = ''
+    try {
+      await writePipelineConfig('global', buildFullPipeline(), undefined, props.projectId ?? undefined)
+      flashSaved(t('pipelineEditor.target.defaultSet'))
+    } catch (e) {
+      saveMsg.value = `✗ ${e.message}`
+    }
+  })
 }
 
 /**
@@ -1074,6 +1102,7 @@ const hasFanOut = computed(() => {
       :step="selectedNodeData"
       :catalog="catalog"
       :project-id="projectId"
+      :runner-options="runnerModelOptions"
       @update="applyStepUpdate"
       @close="closeConfig"
     />

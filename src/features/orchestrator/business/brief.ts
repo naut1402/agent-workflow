@@ -139,6 +139,15 @@ function renderAssignment(step: any, input: StepBriefInput): string {
   if (input.detail?.trim()) lines.push(`\n### Nội dung cần xử lý\n\n${input.detail.trim()}`)
   const agentNote = agentPart(input.agentContext, 'context')
   if (agentNote) lines.push(`\n### Bối cảnh từ node điều phối\n\n${agentNote}`)
+  // Kênh con → cha. Node điều phối chạy trong phiên riêng và chỉ đọc dòng này
+  // + danh sách artifact, nên context làm việc của nút con không tràn sang nó.
+  lines.push(
+    '\n### Khi xong\n\n' +
+      'Kết thúc output bằng MỘT dòng cuối cùng đúng dạng:\n\n' +
+      '`STEP_SUMMARY: <1–3 câu: đã làm gì, ghi artifact nào, việc còn lại>`\n\n' +
+      'Node điều phối chỉ đọc dòng này + danh sách artifact. Mọi chi tiết khác ' +
+      'phải nằm trong artifact, không nằm trong output.',
+  )
   return lines.join('\n')
 }
 

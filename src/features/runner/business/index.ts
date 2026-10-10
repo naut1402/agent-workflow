@@ -18,12 +18,19 @@ export {
   listRunners,
   getRunner,
   getDefaultRunner,
+  resolveDefaultRunner,
+  resetDefaultRunnerWarn,
   upsertRunner,
   deleteRunner,
   setDefaultRunner,
   substituteConfig,
   normalizeRunner,
+  resolveStepRunnerId,
 } from './registry.js'
+export type { StepRunnerReason, StepRunnerResolution } from './registry.js'
+export type { DefaultRunnerReason, DefaultRunnerResolution } from './types.js'
+/** Đường ghi pipeline dùng cùng hàm chuẩn hoá với đường giải pin lúc execute. */
+export { sanitiseRunnerId } from './types.js'
 export {
   loadCredentials,
   saveCredentials,
@@ -52,7 +59,6 @@ export {
   upsertConnection,
   deleteConnection,
   ensureLegacyConnection,
-  listProviderCatalog,
   scanLocalCommands,
 } from './connections.js'
 export {
@@ -72,14 +78,13 @@ export {
   deleteCustomCommand,
 } from './commands.js'
 export { resolveAgent, resolveAgentFilePath, normalizeAgentRef, describeAgentSearchPaths } from './agentResolver.js'
-export { getProvider, listProviderIds, registerProvider } from './registry.js'
+export { getProvider, listProviderIds, listProviderCatalog, providerFamilyOf, registerProvider } from './registry.js'
 export { listAvailableModels } from './modelCatalog.js'
 export type { ListModelsInput, ListModelsResult } from './modelCatalog.js'
 export {
   AGENT_CLI_PROVIDER_IDS,
   isAgentCliProviderId,
   isAgentCliProvider,
-  providerFamilyOf,
 } from './providers/agentCli.js'
 export type { AgentCliProvider, AgentCliCapabilities, TokenUsage, ProviderFamily as AgentProviderFamily } from './providers/agentCli.js'
 export {

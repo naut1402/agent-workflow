@@ -85,6 +85,19 @@ RUN curl -fsSL https://claude.ai/install.sh | bash \
   && command -v claude \
   && (command -v agent || command -v cursor-agent)
 
+# rtk — nén output lệnh shell trước khi vào context LLM.
+# install.sh upstream đã detect arch và verify SHA-256, không cần script tự viết.
+ARG RTK_VERSION=""
+ARG RTK_REFRESH=""
+RUN if [ -f /etc/ssl/corp-ca/env.sh ]; then . /etc/ssl/corp-ca/env.sh; fi \
+  && ref="${RTK_VERSION:+refs/tags/$RTK_VERSION}" \
+  && curl -fsSL "https://raw.githubusercontent.com/rtk-ai/rtk/${ref:-refs/heads/develop}/install.sh" \
+     | RTK_REFRESH="$RTK_REFRESH" \
+       RTK_VERSION="$RTK_VERSION" \
+       RTK_INSTALL_DIR=/home/dashboard/.local/bin \
+       sh \
+  && command -v rtk
+
 COPY --chown=dashboard:dashboard package.json bun.lock ./
 RUN --mount=type=cache,id=bun-cache-runtime,target=/tmp/bun-cache,uid=1001,gid=1001 \
     if [ -f /etc/ssl/corp-ca/env.sh ]; then . /etc/ssl/corp-ca/env.sh; fi \
@@ -96,6 +109,8 @@ USER root
 COPY --from=build --chown=dashboard:dashboard /app/dist ./dist
 COPY --from=build --chown=dashboard:dashboard /app/src ./src
 COPY --from=build --chown=dashboard:dashboard /app/tsconfig.json ./tsconfig.json
+# MCP server stdio (`bun run mcp`) — import thẳng `src/`, nên nằm cạnh `./src`.
+COPY --chown=dashboard:dashboard mcp ./mcp
 COPY --chown=dashboard:dashboard docs/template/agents /opt/bundled-plugins/dev-agent-teams/agents
 COPY --chmod=0755 docker/entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 

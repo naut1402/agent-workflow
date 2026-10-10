@@ -3,6 +3,8 @@ import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { onMounted, ref } from 'vue'
 import { fetchCustomAgent, saveCustomAgent, type AgentScope } from '../scripts/agentEditorApi'
 import { emptyDraft } from '../business/agentDraft.js'
+import { useApiAction } from '../../../frontend/composables/useApiAction'
+import CDialog from '../../../frontend/ui/CDialog.vue'
 import AgentSectionEditor from './AgentSectionEditor.vue'
 
 const props = defineProps<{
@@ -22,7 +24,7 @@ const draft = ref(emptyDraft())
 const scope = ref<AgentScope>('project')
 const selectedName = ref('')
 const loading = ref(false)
-const saving = ref(false)
+const { pending: saving, run: runSave } = useApiAction()
 const message = ref('')
 const error = ref('')
 
@@ -49,90 +51,73 @@ onMounted(async () => {
 })
 
 async function save() {
-  saving.value = true
-  error.value = ''
-  message.value = ''
-  try {
-    const result = await saveCustomAgent(draft.value, props.projectId ?? undefined, scope.value)
-    selectedName.value = result.name
-    message.value = t('agentEditor.messages.saved', { name: result.name })
-    emit('saved', result.name)
-  } catch (e: any) {
-    error.value = String(e.message || e)
-  } finally {
-    saving.value = false
-  }
+  await runSave(async () => {
+    error.value = ''
+    message.value = ''
+    try {
+      const result = await saveCustomAgent(draft.value, props.projectId ?? undefined, scope.value)
+      selectedName.value = result.name
+      message.value = t('agentEditor.messages.saved', { name: result.name })
+      emit('saved', result.name)
+    } catch (e: any) {
+      error.value = String(e.message || e)
+    }
+  })
 }
 
 </script>
 
 <template>
-  <div class="modal-backdrop" @click.self="emit('close')">
-    <div class="modal agent-form-dialog" role="dialog" aria-modal="true">
-      <div class="modal-head">
-        <h3>{{ selectedName ? t('agentEditor.form.editTitle', { name: selectedName }) : t('agentEditor.form.createTitle') }}</h3>
-        <button
-          type="button"
-          class="modal-close"
-          :title="t('agentEditor.form.close')"
-          :aria-label="t('agentEditor.form.close')"
-          @click="emit('close')"
-        >
-          ✕
-        </button>
-      </div>
+  <CDialog
+    class="agent-form-dialog"
+    :title="selectedName ? t('agentEditor.form.editTitle', { name: selectedName }) : t('agentEditor.form.createTitle')"
+    :loading="saving"
+    width="min(720px, calc(100vw - 32px))"
+    @close="emit('close')"
+  >
+    <p v-if="message" class="ok-msg">{{ message }}</p>
+    <p v-if="error" class="err">{{ error }}</p>
 
-      <div class="modal-body agent-form-body">
-        <p v-if="message" class="ok-msg">{{ message }}</p>
-        <p v-if="error" class="err">{{ error }}</p>
+    <div class="agent-basic-fields">
+      <label class="cfg-label">
+        {{ t('agentEditor.fields.name') }}
+        <input v-model="draft.name" class="cfg-input" placeholder="agent-name" />
+      </label>
+      <label class="cfg-label">
+        {{ t('agentEditor.fields.description') }}
+        <input v-model="draft.description" class="cfg-input" :placeholder="t('agentEditor.fields.descriptionPlaceholder')" />
+      </label>
+      <label class="cfg-label">
+        {{ t('agentEditor.fields.recommendedModel') }}
+        <input v-model="draft.model" class="cfg-input" placeholder="claude-sonnet-4-6" />
+      </label>
+      <label class="cfg-label">
+        {{ t('agentEditor.fields.scope') }}
+        <select v-model="scope" class="cfg-input">
+          <option value="project">{{ t('agentEditor.fields.scopeProject') }}</option>
+          <option value="global">{{ t('agentEditor.fields.scopeGlobal') }}</option>
+        </select>
+      </label>
+    </div>
 
-        <div class="agent-basic-fields">
-          <label class="cfg-label">
-            {{ t('agentEditor.fields.name') }}
-            <input v-model="draft.name" class="cfg-input" placeholder="agent-name" />
-          </label>
-          <label class="cfg-label">
-            {{ t('agentEditor.fields.description') }}
-            <input v-model="draft.description" class="cfg-input" :placeholder="t('agentEditor.fields.descriptionPlaceholder')" />
-          </label>
-          <label class="cfg-label">
-            {{ t('agentEditor.fields.recommendedModel') }}
-            <input v-model="draft.model" class="cfg-input" placeholder="claude-sonnet-4-6" />
-          </label>
-          <label class="cfg-label">
-            {{ t('agentEditor.fields.scope') }}
-            <select v-model="scope" class="cfg-input">
-              <option value="project">{{ t('agentEditor.fields.scopeProject') }}</option>
-              <option value="global">{{ t('agentEditor.fields.scopeGlobal') }}</option>
-            </select>
-          </label>
-        </div>
+    <AgentSectionEditor
+      :draft="draft"
+      :catalog="catalog"
+      @update:draft="draft = $event"
+      @message="message = $event; error = ''"
+      @error="error = $event; message = ''"
+    />
 
-        <AgentSectionEditor
-          :draft="draft"
-          :catalog="catalog"
-          @update:draft="draft = $event"
-          @message="message = $event; error = ''"
-          @error="error = $event; message = ''"
-        />
-      </div>
-
+    <template #footer>
       <div class="modal-foot">
         <button type="button" class="btn-primary" :disabled="saving" @click="save">{{ t('agentEditor.actions.save') }}</button>
         <button type="button" class="btn-ghost" @click="emit('close')">{{ t('agentEditor.form.cancel') }}</button>
       </div>
-    </div>
-  </div>
+    </template>
+  </CDialog>
 </template>
 
 <style scoped lang="scss">
-.agent-form-dialog {
-  width: min(720px, calc(100vw - 32px));
-}
-.agent-form-body {
-  max-height: min(76vh, 760px);
-  overflow-y: auto;
-}
 .agent-basic-fields {
   display: grid;
   gap: 10px;

@@ -7,6 +7,7 @@ import path from 'node:path'
 // Defer access to call sites.
 import * as nodeUrl from 'node:url'
 import * as nodeCrypto from 'node:crypto'
+import * as nodeUtil from 'node:util'
 import type {
   Dirent,
   PathLike,
@@ -135,8 +136,27 @@ export async function stat(p: string): Promise<Stats> {
   return fsPromises.stat(p)
 }
 
-export async function readTextFile(p: string): Promise<string> {
-  return fsPromises.readFile(p, 'utf8')
+/** With maxChars, read only the UTF-8 prefix needed for that many characters. */
+export async function readTextFile(p: string, maxChars?: number): Promise<string> {
+  if (maxChars === undefined) return fsPromises.readFile(p, 'utf8')
+  if (!Number.isSafeInteger(maxChars) || maxChars < 0) throw new RangeError('invalid text limit')
+  const file = await fsPromises.open(p, 'r')
+  try {
+    const decoder = new nodeUtil.TextDecoder('utf-8', { ignoreBOM: true })
+    const buffer = Buffer.alloc(Math.min(4096, maxChars))
+    let content = ''
+    while (content.length < maxChars) {
+      const { bytesRead } = await file.read(buffer, 0, Math.min(buffer.length, maxChars - content.length), null)
+      if (bytesRead === 0) {
+        content += decoder.decode()
+        break
+      }
+      content += decoder.decode(buffer.subarray(0, bytesRead), { stream: true })
+    }
+    return content.slice(0, maxChars)
+  } finally {
+    await file.close()
+  }
 }
 
 export async function writeTextFile(p: string, data: string | Buffer): Promise<void> {
@@ -219,8 +239,9 @@ export function readTextFileSync(p: string): string {
   return fs.readFileSync(p, 'utf8')
 }
 
-export function writeTextFileSync(p: string, data: string): void {
-  fs.writeFileSync(p, data, 'utf8')
+/** `mode` chỉ có tác dụng khi file được TẠO — ghi đè giữ nguyên quyền cũ. */
+export function writeTextFileSync(p: string, data: string, opts?: { mode?: number }): void {
+  fs.writeFileSync(p, data, { encoding: 'utf8', ...(opts?.mode != null ? { mode: opts.mode } : {}) })
 }
 
 export function appendTextFileSync(p: string, data: string): void {
@@ -229,6 +250,24 @@ export function appendTextFileSync(p: string, data: string): void {
 
 export function mkdirSync(p: string, opts?: { recursive?: boolean }): string | undefined {
   return fs.mkdirSync(p, opts) ?? undefined
+}
+
+/** Đặt quyền POSIX. Trên win32 gần như vô nghĩa — đừng dựa vào nó làm rào duy nhất. */
+export function chmodSync(p: string, mode: number): void {
+  fs.chmodSync(p, mode)
+}
+
+/**
+ * `chmodSync` không ném — cho chỗ quyền chỉ là lớp rào phụ. Rào chính phải nằm
+ * ở chỗ khác: `mode` ngay lúc tạo file, hoặc vị trí file dưới thư mục hồ sơ
+ * người dùng.
+ */
+export function chmodSafe(target: string, mode: number): void {
+  try {
+    chmodSync(target, mode)
+  } catch {
+    /* filesystem không hỗ trợ (win32, bind mount) */
+  }
 }
 
 export function renameSync(from: string, to: string): void {
@@ -245,12 +284,29 @@ export function copyFileSync(from: string, to: string): void {
  * transiently when rename targets an existing file — retry briefly, then fall
  * back to copy-over + unlink, which those filesystems do allow.
  */
-export function writeTextFileAtomicSync(file: string, data: string): void {
+export function writeTextFileAtomicSync(
+  file: string,
+  data: string,
+  opts?: { mode?: number },
+): void {
   const tmp = `${file}.tmp`
-  writeTextFileSync(tmp, data)
-  if (renameOverExisting(tmp, file)) return
-  copyFileSync(tmp, file)
-  rmSync(tmp, { force: true })
+  writeTextFileSync(tmp, data, opts)
+  const renamed = renameOverExisting(tmp, file)
+  if (!renamed) {
+    // `copyFileSync` GIỮ mode của file đích khi đích đã tồn tại, nên nhánh này
+    // không thừa hưởng `mode` của temp — `chmodSync` bên dưới mới là thứ chốt.
+    copyFileSync(tmp, file)
+    rmSync(tmp, { force: true })
+  }
+  // Cả hai nhánh đều cần: file tạo từ lần chạy TRƯỚC khi có `mode` vẫn đang
+  // mang mode cũ, mà `writeFileSync` không đổi mode của file đã tồn tại.
+  if (opts?.mode != null) {
+    try {
+      chmodSync(file, opts.mode)
+    } catch {
+      /* win32 / FS không hỗ trợ POSIX mode — nội dung vẫn ghi đúng, không chặn luồng */
+    }
+  }
 }
 
 function renameOverExisting(from: string, to: string): boolean {

@@ -5,7 +5,14 @@
  * không cần bus, không cần job, không cần LLM.
  */
 
-import { DECISION_SENTINEL, MAX_AGENT_CONTEXT_BYTES, OrchestratorDecision } from '../schemas/orchestrator.js'
+import {
+  DECISION_SENTINEL,
+  MAX_AGENT_CONTEXT_BYTES,
+  MAX_STEP_RESULT_BYTES,
+  OrchestratorDecision,
+} from '../schemas/orchestrator.js'
+import { stripBalancedFence } from '../../../shared/lib/orchestrator.js'
+import type { DecisionRoute } from './mcpRoute.js'
 
 /** Vì sao orchestrator phải hỏi agent. */
 export type DecisionTrigger =
@@ -22,7 +29,10 @@ export interface StepResult {
   stepId: string
   status: 'succeeded' | 'failed'
   artifacts: string[]
-  output: string
+  /** Kết quả nút con trả về — KHÔNG phải log/context làm việc của nó. */
+  result: string
+  /** True khi nút con không trả `STEP_SUMMARY` và đây chỉ là đuôi output. */
+  fromTail?: boolean
 }
 
 export interface DecisionContext {
@@ -40,10 +50,17 @@ export interface DecisionContext {
   stepResult?: StepResult
   /** Gate đang chờ người (`state.hitl_pending`) — agent không được start khi có. */
   gatePending?: string
+  /** Job step đang chạy của task lúc giao lượt (không tính job điều phối); `null` khi không có. */
+  activeStep?: { stepId: string | null; status: string } | null
   /** `orchestrator.system_prompt` từ pipeline.yaml — hướng dẫn tự do do người vận hành cấu hình. */
   extraSystemPrompt?: string
   /** Bundle knowledge đã render, ứng với `orchestrator.knowledge_inputs`. */
   knowledgeText?: string
+  /**
+   * Tuyến ra lệnh đã chốt cho lượt này (`resolveDecisionRoute`). Vắng ⇒
+   * `'sentinel'`: mọi caller/test cũ giữ nguyên hành vi, ký tự với ký tự.
+   */
+  route?: DecisionRoute
 }
 
 const TRIGGER_BRIEF: Record<DecisionTrigger, string> = {
@@ -57,31 +74,122 @@ const TRIGGER_BRIEF: Record<DecisionTrigger, string> = {
 }
 
 /** Đuôi giữ nguyên: kết luận của một agent CLI nằm ở cuối output, không ở đầu. */
-function tailOf(text: string): string {
+function tailOf(text: string, limit: number): string {
   const raw = String(text ?? '')
-  if (Buffer.byteLength(raw, 'utf8') <= MAX_AGENT_CONTEXT_BYTES) return raw
+  if (Buffer.byteLength(raw, 'utf8') <= limit) return raw
   const buf = Buffer.from(raw, 'utf8')
-  return `…(đã cắt phần đầu)\n${buf.subarray(buf.length - MAX_AGENT_CONTEXT_BYTES).toString('utf8')}`
+  let start = buf.length - limit
+  // Ngân sách tính bằng byte, nhưng điểm cắt phải rơi vào ranh giới ký tự: cắt
+  // giữa một ký tự nhiều byte (tiếng Việt là chuyện thường ngày ở đây) thì
+  // `toString` trả về U+FFFD. Bỏ qua các byte nối (10xxxxxx) ở đầu lát cắt.
+  while (start < buf.length && (buf[start] & 0xc0) === 0x80) start++
+  return `…(đã cắt phần đầu)\n${buf.subarray(start).toString('utf8')}`
 }
 
+/**
+ * Khối kết quả của nút con. Cố ý KHÔNG mang log thô: context làm việc của nút
+ * con ở lại phiên của nút con, cha chỉ nhận `STEP_SUMMARY` nó tự soạn (hoặc
+ * đuôi output khi nó không trả) cùng danh sách artifact để đọc chi tiết.
+ *
+ * Heading `###` chứ không `##`: khối này nằm lồng giữa các mục `##` khác của
+ * prompt, và tài liệu artifact có thể nhúng lại prompt rồi cắt theo section.
+ */
 function renderStepResult(result: StepResult): string {
   const artifacts = result.artifacts.length ? result.artifacts.join(', ') : '(không có)'
-  const output = tailOf(result.output).trim() || '(không có output)'
+  const body = tailOf(result.result, MAX_STEP_RESULT_BYTES).trim() || '(nút con không trả kết quả)'
   return [
-    `## Kết quả bước vừa xong`,
+    `### Kết quả bước vừa xong`,
     '',
     `**Step:** \`${result.stepId}\` — ${result.status === 'succeeded' ? 'thành công' : 'thất bại'}`,
     `**Artifact ghi được:** ${artifacts}`,
+    result.fromTail
+      ? '**Nguồn:** đuôi output (nút con không trả `STEP_SUMMARY`)'
+      : '**Nguồn:** `STEP_SUMMARY` do nút con trả về',
     '',
     '```text',
-    output,
+    body,
     '```',
+    '',
+    'Chi tiết đầy đủ nằm trong artifact ở thư mục task — đọc file khi cần,',
+    'đừng suy đoán từ đoạn trên.',
+  ].join('\n')
+}
+
+function renderCurrentState(ctx: DecisionContext): string {
+  const gate = ctx.gatePending ? `\`${ctx.gatePending}\`` : 'không có'
+  const active = ctx.activeStep
+    ? `\`${ctx.activeStep.stepId ?? '(không rõ step)'}\` — ${ctx.activeStep.status}`
+    : 'không có step nào đang chạy'
+  return [
+    '## Trạng thái hiện tại',
+    '',
+    'Snapshot lúc giao lượt này — đủ để quyết, không cần hỏi lại dashboard.',
+    '',
+    `- **Cổng chờ duyệt:** ${gate}`,
+    `- **Step đang chạy:** ${active}`,
+  ].join('\n')
+}
+
+/**
+ * Giao thức sentinel — ra lệnh bằng dòng JSON cuối output.
+ *
+ * ⚠️ Nội dung giữ Y NGUYÊN bản trước khi tách hàm: đây là đường mặc định của
+ * mọi lượt không có MCP, và test characterization chốt nó ký tự với ký tự.
+ */
+function renderSentinelProtocol(): string {
+  return [
+    '## Định dạng trả lời (bắt buộc)',
+    '',
+    'Dòng **cuối cùng** của output phải đúng dạng sau, JSON một dòng:',
+    '',
+    '```',
+    `${DECISION_SENTINEL} {"action":"resume","stepId":"implementer","reason":"...","message":"..."}`,
+    '```',
+    '',
+    'Không có dòng này, hoặc JSON hỏng, hoặc `stepId` không nằm trong danh sách trên',
+    '⇒ orchestrator tự chuyển tiếp theo thứ tự pipeline mà không có bối cảnh bạn soạn.',
+    '',
+    'Ra lệnh bằng đúng dòng này. Trạng thái task, kết quả bước vừa xong và event gần đây',
+    'đã nằm trong prompt — KHÔNG gọi API điều phối bằng shell (`curl`) để lấy lại hay để ra lệnh.',
+  ].join('\n')
+}
+
+/**
+ * Giao thức MCP — ra lệnh bằng tool `orchestrator_decide`.
+ *
+ * Hai dòng fallback cuối là phần *runtime* của yêu cầu "không kết nối được thì
+ * dùng cách cũ", 🚫 không phải thừa: `route` chốt ở server chỉ nói job SẼ có
+ * tool, còn việc CLI có kết nối được tới MCP server hay không xảy ra sau đó và
+ * server không biết. Thiếu hai dòng này, một lần MCP rụng giữa lượt là pipeline
+ * đứng im không lý do. Chi phí ~35 token, so với ~250 token của khối sentinel.
+ *
+ * Agent gọi tool RỒI in thêm dòng sentinel cũng không thi hành hai lần: chốt
+ * `directDecisionApplied` được đóng trước khi `applyDecision` chạy.
+ */
+function renderMcpProtocol(): string {
+  return [
+    '## Cách ra lệnh (bắt buộc)',
+    '',
+    'Gọi tool MCP `orchestrator_decide`. Tool có hiệu lực NGAY, không cần chờ hết lượt.',
+    'Tham số đúng bằng các trường đã mô tả ở "Hành động cho phép" và "Ràng buộc" bên trên.',
+    '',
+    'Gọi tool xong thì KHÔNG in thêm dòng JSON nào — lệnh đã được thi hành.',
+    '',
+    'Nếu `orchestrator_decide` KHÔNG có trong danh sách tool của bạn, hoặc gọi nó trả lỗi:',
+    // Ví dụ phải CHẠY ĐƯỢC, không phải placeholder: agent chỉ đọc tới đây khi
+    // tuyến chính đã hỏng — đúng lúc cần ít mơ hồ nhất. Chép nguyên ví dụ có
+    // `…` vào JSON là `validateDecision` từ chối rồi `recoverFromBadTurn`.
+    `in dòng cuối cùng của output đúng dạng \`${DECISION_SENTINEL} {"action":"resume","stepId":"implementer","reason":"...","message":"..."}\``,
+    'để dashboard thi hành thay — KHÔNG gọi API điều phối bằng shell (`curl`).',
   ].join('\n')
 }
 
 /**
  * Prompt cho lượt quyết định. Cố ý mô tả định dạng trả lời trước, vì guard
  * phía sau không đoán: sai định dạng là pipeline halt tường minh.
+ *
+ * Khối giao thức chọn theo `ctx.route` — đây là chỗ hiện thực "quyết định ở
+ * runtime theo trạng thái MCP", 🚫 không chép cứng một định dạng vào template.
  */
 export function buildDecisionPrompt(ctx: DecisionContext): string {
   const actions = [
@@ -115,47 +223,14 @@ export function buildDecisionPrompt(ctx: DecisionContext): string {
     ctx.extraSystemPrompt?.trim()
       ? `## Hướng dẫn bổ sung (cấu hình orchestrator)\n\n${ctx.extraSystemPrompt.trim()}`
       : '',
+    renderCurrentState(ctx),
     ctx.stepResult ? renderStepResult(ctx.stepResult) : '',
     ctx.detail?.trim() ? `## Chi tiết\n\n${ctx.detail.trim()}` : '',
     ctx.recent?.length ? `## Event gần đây\n\n${ctx.recent.map((r) => `- ${r}`).join('\n')}` : '',
     ctx.knowledgeText?.trim() ? `## Knowledge\n\n${ctx.knowledgeText.trim()}` : '',
     `## Hành động cho phép\n\n${actions.join('\n')}`,
     `## Ràng buộc\n\n${constraints.join('\n')}`,
-    [
-      '## Định dạng trả lời (bắt buộc)',
-      '',
-      'Dòng **cuối cùng** của output phải đúng dạng sau, JSON một dòng:',
-      '',
-      '```',
-      `${DECISION_SENTINEL} {"action":"resume","stepId":"implementer","reason":"...","message":"..."}`,
-      '```',
-      '',
-      'Không có dòng này, hoặc JSON hỏng, hoặc `stepId` không nằm trong danh sách trên',
-      '⇒ orchestrator tự chuyển tiếp theo thứ tự pipeline mà không có bối cảnh bạn soạn.',
-      '',
-      'Nếu 2 biến môi trường DASHBOARD_ORCHESTRATOR_TOKEN và DASHBOARD_ORCHESTRATOR_BASE_URL',
-      'có mặt, bạn có thể gọi TRỰC TIẾP API điều phối bằng lệnh shell, giữa lượt — biết ngay',
-      'kết quả (dispatch được hay không) và không cần đợi hết lượt:',
-      '',
-      '```',
-      '# Trạng thái thật của task — step đang chạy (nếu có), gate đang chờ, event gần đây',
-      'curl -s "$DASHBOARD_ORCHESTRATOR_BASE_URL/api/orchestrator/status" \\',
-      '  -H "X-Dashboard-Orchestrator-Token: $DASHBOARD_ORCHESTRATOR_TOKEN"',
-      '',
-      '# Output hiện tại của step đang/đã chạy — không cần chờ job đó kết thúc',
-      'curl -s "$DASHBOARD_ORCHESTRATOR_BASE_URL/api/orchestrator/output?offset=0" \\',
-      '  -H "X-Dashboard-Orchestrator-Token: $DASHBOARD_ORCHESTRATOR_TOKEN"',
-      '',
-      '# Ra lệnh start/resume/halt/summary — cùng ngữ nghĩa với dòng JSON ở trên',
-      'curl -s -X POST "$DASHBOARD_ORCHESTRATOR_BASE_URL/api/orchestrator/decide" \\',
-      '  -H "X-Dashboard-Orchestrator-Token: $DASHBOARD_ORCHESTRATOR_TOKEN" \\',
-      '  -H "Content-Type: application/json" \\',
-      '  -d \'{"action":"start","stepId":"..."}\'',
-      '```',
-      '',
-      'Gọi API rồi thì KHÔNG in lại dòng ORCHESTRATOR_DECISION nữa (double-dispatch).',
-      'Không có 2 biến môi trường trên (agent CLI khác) thì vẫn dùng dòng JSON như trên.',
-    ].join('\n'),
+    ctx.route === 'mcp' ? renderMcpProtocol() : renderSentinelProtocol(),
   ]
   return parts.filter(Boolean).join('\n\n')
 }
@@ -164,9 +239,10 @@ export function buildDecisionPrompt(ctx: DecisionContext): string {
 function lastDecisionLine(stdout: string): string | null {
   const lines = String(stdout ?? '').split(/\r?\n/)
   for (let i = lines.length - 1; i >= 0; i--) {
-    const line = lines[i].trim()
     // Fence ```…``` quanh dòng quyết định là thói quen rất hay gặp của agent CLI.
-    const unfenced = line.replace(/^`+/, '').replace(/`+$/, '').trim()
+    // Chỉ bóc khi fence CÂN hai đầu — cùng quy ước với `stepSummaryOf`, để một
+    // backtick kết câu (code span) không bị ăn mất.
+    const unfenced = stripBalancedFence(lines[i])
     if (unfenced.startsWith(DECISION_SENTINEL)) return unfenced
   }
   return null

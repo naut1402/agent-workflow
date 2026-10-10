@@ -23,6 +23,8 @@ import { buildRules, resolveRuleContentPathWithPatterns } from './business/rules
  *   path-traversal, AGENTS.md §4). Ref hỏng ⇒ 400, không lưu im lặng.
  * - Step id bắt đầu bằng `__` bị từ chối: `__orchestrator__` là id dành riêng cho
  *   node điều phối, trùng vào là session ledger và chat surface lẫn hai thứ.
+ * - `steps[].runner_id` (model pin cho step) là khoá tra registry runner lúc execute —
+ *   cùng lý do với `orchestrator.agent`, id bị gọt phải bị từ chối chứ không lưu bản đã gọt.
  *
  * Chạy ở cả hai đường ghi (`writePipelineConfig` và `createPipelineProfile`) —
  * chỉ chặn một đường thì đường kia vẫn lưu được nội dung độc hại.
@@ -31,6 +33,17 @@ function validatePipelinePayload(pipeline: any): string | null {
   for (const step of pipeline.steps ?? []) {
     if (typeof step?.id === 'string' && step.id.startsWith('__')) {
       return `step id must not start with "__": ${step.id}`
+    }
+    // `runner_id` thành khoá tra registry lúc execute. So sánh bằng (như `orchestrator.agent`)
+    // để id bị `sanitiseRunnerId` gọt cũng bị từ chối thay vì âm thầm lưu bản đã gọt.
+    // Không kiểm runner có tồn tại: profile được chia sẻ giữa máy khác nhau, chặn ở đây
+    // làm profile hợp lệ trên máy A bị 400 trên máy B — ca đó đã có `resolveStepRunnerId` lo.
+    const runnerId = step?.runner_id
+    if (runnerId != null && runnerId !== '') {
+      if (typeof runnerId !== 'string') return `invalid step runner_id: ${step?.id}`
+      if (pipelineEditorBusiness.sanitiseRunnerId(runnerId) !== runnerId) {
+        return `invalid step runner_id: ${step?.id}`
+      }
     }
   }
   const agent = pipeline.orchestrator?.agent

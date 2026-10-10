@@ -1,7 +1,7 @@
 import { readTextFile, writeTextFileAtomic } from '../../../../backend/lib/fileHelper.js'
 import { CreateQaRequest } from '../../schemas/qa.js'
 import type { QaQuestionInput } from '../../schemas/qa.js'
-import { resolveArtifact } from './index.js'
+import { resolveArtifact } from './reads.js'
 
 const CHOICE_LABELS = 'ABCDEFGHIJ'
 
@@ -24,12 +24,10 @@ export async function createQa(root: string, taskId: string, input: unknown): Pr
   const parsed = CreateQaRequest.safeParse(input)
   if (!parsed.success) return { ok: false, error: 'invalid request', details: parsed.error.flatten() }
 
-  // `resolveArtifact` chỉ chặn thoát khỏi `root`, không chặn thoát khỏi
-  // `root/tasks/<id>` khi bản thân `id` chứa `..`/`/` (vd `../evil` vẫn "nằm
-  // dưới root"). Route HTTP có regex này ở controller, nhưng MCP tool gọi
-  // thẳng `createQa()` không đi qua đó — validate ngay tại đây để bất biến
-  // "không ghi ra ngoài phạm vi task" áp dụng cho mọi caller như nhau.
-  if (!taskId || /[^\w-]/.test(taskId)) return { ok: false, error: 'invalid task id' }
+  // xem docs/architecture/code/monitor.md §1
+  if (!taskId || /[^\w-]/.test(taskId)) {
+    return { ok: false, error: `invalid task id — qa.md chỉ nhận [A-Za-z0-9_-]: ${JSON.stringify(taskId)}` }
+  }
 
   const target = resolveArtifact(root, taskId, 'qa.md')
   if (!target) return { ok: false, error: 'invalid task id' }

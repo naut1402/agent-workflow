@@ -1,7 +1,7 @@
 {
   "name": "dev-team-dashboard",
   "private": true,
-  "version": "1.1.8",
+  "version": "1.2.0",
   "type": "module",
   "description": "Agent flow — AI harness system: thiết kế pipeline agent, chạy task qua runner, theo dõi HITL gate và artifact trên dashboard local-first",
   "keywords": [
@@ -28,7 +28,7 @@
     "preview": "vite preview",
     "serve": "bun src/backend/standalone.ts",
     "start": "vite build && bun src/backend/standalone.ts",
-    "mcp": "bun mcp/server.ts",
+    "mcp": "bun mcp/stdio.ts",
     "typecheck": "vue-tsc --noEmit",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
@@ -49,7 +49,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.117.1",
-    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@toast-ui/editor": "^3.2.2",
     "@vue-flow/core": "^1.41.0",
     "@vueuse/core": "^11.0.0",

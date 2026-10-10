@@ -119,6 +119,13 @@ function onTriggerKeydown(e: KeyboardEvent) {
       </span>
     </button>
 
+    <!--
+      `.prevent` trên <li>: khi CSelect nằm trong một <label>, activation behavior
+      của label dội một click tổng hợp lên `.c-select-trigger` và mở lại menu vừa
+      đóng. Behavior đó chỉ chạy khi event chưa bị canceled nên preventDefault là đủ.
+      🚫 Không dùng `.stop` — chặn bubbling sẽ giết `onClickOutside` và handler của
+      component cha; <li> không có default action riêng để mất.
+    -->
     <ul v-if="open" class="c-select-menu" role="listbox" :aria-label="ariaLabel">
       <li v-if="!options.length" class="c-select-empty">{{ t('common.select.empty') }}</li>
       <li
@@ -129,7 +136,7 @@ function onTriggerKeydown(e: KeyboardEvent) {
         :class="{ 'is-selected': opt.value === modelValue, 'is-highlighted': index === highlightedIndex }"
         :aria-selected="opt.value === modelValue"
         @mouseenter="highlightedIndex = index"
-        @click="pick(opt.value)"
+        @click.prevent="pick(opt.value)"
       >
         {{ opt.label }}
       </li>

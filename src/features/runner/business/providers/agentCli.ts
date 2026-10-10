@@ -3,9 +3,9 @@
  * Distinct from `console-command` (argv-only, never default AI runner).
  */
 
-import type { RunnerProvider, ExecuteResult, ExecuteRequest, ProviderFamily } from '../types.js'
+import type { RunnerProvider, ExecuteResult, ExecuteRequest, McpDelivery, ProviderFamily } from '../types.js'
 
-export type { ProviderFamily }
+export type { ProviderFamily, McpDelivery }
 
 /** Built-in Agent CLI provider ids. */
 export const AGENT_CLI_PROVIDER_IDS = [
@@ -24,6 +24,8 @@ export interface AgentCliCapabilities {
   sessionCapture: 'preset-uuid' | 'parse-json' | 'none'
   /** Whether this provider can supply token usage in ExecuteResult. */
   supportsTokenUsage: boolean
+  /** `kind` của `RunnerProvider.mcpDelivery` — cùng giá trị catalog trả cho UI. */
+  mcpDelivery: McpDelivery
 }
 
 /** Agent CLI providers implement RunnerProvider plus family metadata. */
@@ -44,7 +46,7 @@ export function isAgentCliProvider(provider: RunnerProvider | null | undefined):
   return isAgentCliProviderId(provider.providerId)
 }
 
-export function providerFamilyOf(providerId: string): ProviderFamily {
+export function providerFamilyFromId(providerId: string): ProviderFamily {
   if (providerId === 'console-command') return 'console-command'
   if (providerId === 'anthropic-api' || providerId.endsWith('-api')) return 'ai-api'
   if (isAgentCliProviderId(providerId)) return 'agent-cli'

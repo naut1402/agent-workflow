@@ -11,6 +11,7 @@ import {
   type ConnectionsStore,
   type MutationResult,
   type ProviderCatalogEntry,
+  type ProviderFamily,
   type ScannedCommand,
 } from './types.js'
 
@@ -20,7 +21,12 @@ const LOCAL_COMMANDS: Array<{ id: string; command: string; providerId: string; l
   { id: 'codex', command: 'codex', providerId: 'codex-cli', label: 'Codex CLI' },
 ]
 
-const PROVIDER_CATALOG: ProviderCatalogEntry[] = [
+/**
+ * Danh mục provider tĩnh (chưa có `mcpDelivery`). `listProviderCatalog` ở
+ * `registry.ts` gắn thêm `mcpDelivery` từ provider đã lắp ráp — 🚫 import
+ * `registry.ts` từ file này (vòng import, `registry.ts` đã import file này).
+ */
+export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
   { id: 'claude-code-cli', kind: 'local-console', label: 'Claude Code CLI', family: 'agent-cli' },
   { id: 'cursor-cli', kind: 'local-console', label: 'Cursor CLI', family: 'agent-cli' },
   { id: 'codex-cli', kind: 'local-console', label: 'Codex CLI', family: 'agent-cli' },
@@ -148,6 +154,12 @@ export function upsertConnection(input: any): MutationResult<{ connection: Conne
 
   const store = loadConnections()
   const idx = store.connections.findIndex((c) => c.id === id)
+  // Cùng lý do với `upsertRunner`: `create` là cờ opt-in của dialog tạo mới.
+  // Ghi đè ở đây nguy hiểm hơn vì connection giữ cả providerId/model/credential —
+  // một connection trùng slug sẽ đổi hẳn thứ mà runner mặc định thật sự chạy.
+  if (idx >= 0 && input?.create === true) {
+    return { ok: false, status: 409, error: `connection id "${id}" đã tồn tại` }
+  }
   if (idx >= 0) store.connections[idx] = entry
   else store.connections.push(entry)
   saveConnections(store)
@@ -205,8 +217,8 @@ export function ensureLegacyConnection(legacy: {
   return result.connection.id
 }
 
-export function listProviderCatalog(): ProviderCatalogEntry[] {
-  return [...PROVIDER_CATALOG]
+export function catalogFamilyOf(providerId: string): ProviderFamily | undefined {
+  return PROVIDER_CATALOG.find((e) => e.id === providerId)?.family
 }
 
 function resolveCommandPath(command: string): string | null {
