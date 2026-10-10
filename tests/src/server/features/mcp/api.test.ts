@@ -6,7 +6,7 @@ import { createApp } from '../../../../../src/backend/apiServer.js'
 import type { RegistryContext } from '../../../../../src/backend/http/types.js'
 import { on, _resetEventBusForTest } from '../../../../../src/backend/events/index.js'
 import type { DashboardEvent } from '../../../../../src/backend/events/index.js'
-import { resetLogDriver, setLogDriver } from '../../../../../src/backend/log/driver.js'
+import { resetLogDriver, setLogDriver } from '../../../../../src/backend/log/index.js'
 import { AuditLogEntry, type LogEntry } from '../../../../../src/shared/log/schema.js'
 import { MCP_MAX_TIMEOUT_MS } from '../../../../../src/features/mcp/schemas/mcpServer.js'
 import { upsertCredential } from '../../../../../src/features/runner/business/index.js'
@@ -99,10 +99,10 @@ beforeAll(async () => {
   fs.mkdirSync(home, { recursive: true })
   app = await createApp(fakeCtx())
   setLogDriver({
-    kind: 'file',
     append: async (entry) => {
       logEntries.push(entry)
     },
+    query: async () => [],
   })
   for (const type of ['entity.created', 'entity.updated', 'entity.deleted'] as const) {
     on(type, (e) => {

@@ -533,6 +533,7 @@ function capture(): Captured {
     append: async (entry: any) => {
       if (entry.type === 'audit') audits.push(entry)
     },
+    query: async () => [],
   })
   const off = on('*', (event) => void events.push(event))
   return { audits, events, stop: off }
