@@ -39,6 +39,38 @@ function orchestratorJob(over: Record<string, unknown> = {}): Record<string, unk
   return { orchestratorJob: true, orchestratorMcpRoute: 'mcp', orchestratorToken: TOKEN, ...over }
 }
 
+/** Tích Descartes của các trục — mỗi phần tử là một tổ hợp giá trị. */
+function product(axes: Record<string, readonly unknown[]>): Record<string, unknown>[] {
+  let rows: Record<string, unknown>[] = [{}]
+  for (const [key, values] of Object.entries(axes)) {
+    rows = rows.flatMap((row) => values.map((value) => ({ ...row, [key]: value })))
+  }
+  return rows
+}
+
+/** `undefined` ⇒ biến vắng hẳn, khác với chuỗi rỗng. */
+function setSelfBaseUrl(value: unknown): void {
+  if (value === undefined) delete process.env.DEV_TEAM_SELF_BASE_URL
+  else process.env.DEV_TEAM_SELF_BASE_URL = String(value)
+}
+
+/**
+ * Kiểm guard chung cho MỘT tổ hợp: có entry ⇒ env điều phối cùng giá trị; tuyến
+ * `mcp` + env đủ ⇒ phải có entry (repo có `mcp/stdio.ts`). Trả về có entry hay không.
+ */
+function assertSharedGuard(metadata: Record<string, unknown>): boolean {
+  const server = SelfMcpServer.forJob(metadata)
+  const env = SelfMcpServer.childEnv(metadata)
+  if (server) {
+    expect(env).toEqual({
+      DASHBOARD_ORCHESTRATOR_TOKEN: server.config.env!.DASHBOARD_ORCHESTRATOR_TOKEN,
+      DASHBOARD_ORCHESTRATOR_BASE_URL: server.config.env!.DASHBOARD_ORCHESTRATOR_BASE_URL,
+    })
+  }
+  if (metadata.orchestratorMcpRoute === 'mcp' && Object.keys(env).length) expect(server).not.toBeNull()
+  return server !== null
+}
+
 describe('hằng hợp đồng xuyên process', () => {
   test('giá trị giữ nguyên như trước refactor', () => {
     expect(SelfMcpServer.SERVER_ID).toBe('dev-team-dashboard')
@@ -128,31 +160,19 @@ describe('forJob — entry tự gắn cho job điều phối', () => {
   })
 
   test('mọi tổ hợp metadata: có entry ⇒ CHẮC CHẮN có env điều phối (guard chung)', () => {
-    const jobs = [true, false, 'true', undefined]
-    const routes = ['mcp', 'sentinel', undefined]
-    const tokens = [TOKEN, '', undefined, 7]
-    const baseUrls = [BASE_URL, '', undefined]
+    const combos = product({
+      orchestratorJob: [true, false, 'true', undefined],
+      orchestratorMcpRoute: ['mcp', 'sentinel', undefined],
+      orchestratorToken: [TOKEN, '', undefined, 7],
+      baseUrl: [BASE_URL, '', undefined],
+    })
     let entries = 0
-    for (const orchestratorJob of jobs)
-      for (const orchestratorMcpRoute of routes)
-        for (const orchestratorToken of tokens)
-          for (const baseUrl of baseUrls) {
-            if (baseUrl === undefined) delete process.env.DEV_TEAM_SELF_BASE_URL
-            else process.env.DEV_TEAM_SELF_BASE_URL = baseUrl
-            const metadata = { orchestratorJob, orchestratorMcpRoute, orchestratorToken }
-            const server = SelfMcpServer.forJob(metadata)
-            const env = SelfMcpServer.childEnv(metadata)
-            if (server) {
-              entries++
-              expect(env).toEqual({
-                DASHBOARD_ORCHESTRATOR_TOKEN: server.config.env!.DASHBOARD_ORCHESTRATOR_TOKEN,
-                DASHBOARD_ORCHESTRATOR_BASE_URL: server.config.env!.DASHBOARD_ORCHESTRATOR_BASE_URL,
-              })
-            }
-            // Chiều ngược lại: tuyến `mcp` + env đủ ⇒ phải có entry (repo có `mcp/stdio.ts`).
-            if (orchestratorMcpRoute === 'mcp' && Object.keys(env).length) expect(server).not.toBeNull()
-          }
-    // Chống xanh giả: ít nhất một tổ hợp thật sự ra entry.
+    for (const { baseUrl, ...metadata } of combos) {
+      setSelfBaseUrl(baseUrl)
+      if (assertSharedGuard(metadata)) entries++
+    }
+    // Chống xanh giả: đủ 144 tổ hợp, và ít nhất một tổ hợp thật sự ra entry.
+    expect(combos).toHaveLength(4 * 3 * 4 * 3)
     expect(entries).toBeGreaterThan(0)
   })
 
