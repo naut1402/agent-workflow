@@ -100,25 +100,38 @@ export function providerFamilyFromId(providerId: string): ProviderFamily {
 /**
  * Bù trường provider không khai. Ưu tiên bản dựng sẵn cùng id (stub test thay
  * `claude-code-cli` vẫn được ghi usage transcript, liệt kê model tĩnh như
- * trước), rồi mới tới luật theo id. Ghi thẳng lên object được đăng ký để test
- * đọc lại trạng thái trên chính stub của nó.
+ * trước), rồi mới tới luật theo id.
+ *
+ * 🚫 Ghi lên object được đăng ký: test hay dựng stub thứ hai bằng
+ * `{ ...stub, providerId: 'khac' }`, ghi thẳng thì stub sau chép luôn `family`
+ * suy theo id của stub trước. Giá trị bù nằm trong Proxy — đọc rơi về nó khi
+ * object không khai, ghi vẫn đi thẳng xuống object gốc.
  */
 function withDefaults(input: RunnerProvider): RegisteredProvider {
-  const provider = input as RegisteredProvider
   const base = builtins.get(input.providerId)
-  if (provider.family === undefined) provider.family = base?.family ?? providerFamilyFromId(input.providerId)
-  if (provider.acceptsAgent === undefined) provider.acceptsAgent = base?.acceptsAgent ?? true
-  if (provider.mcpDelivery === undefined) provider.mcpDelivery = new NoMcpDelivery()
-  if (base && base !== provider) {
-    if (provider.transcriptFormat === undefined && base.transcriptFormat) provider.transcriptFormat = base.transcriptFormat
-    if (provider.catalog === undefined && base.catalog) provider.catalog = base.catalog
-    if (!provider.captureUsage && base.captureUsage) provider.captureUsage = base.captureUsage.bind(base)
+  const defaults: Partial<RegisteredProvider> = {}
+  if (input.family === undefined) defaults.family = base?.family ?? providerFamilyFromId(input.providerId)
+  if (input.acceptsAgent === undefined) defaults.acceptsAgent = base?.acceptsAgent ?? true
+  if (input.mcpDelivery === undefined) defaults.mcpDelivery = new NoMcpDelivery()
+  if (base && base !== input) {
+    if (input.transcriptFormat === undefined && base.transcriptFormat) defaults.transcriptFormat = base.transcriptFormat
+    if (input.catalog === undefined && base.catalog) defaults.catalog = base.catalog
+    if (!input.captureUsage && base.captureUsage) defaults.captureUsage = base.captureUsage.bind(base)
     // Chỉ danh sách tĩnh: provider API thay thế phải tự gọi được endpoint của nó.
-    if (!provider.listModels && base.listModels && base.catalog?.modelListing === 'static') {
-      provider.listModels = base.listModels.bind(base)
+    if (!input.listModels && base.listModels && base.catalog?.modelListing === 'static') {
+      defaults.listModels = base.listModels.bind(base)
     }
   }
-  return provider
+  if (!Object.keys(defaults).length) return input as RegisteredProvider
+  return new Proxy(input, {
+    get(target, prop) {
+      const value = Reflect.get(target, prop, target)
+      return value === undefined && prop in defaults ? defaults[prop as keyof RegisteredProvider] : value
+    },
+    has(target, prop) {
+      return prop in target || prop in defaults
+    },
+  }) as RegisteredProvider
 }
 
 /**
