@@ -86,8 +86,9 @@ Logic đơn lẻ (một hiện thực, không phải biên I/O) gom theo nghiệ
 
 ### 2.6 Cross-feature (peer)
 
-- **Chỉ `features/<A>/business/index.ts`** được import từ `features/<B>/business/**`.
-- **Trong feature A**, controller và các `business/*.ts` import peer qua `./business/index.js` (hoặc `./index.js` trong cùng `business/`).
+- **Chỉ cổng peer của feature A** được import từ `features/<B>/business/**`: `features/<A>/business/index.ts`, hoặc `features/<A>/business/peers.ts` khi feature có.
+- **`peers.ts` — cổng peer tách khỏi barrel**: dùng khi module trong `business/` (vd hiện thực ở thư mục con) cần peer mà import `./index.js` sẽ tạo vòng `index.ts` ⇄ module đó. Có `peers.ts` thì nó là file **duy nhất** của feature import feature khác; mỗi symbol lấy từ barrel của **feature chủ** (không đi vòng qua façade feature thứ ba); `index.ts` re-export phần controller cần từ `./peers.js`. Ví dụ: `automations/business/peers.ts`; `monitor/business/peers.ts` là tiền lệ cũ chưa theo đủ (index vẫn import peer trực tiếp) — đưa về khi sửa đáng kể vùng đó (§2.4).
+- **Trong feature A**, controller import peer qua `./business/index.js`; các `business/*.ts` qua `./index.js`, hoặc `./peers.js` khi feature có cổng đó.
 - **Không import sâu** `../../other-feature/business/foo.js` từ controller hay module nội bộ — **trừ** khi đi qua index tạo vòng barrel.
 - **Tránh vòng barrel↔barrel** — khi cần, index A re-export từ **module sâu** của B.
 - **Sanitize / rule chỉ thuộc một feature** đặt trong module sở hữu; feature khác dùng qua index.
