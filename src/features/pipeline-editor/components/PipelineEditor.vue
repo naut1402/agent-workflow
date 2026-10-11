@@ -766,8 +766,9 @@ watch(() => props.projectId, () => {
   taskProfileName.value = ''
 })
 
-// Một instance dùng chung cho `handleSave` và `handleSetDefault` — giữ đúng
-// ngữ nghĩa cờ `saving` cũ (hai nút này vốn chia nhau một cờ).
+// Một instance dùng chung cho `handleSave`, `handleSetDefault` và
+// `handleDeleteProfile` — cả ba ghi xuống cùng nguồn (profile / pipeline), nên
+// một slot chặn luôn việc xoá profile trong lúc nó đang được lưu.
 const { pending: saving, run: runSave } = useApiAction()
 const saveMsg = ref('')
 
@@ -820,16 +821,19 @@ async function handleSave() {
 
 async function handleDeleteProfile() {
   const name = profileSelected.value
-  if (!name) return
+  // Kiểm cờ TRƯỚC `confirm()`: lượt bấm mà `run` sẽ bỏ qua không được hỏi lại.
+  if (!name || saving.value) return
   if (!confirm(t('pipelineEditor.target.confirmDeleteProfile', { name }))) return
-  const ok = await removeProfile(name)
-  if (!ok) {
-    saveMsg.value = `✗ ${profileError.value}`
-    return
-  }
-  // Giữ nguyên canvas — người dùng vừa mất file, đừng mất luôn công việc đang mở.
-  profileSelected.value = ''
-  await refreshProfiles()
+  await runSave(async () => {
+    const ok = await removeProfile(name)
+    if (!ok) {
+      saveMsg.value = `✗ ${profileError.value}`
+      return
+    }
+    // Giữ nguyên canvas — người dùng vừa mất file, đừng mất luôn công việc đang mở.
+    profileSelected.value = ''
+    await refreshProfiles()
+  })
 }
 
 async function handleDownloadProfile() {
