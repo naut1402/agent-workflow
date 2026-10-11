@@ -321,3 +321,140 @@ describe('ProjectBar — remove default project (mục 2)', () => {
     expect(form.classes()).toContain('project-add-form')
   })
 })
+
+// ---------------------------------------------------------------------------
+// T86917a08 — điều hướng bàn phím trong menu select theo khuôn Listbox của
+// WAI-ARIA APG: Arrow di chuyển option active, Home/End nhảy biên, Enter chọn,
+// Escape đóng và trả focus về trigger, trạng thái active phơi qua
+// `aria-activedescendant`. Wrap-around ở biên là lựa chọn của design.md §5.4.
+// ---------------------------------------------------------------------------
+
+const projectsKeyboard = [
+  { id: 'p-current', name: 'Current project', default: true },
+  { id: 'p-other', name: 'Other project', default: false },
+  { id: 'p-third', name: 'Third project', default: false },
+]
+
+function mountKeyboardBar() {
+  return mountBar({
+    projects: projectsKeyboard,
+    defaultId: 'p-current',
+    selectedId: 'p-current',
+  })
+}
+
+/** Menu tự nhận focus qua `nextTick` sau khi mở — đợi hết microtask queue. */
+async function openMenuFocused(w: ReturnType<typeof mount>) {
+  await openSelectMenu(w)
+  await flushPromises()
+  expect(menuEl()).not.toBeNull()
+}
+
+async function pressOnMenu(key: string) {
+  await new DOMWrapper(menuEl()!).trigger('keydown', { key })
+}
+
+function highlightedIndex(): number {
+  return menuItems().findIndex((item) => item.classes().includes('highlighted'))
+}
+
+function triggerEl(w: ReturnType<typeof mount>): HTMLElement {
+  return w.get('.project-select-trigger').element as HTMLElement
+}
+
+describe('ProjectBar — điều hướng bàn phím trong menu select (T86917a08)', () => {
+  it('TC-K1 — mở menu: menu tự nhận focus, aria-activedescendant trỏ project đang chọn', async () => {
+    const w = mountKeyboardBar()
+    await openMenuFocused(w)
+
+    expect(document.activeElement).toBe(menuEl())
+    expect(menuEl()!.getAttribute('aria-activedescendant')).toBe(menuItems()[0].attributes('id'))
+    expect(menuItems()[0].attributes('aria-selected')).toBe('true')
+  })
+
+  it('TC-K2 — ArrowDown rồi Enter chọn item kế tiếp, đóng menu và trả focus về trigger', async () => {
+    const w = mountKeyboardBar()
+    await openMenuFocused(w)
+
+    await pressOnMenu('ArrowDown')
+    await pressOnMenu('Enter')
+    await flushPromises()
+
+    expect(w.emitted('select')?.at(-1)).toEqual(['p-other'])
+    expect(menuEl()).toBeNull()
+    expect(document.activeElement).toBe(triggerEl(w))
+  })
+
+  it('TC-K3 — ArrowUp ở item đầu wrap về item cuối, menu vẫn mở và chưa chọn gì', async () => {
+    const w = mountKeyboardBar()
+    await openMenuFocused(w)
+    expect(highlightedIndex()).toBe(0)
+
+    await pressOnMenu('ArrowUp')
+
+    expect(highlightedIndex()).toBe(projectsKeyboard.length - 1)
+    expect(menuEl()).not.toBeNull()
+    expect(w.emitted('select')).toBeUndefined()
+  })
+
+  it('TC-K4 — Escape đóng menu, không chọn gì, focus quay về trigger', async () => {
+    const w = mountKeyboardBar()
+    await openMenuFocused(w)
+
+    await pressOnMenu('Escape')
+    await flushPromises()
+
+    expect(menuEl()).toBeNull()
+    expect(w.emitted('select')).toBeUndefined()
+    expect(document.activeElement).toBe(triggerEl(w))
+  })
+
+  it('TC-K5 — End nhảy xuống item cuối, Home nhảy về item đầu, không chọn gì', async () => {
+    const w = mountKeyboardBar()
+    await openMenuFocused(w)
+
+    await pressOnMenu('End')
+    expect(highlightedIndex()).toBe(projectsKeyboard.length - 1)
+    expect(menuEl()).not.toBeNull()
+    expect(w.emitted('select')).toBeUndefined()
+
+    // Đóng rồi mở lại: highlight khởi động lại từ project đang chọn (item đầu).
+    await w.find('.project-select-trigger').trigger('click')
+    expect(menuEl()).toBeNull()
+    await openMenuFocused(w)
+
+    await pressOnMenu('Home')
+    expect(highlightedIndex()).toBe(0)
+    expect(menuEl()).not.toBeNull()
+    expect(w.emitted('select')).toBeUndefined()
+  })
+
+  it('TC-K6 — mousemove lên item khác ghi đè highlight bàn phím: Enter chọn item dưới chuột', async () => {
+    const w = mountKeyboardBar()
+    await openMenuFocused(w)
+
+    await pressOnMenu('ArrowDown')
+    expect(highlightedIndex()).toBe(1)
+
+    await menuItems()[2].trigger('mousemove')
+    expect(highlightedIndex()).toBe(2)
+
+    await pressOnMenu('Enter')
+    await flushPromises()
+
+    // Chuột và bàn phím không được giữ hai con trỏ mâu thuẫn.
+    expect(w.emitted('select')?.at(-1)).toEqual(['p-third'])
+  })
+
+  it('TC-K7 (đối chứng) — menu đóng, hover vùng select + ArrowDown vẫn đổi project ngay', async () => {
+    const w = mountKeyboardBar()
+    await w.find('.project-select').trigger('mouseenter')
+    expect(menuEl()).toBeNull()
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }))
+    await w.vm.$nextTick()
+
+    expect(w.emitted('select')?.at(-1)).toEqual(['p-other'])
+    expect(menuEl()).toBeNull()
+  })
+})
