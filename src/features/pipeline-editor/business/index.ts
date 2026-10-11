@@ -13,3 +13,7 @@ export { sanitiseRunnerId } from '../../runner/business/index.js'
 // fallow-ignore-next-line unused-export
 export { loadScanPatternsConfig } from '../../settings/business/index.js'
 export * from '../../agent-editor/business/index.js'
+/** Bề mặt catalog cho feature khác (nl-chat) — đi qua barrel, không import sâu `catalog/`. */
+export { buildCatalog } from './catalog/index.js'
+// fallow-ignore-next-line unused-type
+export type { Catalog, CatalogAgentStore, CatalogScanPatterns } from './catalog/index.js'
