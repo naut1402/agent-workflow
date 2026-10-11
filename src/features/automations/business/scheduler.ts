@@ -1,8 +1,8 @@
 /**
  * Automation scheduler (#233) — tick định kỳ quét automation của mọi project
  * trong registry, đánh giá trigger thời gian (timer: once/interval/cron) và
- * chạy action do hệ thống bơm vào (`bindAutomationRunner`, pattern
- * recoverPoller: module này không kéo monitor/runner khi unit-test).
+ * chạy action qua port `AutomationRunner.ts` (`bootstrap.ts` bơm runner thật —
+ * module này không kéo monitor/runner khi unit-test).
  *
  * Sống sót qua restart: rule config ở data root, runtime state ở
  * `registryHome()/automations/` — khi boot quét lại là tính tiếp due.
@@ -10,33 +10,10 @@
 
 import { loadRegistry } from '../../../backend/registry.js'
 import type { AutomationRuleRecord } from '../schemas/automation.js'
+import { getBoundAutomationRunner } from './AutomationRunner.js'
 import { evaluateRuleTriggers } from './matcher.js'
 import { clearStaleInFlight, getRuleState } from './runLedger.js'
 import { listAutomations, syncTriggerRegistry } from './rules.js'
-
-export interface AutomationRunnerInput {
-  root: string
-  projectId: string | null
-  rule: AutomationRuleRecord
-  source: 'manual' | 'schedule' | 'event'
-  /** Trigger khớp (id trong rule.triggers) — truyền vào run để dựng context. */
-  triggerId?: string
-  /** Payload event gốc khi source=event. */
-  event?: { type: string; payload: Record<string, unknown> }
-}
-
-export type AutomationRunnerFn = (input: AutomationRunnerInput) => Promise<unknown> | unknown
-
-/** Default noop — business/index.ts bơm `runAutomation` thật khi nạp server. */
-let boundRunner: AutomationRunnerFn = async () => undefined
-
-export function bindAutomationRunner(fn: AutomationRunnerFn): void {
-  boundRunner = fn
-}
-
-export function getBoundAutomationRunner(): AutomationRunnerFn {
-  return boundRunner
-}
 
 export function automationPollIntervalMs(): number {
   const raw = Number(process.env.AUTOMATION_POLL_INTERVAL_MS || '')
@@ -84,7 +61,7 @@ export async function tickAutomationScheduler(now: Date = new Date()): Promise<n
   let triggered = 0
   for (const { project, rule, triggerId } of collectDueSchedules(now)) {
     try {
-      await boundRunner({ root: project.path, projectId: project.id, rule, source: 'schedule', triggerId })
+      await getBoundAutomationRunner()({ root: project.path, projectId: project.id, rule, source: 'schedule', triggerId })
       triggered++
     } catch (err) {
       console.warn(`[automations] run failed for ${project.id}:${rule.id}:`, err)
