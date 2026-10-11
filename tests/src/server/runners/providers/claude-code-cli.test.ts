@@ -5,8 +5,11 @@ import os from 'node:os'
 import path from 'node:path'
 import {
   buildClaudeInvocation,
-  createLocalConsoleProvider,
-} from '../../../../../src/features/runner/business/providers/claude-code-cli.js'
+  ClaudeCliProvider,
+} from '../../../../../src/features/runner/business/providers/ClaudeCliProvider.js'
+import { CodexCliProvider } from '../../../../../src/features/runner/business/providers/CodexCliProvider.js'
+import { CursorCliProvider } from '../../../../../src/features/runner/business/providers/CursorCliProvider.js'
+import type { AgentCliProviderOptions } from '../../../../../src/features/runner/business/providers/AbstractAgentCliProvider.js'
 import { mcpRegistry } from '../../../../../src/features/mcp/business/McpRegistry.js'
 import type { CredentialProfile, ResolvedAgent } from '../../../../../src/features/runner/business/types.js'
 import { registryHome } from '../../../../../src/backend/registry.js'
@@ -17,7 +20,7 @@ import { RunnerCredentialResolver } from '../../../../../src/features/runner/bus
 
 /**
  * Delivery y hệt bản `runner/business/registry.ts` lắp ráp cho claude / cursor.
- * `createLocalConsoleProvider` dựng tay 🚫 còn tự suy cách giao theo `providerId`
+ * Provider CLI dựng tay 🚫 còn tự suy cách giao theo `providerId`
  * (G12) — ca MCP phải truyền tường minh. `runtimeDir` tính lại mỗi lần gọi vì
  * từng ca đổi `DEV_TEAM_DASHBOARD_HOME`.
  */
@@ -64,7 +67,7 @@ function makeLogPath(home: string): string {
   return logPath
 }
 
-describe('createLocalConsoleProvider — job log structure', () => {
+describe('Agent CLI provider — job log structure', () => {
   test('success: log has payload, runner response, and result sections', async () => {
     const home = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-provider-'))
     const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-workspace-'))
@@ -72,10 +75,8 @@ describe('createLocalConsoleProvider — job log structure', () => {
       const { cliPath, flags } = nodeCli('hello')
       const logPath = makeLogPath(home)
 
-      const provider = createLocalConsoleProvider({
-        providerId: 'claude-code-cli',
+      const provider = new CodexCliProvider({
         defaultCliPath: cliPath,
-        claudeStyleArgs: false,
       })
 
       const result = await provider.execute(
@@ -234,10 +235,9 @@ describe('createLocalConsoleProvider — job log structure', () => {
         'Đọc file design.md rồi cải thiện phần mô tả.\n' +
         'Nhiều dòng có dấu cách tiếng Việt.'
 
-      const provider = createLocalConsoleProvider({
-        providerId: 'claude-code-cli',
+      const provider = new ClaudeCliProvider({
         defaultCliPath: process.execPath,
-        claudeStyleArgs: true,
+        sessionCapture: 'none',
       })
 
       let output = ''
@@ -300,10 +300,9 @@ describe('createLocalConsoleProvider — job log structure', () => {
         'utf8',
       )
 
-      const provider = createLocalConsoleProvider({
-        providerId: 'claude-code-cli',
+      const provider = new ClaudeCliProvider({
         defaultCliPath: process.execPath,
-        claudeStyleArgs: true,
+        sessionCapture: 'none',
       })
 
       let output = ''
@@ -351,10 +350,8 @@ describe('createLocalConsoleProvider — job log structure', () => {
         'utf8',
       )
 
-      const provider = createLocalConsoleProvider({
-        providerId: 'cursor-cli',
+      const provider = new CodexCliProvider({
         defaultCliPath: process.execPath,
-        claudeStyleArgs: false,
       })
 
       let output = ''
@@ -416,11 +413,8 @@ describe('createLocalConsoleProvider — job log structure', () => {
       const multiLinePrompt =
         '## Agent instructions\n\nBạn là nl-chat-builder.\n\n## Task\n\nNgười dùng (lượt 1): tạo task cập nhật deploy'
 
-      const provider = createLocalConsoleProvider({
-        providerId: 'cursor-cli',
+      const provider = new CursorCliProvider({
         defaultCliPath: process.execPath,
-        claudeStyleArgs: false,
-        sessionCapture: 'parse-json',
       })
 
       let output = ''
@@ -476,10 +470,8 @@ describe('createLocalConsoleProvider — job log structure', () => {
       const { cliPath, flags } = nodeCli('fail')
       const logPath = makeLogPath(home)
 
-      const provider = createLocalConsoleProvider({
-        providerId: 'claude-code-cli',
+      const provider = new CodexCliProvider({
         defaultCliPath: cliPath,
-        claudeStyleArgs: false,
       })
 
       const result = await provider.execute(
@@ -516,10 +508,8 @@ describe('createLocalConsoleProvider — job log structure', () => {
     const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-workspace-'))
     try {
       const { cliPath, flags } = nodeCli('hang')
-      const provider = createLocalConsoleProvider({
-        providerId: 'claude-code-cli',
+      const provider = new CodexCliProvider({
         defaultCliPath: cliPath,
-        claudeStyleArgs: false,
       })
 
       const result = await provider.execute(
@@ -554,10 +544,8 @@ describe('createLocalConsoleProvider — job log structure', () => {
       const badCliPath = path.join(home, 'does-not-exist-binary')
       const logPath = makeLogPath(home)
 
-      const provider = createLocalConsoleProvider({
-        providerId: 'claude-code-cli',
+      const provider = new CodexCliProvider({
         defaultCliPath: badCliPath,
-        claudeStyleArgs: false,
       })
 
       const result = await provider.execute(
@@ -592,7 +580,7 @@ describe('createLocalConsoleProvider — job log structure', () => {
 
 // Chat rounds resume the same agent's session, so the agent instructions are
 // already in the conversation — re-sending them every message is noise.
-describe('createLocalConsoleProvider — agent instructions on resume', () => {
+describe('Agent CLI provider — agent instructions on resume', () => {
   const agentWithPrompt: ResolvedAgent = { ...resolvedAgent, systemPrompt: 'BẠN LÀ AGENT DESIGNER' }
 
   async function runOnce(metadata: Record<string, unknown>, resumeSessionId?: string): Promise<string> {
@@ -601,10 +589,8 @@ describe('createLocalConsoleProvider — agent instructions on resume', () => {
     try {
       const { cliPath, flags } = nodeCli('ok')
       const logPath = makeLogPath(home)
-      const provider = createLocalConsoleProvider({
-        providerId: 'claude-code-cli',
+      const provider = new CodexCliProvider({
         defaultCliPath: cliPath,
-        claudeStyleArgs: false,
       })
       await provider.execute(
         {
@@ -708,11 +694,11 @@ describe('claude-code-cli — env token/base URL cho job orchestrator (Bug A)', 
     const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-workspace-'))
     try {
       const fakeCli = argvEnvEchoCli(home)
-      const provider = createLocalConsoleProvider({
-        providerId,
-        defaultCliPath: process.execPath,
-        claudeStyleArgs: providerId === 'claude-code-cli',
-      })
+      // claude: argv kiểu `claude -p`; CLI khác: argv thuần (env token áp chung mọi CLI).
+      const provider =
+        providerId === 'claude-code-cli'
+          ? new ClaudeCliProvider({ defaultCliPath: process.execPath, sessionCapture: 'none' })
+          : new CodexCliProvider({ defaultCliPath: process.execPath })
 
       let output = ''
       const result = await provider.execute(
@@ -778,7 +764,7 @@ describe('claude-code-cli — env token/base URL cho job orchestrator (Bug A)', 
 
   // Khác biệt có chủ đích so với bản MCP cũ (từng gate riêng `claude-code-cli`,
   // TC-12 cũ khẳng định provider khác KHÔNG có kênh trực tiếp) — env injection
-  // đặt ở tầng `execute()` DÙNG CHUNG cho cả 3 provider CLI (`createLocalConsoleProvider`),
+  // đặt ở tầng `execute()` DÙNG CHUNG cho cả 3 provider CLI (`AbstractAgentCliProvider`),
   // nên giờ `cursor-cli`/`codex-cli` cũng nhận được token/base URL để tự chạy
   // shell command, không cần hỗ trợ riêng giao thức MCP.
   test('provider khác claude-code-cli (vd cursor-cli) cũng nhận được token/base URL qua env — áp dụng chung mọi provider CLI', async () => {
@@ -902,18 +888,17 @@ describe('claude-code-cli — execute() với MCP', () => {
     })
   }
 
-  function mcpProvider(over: Partial<Parameters<typeof createLocalConsoleProvider>[0]> = {}) {
-    return createLocalConsoleProvider({
-      providerId: 'claude-code-cli',
+  function mcpProvider(over: Partial<AgentCliProviderOptions> = {}) {
+    return new ClaudeCliProvider({
       defaultCliPath: process.execPath,
-      claudeStyleArgs: true,
+      sessionCapture: 'none',
       mcpDelivery: claudeMcpDelivery(),
       ...over,
     })
   }
 
   async function run(
-    provider: ReturnType<typeof createLocalConsoleProvider>,
+    provider: ClaudeCliProvider,
     runnerConfig: Record<string, any>,
     opts: { logPath?: string; onLog?: (c: string) => void; timeoutMs?: number; jobId?: string } = {},
   ) {
@@ -1230,10 +1215,9 @@ describe('claude-code-cli — self-MCP cho job điều phối (Tf2f484e2)', () =
     opts: { logPath?: string; mode?: string } = {},
   ) {
     const { cliPath, flags } = nodeCli(opts.mode ?? 'mcp-dump')
-    const provider = createLocalConsoleProvider({
-      providerId: 'claude-code-cli',
+    const provider = new ClaudeCliProvider({
       defaultCliPath: process.execPath,
-      claudeStyleArgs: true,
+      sessionCapture: 'none',
       mcpDelivery: claudeMcpDelivery(),
     })
     const result = await provider.execute(
@@ -1425,10 +1409,9 @@ describe('claude-code-cli — self-MCP cho job điều phối (Tf2f484e2)', () =
       ].join('\n'),
       'utf8',
     )
-    const provider = createLocalConsoleProvider({
-      providerId: 'claude-code-cli',
+    const provider = new ClaudeCliProvider({
       defaultCliPath: process.execPath,
-      claudeStyleArgs: true,
+      sessionCapture: 'none',
       mcpDelivery: claudeMcpDelivery(),
     })
     const result = await provider.execute(
@@ -1506,11 +1489,8 @@ describe('cursor-cli — MCP qua workspace config file (#378)', () => {
   })
 
   function cursorProvider() {
-    return createLocalConsoleProvider({
-      providerId: 'cursor-cli',
+    return new CursorCliProvider({
       defaultCliPath: process.execPath,
-      claudeStyleArgs: false,
-      sessionCapture: 'parse-json',
       mcpDelivery: cursorMcpDelivery(),
     })
   }

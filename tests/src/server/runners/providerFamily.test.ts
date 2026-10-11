@@ -13,7 +13,7 @@ import {
   upsertRunner,
 } from '../../../../src/features/runner/business/index.js'
 import { providerFamilyOf as registryProviderFamilyOf } from '../../../../src/features/runner/business/registry.js'
-import { providerFamilyFromId } from '../../../../src/features/runner/business/providers/agentCli.js'
+import { providerFamilyFromId } from '../../../../src/features/runner/business/providers/providerRegistry.js'
 import type { ProviderFamily, RunnerProvider } from '../../../../src/features/runner/business/types.js'
 
 // T6fabee9b · G6 — `providerFamilyOf` phân loại theo khai báo (catalog → family

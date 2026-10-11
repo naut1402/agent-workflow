@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { OpenAiCompatibleProvider } from '../../../../../../src/features/runner/business/providers/openai-compatible-api.js'
+import { OpenAiCompatibleProvider } from '../../../../../../src/features/runner/business/providers/OpenAiCompatibleProvider.js'
 import { readTranscriptTurns } from '../../../../../../src/features/runner/business/providers/agentTranscriptStore.js'
 import type { CredentialProfile, ExecuteRequest } from '../../../../../../src/features/runner/business/types.js'
 

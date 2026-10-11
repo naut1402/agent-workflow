@@ -280,7 +280,8 @@ describe('Tcebe274e-P3 — `mcp` không phụ thuộc `runner` / `agent-editor`'
   })
 
   test('chiều ngược vẫn có: runner đăng ký adapter credential qua barrel mcp (chống xanh giả của cổng)', () => {
-    const registry = FILES.find((f) => f.endsWith(path.join('runner', 'business', 'registry.ts')))!
+    // Chỗ lắp ráp provider runner (#440): `runner/business/providers/providerRegistry.ts`.
+    const registry = FILES.find((f) => f.endsWith(path.join('runner', 'business', 'providers', 'providerRegistry.ts')))!
     expect((GRAPH.get(registry) ?? []).some((t) => t.endsWith(path.join('features', 'mcp', 'business', 'index.ts')))).toBe(true)
   })
 })
