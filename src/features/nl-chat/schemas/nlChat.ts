@@ -6,6 +6,13 @@ import { z } from 'zod'
  * server/chat/nlChatSession.ts), instead of calling an LLM API directly.
  */
 
+/**
+ * Trần độ dài của MỘT message chat. Có tên để phía client đo đúng ngưỡng này khi
+ * nối thêm block vào message (draft đang sửa, attachment, knowledge) thay vì
+ * hard-code lần thứ hai — hai nguồn chân lý là hai con số sẽ lệch nhau.
+ */
+export const MAX_CHAT_MESSAGE_CHARS = 20_000
+
 export const NL_CHAT_ENTITY_TYPES = ['task', 'pipeline', 'agent', 'automation'] as const
 export type NlChatEntityType = (typeof NL_CHAT_ENTITY_TYPES)[number]
 
@@ -19,14 +26,14 @@ export type NlChatEntityType = (typeof NL_CHAT_ENTITY_TYPES)[number]
  */
 export const StartNlChatRequest = z.object({
   entityType: z.enum(NL_CHAT_ENTITY_TYPES).nullish(),
-  message: z.string().min(1).max(20_000),
+  message: z.string().min(1).max(MAX_CHAT_MESSAGE_CHARS),
   runnerId: z.string().min(1).nullish(),
 })
 export type StartNlChatRequest = z.infer<typeof StartNlChatRequest>
 
 /** Body for `POST /api/nl-chat/sessions/:id/messages` (continues a session). */
 export const NlChatMessageRequest = z.object({
-  message: z.string().min(1).max(20_000),
+  message: z.string().min(1).max(MAX_CHAT_MESSAGE_CHARS),
 })
 export type NlChatMessageRequest = z.infer<typeof NlChatMessageRequest>
 
@@ -42,7 +49,16 @@ export const MAX_ATTACHMENTS_PER_TURN = 5
 const ALLOWED_MIME_PREFIXES = ['image/', 'text/'] as const
 const ALLOWED_MIME_EXACT = ['application/pdf', 'application/json'] as const
 /** Browsers report an empty `type` for some extensions (`.md`) — fall back to these. */
-const ALLOWED_EXTENSIONS = ['.md', '.txt', '.json', '.pdf', '.log', '.csv', '.yaml', '.yml'] as const
+const ALLOWED_EXTENSIONS = [
+  '.md',
+  '.txt',
+  '.json',
+  '.pdf',
+  '.log',
+  '.csv',
+  '.yaml',
+  '.yml',
+] as const
 
 export function isAllowedAttachment(name: string, mime: string): boolean {
   const type = (mime || '').toLowerCase()
