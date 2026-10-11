@@ -4,7 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { createApp } from '../../../../src/backend/apiServer.js'
 import type { RegistryContext } from '../../../../src/backend/http/types.js'
-import { ORCHESTRATOR_TOKEN_HEADER } from '../../../../src/features/orchestrator/controller.js'
+import { SelfMcpServer } from '../../../../src/features/mcp/business/index.js'
 import { mintOrchestratorToken, revokeOrchestratorTokensFor } from '../../../../src/features/orchestrator/business/orchestratorTokens.js'
 import { listJobs, loadJob, registerProvider, upsertConnection, upsertRunner } from '../../../../src/features/runner/business/index.js'
 import type { ExecuteResult, RunnerProvider } from '../../../../src/features/runner/business/types.js'
@@ -116,13 +116,13 @@ function tokenFor(taskId: string): string {
 
 async function status(token?: string) {
   return app.request('/api/orchestrator/status', {
-    headers: token ? { [ORCHESTRATOR_TOKEN_HEADER]: token } : undefined,
+    headers: token ? { [SelfMcpServer.TOKEN_HEADER]: token } : undefined,
   })
 }
 
 async function output(token: string | undefined, offset = 0) {
   return app.request(`/api/orchestrator/output?offset=${offset}`, {
-    headers: token ? { [ORCHESTRATOR_TOKEN_HEADER]: token } : undefined,
+    headers: token ? { [SelfMcpServer.TOKEN_HEADER]: token } : undefined,
   })
 }
 
@@ -130,7 +130,7 @@ async function decide(token: string | undefined, body: Record<string, unknown>) 
   return app.request('/api/orchestrator/decide', {
     method: 'POST',
     headers: {
-      ...(token ? { [ORCHESTRATOR_TOKEN_HEADER]: token } : {}),
+      ...(token ? { [SelfMcpServer.TOKEN_HEADER]: token } : {}),
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(body),

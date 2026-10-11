@@ -214,3 +214,30 @@ describe('canAttach', () => {
     expect(entry).toBe(path.join(REPO_ROOT, 'mcp', 'stdio.ts'))
   })
 })
+
+// Tfb77cf90-P10 (#449) — hằng hợp đồng HTTP của API điều phối + nguồn đọc
+// `DEV_TEAM_SELF_BASE_URL` khai một chỗ ở `SelfMcpServer`.
+describe('hợp đồng HTTP của API điều phối — Tfb77cf90-P10', () => {
+  test('header token và path decide giữ đúng giá trị dashboard đang phục vụ', () => {
+    expect(SelfMcpServer.TOKEN_HEADER).toBe('X-Dashboard-Orchestrator-Token')
+    expect(SelfMcpServer.DECIDE_PATH).toBe('/api/orchestrator/decide')
+  })
+
+  test('selfBaseUrl() trả NGUYÊN VĂN env, vắng ⇒ undefined', () => {
+    expect(SelfMcpServer.selfBaseUrl()).toBeUndefined()
+    process.env.DEV_TEAM_SELF_BASE_URL = BASE_URL
+    expect(SelfMcpServer.selfBaseUrl()).toBe(BASE_URL)
+    // Không trim ở nguồn: `resolveDecisionRoute` tự trim, `childEnv` thì không —
+    // giữ đúng hai hành vi cũ (xem test kế).
+    process.env.DEV_TEAM_SELF_BASE_URL = '  '
+    expect(SelfMcpServer.selfBaseUrl()).toBe('  ')
+  })
+
+  test('characterization: base URL chỉ khoảng trắng vẫn được childEnv coi là có (không trim)', () => {
+    process.env.DEV_TEAM_SELF_BASE_URL = '  '
+    expect(SelfMcpServer.childEnv(orchestratorJob())).toEqual({
+      DASHBOARD_ORCHESTRATOR_TOKEN: TOKEN,
+      DASHBOARD_ORCHESTRATOR_BASE_URL: '  ',
+    })
+  })
+})
