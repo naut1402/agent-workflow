@@ -13,7 +13,15 @@ vi.mock('@/features/runner/scripts/RunnerDialogApi', () => ({
   fetchJob: vi.fn(),
 }))
 
-import { saveRunner } from '@/features/runner/scripts/RunnerDialogApi'
+// Partial: chỉ `deleteConnection` bị thay — `ConnectionDialog` (con) vẫn import
+// phần còn lại của module.
+vi.mock('@/features/runner/scripts/ConnectionDialogApi', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/features/runner/scripts/ConnectionDialogApi')>()),
+  deleteConnection: vi.fn(async () => ({ deleted: true })),
+}))
+
+import { saveRunner, submitJob, fetchJob } from '@/features/runner/scripts/RunnerDialogApi'
+import { deleteConnection } from '@/features/runner/scripts/ConnectionDialogApi'
 
 const connections: ConnectionOption[] = [
   { id: 'conn-1', label: 'Claude local', providerId: 'claude-code-cli' },
@@ -209,5 +217,126 @@ describe('RunnerDialog — cờ create và hint id', () => {
     expect(document.body.querySelector('.err-banner')?.textContent?.trim()).toBe(
       'connectionId is required',
     )
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tef1d7fb7 — chạy thử và xoá connection đi qua `useApiAction`. Chạy thử tách
+// hai pha: `submitJob` có guard + overlay, vòng poll sau đó KHÔNG phủ overlay
+// (khoá form 120 s chỉ để chờ job nền) nhưng nút chạy thử vẫn tắt tới khi xong.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function buttonByText(text: string): HTMLButtonElement {
+  const btn = [...document.querySelectorAll<HTMLButtonElement>('button')].find(
+    (b) => b.textContent?.trim() === text,
+  )
+  if (!btn) throw new Error(`button not found: ${text}`)
+  return btn
+}
+const overlay = () => document.body.querySelector('.c-loading-overlay')
+
+describe('RunnerDialog — chạy thử: guard submit, poll không phủ overlay', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  function holdSubmit(): (job: Record<string, unknown>) => void {
+    let release: (v: unknown) => void = () => {}
+    vi.mocked(submitJob).mockImplementationOnce(() => new Promise((r) => { release = r }) as any)
+    return (job) => release({ job })
+  }
+
+  it('bấm hai lần khi đang submit ⇒ một submitJob, overlay hiện; vào poll thì gỡ overlay, nút vẫn tắt', async () => {
+    // Chỉ giả `setTimeout`: `flushPromises` chạy trên `setImmediate` thật.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const release = holdSubmit()
+    vi.mocked(fetchJob).mockResolvedValue({ job: { id: 'j1', status: 'succeeded' } } as any)
+    mountDialog({ runner: EXISTING_RUNNER, mode: 'edit' })
+
+    const btn = buttonByText(runnerVi.actions.test)
+    btn.click()
+    btn.click()
+    await flushPromises()
+
+    expect(submitJob).toHaveBeenCalledTimes(1)
+    expect(overlay()).not.toBe(null)
+
+    release({ id: 'j1', status: 'queued' })
+    await flushPromises()
+
+    // Pha poll: overlay đã gỡ, nút chạy thử vẫn tắt, form dùng được.
+    expect(overlay()).toBe(null)
+    expect(buttonByText(runnerVi.actions.testing).disabled).toBe(true)
+    expect(buttonByText(runnerVi.actions.save).disabled).toBe(false)
+
+    await vi.advanceTimersByTimeAsync(1000)
+    await flushPromises()
+
+    expect(fetchJob).toHaveBeenCalledTimes(1)
+    expect(buttonByText(runnerVi.actions.test).disabled).toBe(false)
+    expect(document.body.querySelector('.ok-banner')?.textContent).toContain('Smoke test')
+  })
+
+  it('submit lỗi ⇒ hiện lỗi, không poll, nút không kẹt', async () => {
+    vi.mocked(submitJob).mockRejectedValueOnce(new Error('runner busy'))
+    mountDialog({ runner: EXISTING_RUNNER, mode: 'edit' })
+
+    buttonByText(runnerVi.actions.test).click()
+    await flushPromises()
+
+    expect(document.body.querySelector('.err-banner')?.textContent?.trim()).toBe('runner busy')
+    expect(fetchJob).not.toHaveBeenCalled()
+    expect(buttonByText(runnerVi.actions.test).disabled).toBe(false)
+  })
+
+  it('đóng dialog giữa vòng poll ⇒ dừng poll, không gọi fetchJob nữa', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    vi.mocked(submitJob).mockResolvedValueOnce({ job: { id: 'j1', status: 'queued' } } as any)
+    vi.mocked(fetchJob).mockResolvedValue({ job: { id: 'j1', status: 'running' } } as any)
+    const w = mountDialog({ runner: EXISTING_RUNNER, mode: 'edit' })
+
+    buttonByText(runnerVi.actions.test).click()
+    await flushPromises()
+    w.unmount()
+
+    await vi.advanceTimersByTimeAsync(5000)
+    await flushPromises()
+
+    expect(fetchJob).not.toHaveBeenCalled()
+  })
+})
+
+describe('RunnerDialog — xoá connection qua useApiAction', () => {
+  function trashButton(): HTMLButtonElement {
+    const btn = document.body.querySelector<HTMLButtonElement>(
+      `button[aria-label="${runnerVi.connectionDialog.deleteConnection}"]`,
+    )
+    if (!btn) throw new Error('trash button not found')
+    return btn
+  }
+
+  it('bấm hai lần khi đang chờ ⇒ một confirm, một API; overlay hiện tới khi xong', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    let release: (v: unknown) => void = () => {}
+    vi.mocked(deleteConnection).mockImplementationOnce(() => new Promise((r) => { release = r }) as any)
+    const w = mountDialog({ runner: EXISTING_RUNNER, mode: 'edit' })
+
+    trashButton().click()
+    trashButton().click()
+    await flushPromises()
+
+    expect(confirmSpy).toHaveBeenCalledTimes(1)
+    expect(deleteConnection).toHaveBeenCalledTimes(1)
+    expect(overlay()).not.toBe(null)
+    // Footer nằm ngoài overlay ⇒ tự khoá bằng `:disabled`.
+    expect(buttonByText(runnerVi.actions.save).disabled).toBe(true)
+
+    release({ deleted: true })
+    await flushPromises()
+
+    // Overlay đã kịp vẽ thì giữ tối thiểu `minVisibleMs` — chờ, đừng assert tức thì.
+    await vi.waitFor(() => expect(overlay()).toBe(null))
+    expect(w.emitted('refreshed')).toHaveLength(1)
+    confirmSpy.mockRestore()
   })
 })
