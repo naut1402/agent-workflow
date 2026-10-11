@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { defineDto } from '../../../shared/type/dto.js'
 
 /**
  * Zod là nguồn chân lý cho query + response thống kê usage (issue #231).
@@ -37,15 +38,20 @@ const filterString = z
   .max(200)
   .regex(/^[\w\-.:@ +]+$/)
 
-/** `from`/`to`: ISO date/datetime hoặc epoch-ms; parse số tại controller. */
-export const UsageStatsQuerySchema = z.object({
-  project: filterString.optional(),
-  taskId: filterString.optional(),
-  stepId: filterString.optional(),
-  from: filterString.optional(),
-  to: filterString.optional(),
-  groupBy: z.enum(USAGE_GROUP_BYS).default('task'),
-})
+/**
+ * `from`/`to`: ISO date/datetime hoặc epoch-ms; parse số ở `UsageStatsRequest.after()`.
+ * Validate ở controller, nhưng ở lại đây vì business nhận đúng kiểu này (`UsageStatsQuery`).
+ */
+export const UsageStatsQuerySchema = defineDto(
+  z.object({
+    project: filterString.optional(),
+    taskId: filterString.optional(),
+    stepId: filterString.optional(),
+    from: filterString.optional(),
+    to: filterString.optional(),
+    groupBy: z.enum(USAGE_GROUP_BYS).default('task'),
+  }),
+)
 export type UsageStatsQuery = z.infer<typeof UsageStatsQuerySchema>
 
 /** Một dòng tổng hợp theo group (key = giá trị dimension, '' khi thiếu attribution). */
@@ -95,11 +101,14 @@ export const UsageTotalsSchema = z.object({
 })
 export type UsageTotals = z.infer<typeof UsageTotalsSchema>
 
-export const UsageStatsResultSchema = z.object({
-  groupBy: z.enum(USAGE_GROUP_BYS),
-  groups: z.array(UsageGroupSchema),
-  /** true khi vượt MAX_GROUPS — group yếu nhất bị bỏ để biểu đồ không vỡ. */
-  truncated: z.boolean(),
-  totals: UsageTotalsSchema,
-})
+/** Response `GET /api/statistics/usage` — FE validate lại ở `scripts/usageStatsApi.ts`. */
+export const UsageStatsResultSchema = defineDto(
+  z.object({
+    groupBy: z.enum(USAGE_GROUP_BYS),
+    groups: z.array(UsageGroupSchema),
+    /** true khi vượt MAX_GROUPS — group yếu nhất bị bỏ để biểu đồ không vỡ. */
+    truncated: z.boolean(),
+    totals: UsageTotalsSchema,
+  }),
+)
 export type UsageStatsResult = z.infer<typeof UsageStatsResultSchema>

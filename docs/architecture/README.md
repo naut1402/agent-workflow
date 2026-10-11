@@ -222,12 +222,13 @@ HTTP kernel & entrypoint. Mọi route `/api/*` đều đi qua đây.
 
 | File | Vai trò |
 |---|---|
-| `src/backend/apiServer.ts` | `createApp(ctx)` dựng Hono + middleware resolve root từ `?project=` / tự duyệt `features/<name>/api.ts` (`registerFeatureRoutes`); `createApiHandler(ctx)` là **cầu nối Node ⇆ Hono** (lazy-await `createApp`), và là **điểm chốt duy nhất** ghi request log (fire-and-forget trong `finally`, không await vào response). |
+| `src/backend/apiServer.ts` | `createApp(ctx)` dựng Hono + middleware resolve root từ `?project=` / tự duyệt `features/<name>/{api.ts,controller.ts,controllers/*.ts}` (`registerFeatureRoutes`); `createApiHandler(ctx)` là **cầu nối Node ⇆ Hono** (lazy-await `createApp`), và là **điểm chốt duy nhất** ghi request log (fire-and-forget trong `finally`, không await vào response). |
 | `src/backend/http/AbstractController.ts` | Base controller (`json`/`ok`/`requireRoot`/`parseBody`/…) + `bind(Controller, method)`. |
 | `src/backend/business/AbstractBusiness.ts` | Base tầng domain (`requireRoot`/`fail`; không biết HTTP). |
-| `src/features/<name>/controller.ts` | HTTP handler (extends `AbstractController`); gọi `XxxBusiness`. |
+| `src/backend/http/{decorators,FormRequest,registerControllers,AbstractHttpController}.ts` | Kiểu controller mới: `@Controller({ order, inject })` · `@Get/@Post/…(path, XRequest)` · `@Raw`; `FormRequest` validate input; `registerControllers` gắn route, tự 405 (`feature-architecture-guideline.md` §2.5). |
+| `src/features/<name>/controller.ts` | HTTP handler. Kiểu mới: class `@Controller` khai route + `FormRequest` + inject business. Kiểu cũ (đang chuyển dần): extends `AbstractController`, route ở `api.ts`. |
 | `src/features/<name>/business/` | Domain + class `XxxBusiness` (extends `AbstractBusiness`). |
-| `src/features/<name>/api.ts` | Map route → `bind(...)` + `routeOrder` / `registerRoutes`. |
+| `src/features/<name>/api.ts` | Kiểu cũ — map route → `bind(...)` + `routeOrder` / `registerRoutes`; bị xoá khi feature chuyển sang decorator. |
 | `src/backend/http/{responseHelper,types}.ts` | Helper response (Node `json` + Hono `j`) + type tầng HTTP. |
 
 #### 4.2.2 Entrypoint & shim (2 transport)
