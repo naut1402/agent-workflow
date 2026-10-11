@@ -2,6 +2,8 @@
 // Reusable knowledge multi-select + upload dialog for create-task and pipeline editor.
 import { useI18nHelpers } from '../composables/useI18nHelpers'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useApiAction } from '../composables/useApiAction'
+import CLoadingOverlay from './CLoadingOverlay.vue'
 import { fetchKnowledgeList, uploadKnowledgeFile } from '../../features/knowledge/scripts/knowledgeApi'
 
 const props = defineProps<{
@@ -23,7 +25,7 @@ const entries = ref<
 const query = ref('')
 const loading = ref(false)
 const error = ref('')
-const uploading = ref(false)
+const { pending: uploading, run: runUpload } = useApiAction()
 const uploadTags = ref('')
 /** `global` dùng chung mọi project — chọn được ngay ở picker, không phải mở panel. */
 const uploadScope = ref('project')
@@ -70,30 +72,29 @@ async function onUpload(e: Event) {
   const file = input.files?.[0]
   input.value = ''
   if (!file) return
-  uploading.value = true
-  error.value = ''
-  try {
-    const tags = uploadTags.value
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean)
-    const data = await uploadKnowledgeFile(file, {
-      scope: uploadScope.value,
-      tags,
-      projectId: props.projectId ?? undefined,
-    })
-    await loadEntries()
-    const id = data.entry?.id
-    if (id) {
-      const next = new Set(selected.value)
-      next.add(id)
-      selected.value = next
+  await runUpload(async () => {
+    error.value = ''
+    try {
+      const tags = uploadTags.value
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+      const data = await uploadKnowledgeFile(file, {
+        scope: uploadScope.value,
+        tags,
+        projectId: props.projectId ?? undefined,
+      })
+      await loadEntries()
+      const id = data.entry?.id
+      if (id) {
+        const next = new Set(selected.value)
+        next.add(id)
+        selected.value = next
+      }
+    } catch (err: unknown) {
+      error.value = String((err as Error)?.message ?? err)
     }
-  } catch (err: unknown) {
-    error.value = String((err as Error)?.message ?? err)
-  } finally {
-    uploading.value = false
-  }
+  })
 }
 
 function confirm() {
@@ -138,54 +139,57 @@ watch(
           </button>
         </div>
 
-        <div class="modal-body knowledge-picker-body">
-          <input
-            v-model="query"
-            type="search"
-            class="cfg-input"
-            :placeholder="t('monitor.createTask.knowledgeSearch')"
-          />
+        <div class="c-loading-host">
+          <CLoadingOverlay :active="uploading" />
+          <div class="modal-body knowledge-picker-body">
+            <input
+              v-model="query"
+              type="search"
+              class="cfg-input"
+              :placeholder="t('monitor.createTask.knowledgeSearch')"
+            />
 
-          <ul class="knowledge-picker-list" :aria-busy="loading">
-            <li v-if="loading" class="knowledge-picker-empty">{{ t('monitor.createTask.loading') }}</li>
-            <li v-else-if="!filtered.length" class="knowledge-picker-empty">
-              {{ t('monitor.createTask.knowledgeEmpty') }}
-            </li>
-            <li v-for="e in filtered" :key="e.id">
-              <label class="knowledge-picker-row">
+            <ul class="knowledge-picker-list" :aria-busy="loading">
+              <li v-if="loading" class="knowledge-picker-empty">{{ t('monitor.createTask.loading') }}</li>
+              <li v-else-if="!filtered.length" class="knowledge-picker-empty">
+                {{ t('monitor.createTask.knowledgeEmpty') }}
+              </li>
+              <li v-for="e in filtered" :key="e.id">
+                <label class="knowledge-picker-row">
+                  <input
+                    type="checkbox"
+                    :checked="selected.has(e.id)"
+                    @change="toggle(e.id)"
+                  />
+                  <span class="knowledge-picker-title">{{ e.title || e.id }}</span>
+                  <code class="knowledge-picker-id">{{ e.id }}</code>
+                </label>
+              </li>
+            </ul>
+
+            <div class="knowledge-picker-upload">
+              <label class="cfg-label">{{ t('monitor.createTask.uploadTags') }}</label>
+              <input v-model="uploadTags" class="cfg-input" :placeholder="t('monitor.createTask.uploadTagsHint')" />
+              <label class="cfg-label">{{ t('monitor.createTask.uploadScope') }}</label>
+              <select v-model="uploadScope" class="cfg-input">
+                <option value="project">project</option>
+                <option value="system">system</option>
+                <option value="global">global</option>
+              </select>
+              <label class="btn-ghost btn-sm knowledge-upload-btn">
+                {{ uploading ? t('monitor.createTask.uploading') : t('monitor.createTask.uploadFile') }}
                 <input
-                  type="checkbox"
-                  :checked="selected.has(e.id)"
-                  @change="toggle(e.id)"
+                  type="file"
+                  accept=".md,.txt,text/markdown,text/plain"
+                  hidden
+                  :disabled="uploading"
+                  @change="onUpload"
                 />
-                <span class="knowledge-picker-title">{{ e.title || e.id }}</span>
-                <code class="knowledge-picker-id">{{ e.id }}</code>
               </label>
-            </li>
-          </ul>
+            </div>
 
-          <div class="knowledge-picker-upload">
-            <label class="cfg-label">{{ t('monitor.createTask.uploadTags') }}</label>
-            <input v-model="uploadTags" class="cfg-input" :placeholder="t('monitor.createTask.uploadTagsHint')" />
-            <label class="cfg-label">{{ t('monitor.createTask.uploadScope') }}</label>
-            <select v-model="uploadScope" class="cfg-input">
-              <option value="project">project</option>
-              <option value="system">system</option>
-              <option value="global">global</option>
-            </select>
-            <label class="btn-ghost btn-sm knowledge-upload-btn">
-              {{ uploading ? t('monitor.createTask.uploading') : t('monitor.createTask.uploadFile') }}
-              <input
-                type="file"
-                accept=".md,.txt,text/markdown,text/plain"
-                hidden
-                :disabled="uploading"
-                @change="onUpload"
-              />
-            </label>
+            <p v-if="error" class="knowledge-picker-err">⚠ {{ error }}</p>
           </div>
-
-          <p v-if="error" class="knowledge-picker-err">⚠ {{ error }}</p>
         </div>
 
         <div class="modal-actions knowledge-picker-foot">

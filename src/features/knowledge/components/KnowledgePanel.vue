@@ -22,6 +22,8 @@ import KnowledgeFormDialog, { type KnowledgeDraft } from './KnowledgeFormDialog.
 import KnowledgeUploadDialog from './KnowledgeUploadDialog.vue'
 import KnowledgeCollectionDialog from './KnowledgeCollectionDialog.vue'
 import KnowledgeTagDialog from './KnowledgeTagDialog.vue'
+import { useKeyedApiAction } from '../../../frontend/composables/useApiAction'
+import CLoadingOverlay from '../../../frontend/ui/CLoadingOverlay.vue'
 
 /**
  * Orchestrator màn knowledge: cột trái là sub-menu, `main` là viewer markdown.
@@ -60,7 +62,7 @@ const viewingEntry = ref<any>(null)
 const viewLoading = ref(false)
 const editingId = ref<string | null>(null)
 const showDialog = ref(false)
-const deletingId = ref<string | null>(null)
+const { pendingKey: deletingId, pending: deleting, run: runDelete } = useKeyedApiAction()
 
 const showUpload = ref(false)
 const showCollectionDialog = ref(false)
@@ -207,25 +209,25 @@ async function save() {
 }
 
 async function removeEntry(id: string) {
-  if (deletingId.value) return // chặn double-click
+  // Kiểm cờ TRƯỚC `confirm()`: lượt bấm mà `run` sẽ bỏ qua không được hỏi lại.
+  if (deleting.value) return
   if (!confirm(t('knowledge.messages.confirmDelete', { id }))) return
-  deletingId.value = id
-  error.value = ''
-  try {
-    await deleteKnowledgeEntry(id, props.projectId)
-    message.value = t('knowledge.messages.deleted')
-    // Xoá entry đang xem → `main` thu về 0, cột trái chiếm full width.
-    if (viewingId.value === id) {
-      viewingId.value = null
-      viewingEntry.value = null
+  await runDelete(id, async () => {
+    error.value = ''
+    try {
+      await deleteKnowledgeEntry(id, props.projectId)
+      message.value = t('knowledge.messages.deleted')
+      // Xoá entry đang xem → `main` thu về 0, cột trái chiếm full width.
+      if (viewingId.value === id) {
+        viewingId.value = null
+        viewingEntry.value = null
+      }
+      if (editingId.value === id) showDialog.value = false
+      await loadList()
+    } catch (e: any) {
+      error.value = String(e.message || e)
     }
-    if (editingId.value === id) showDialog.value = false
-    await loadList()
-  } catch (e: any) {
-    error.value = String(e.message || e)
-  } finally {
-    deletingId.value = null
-  }
+  })
 }
 
 // ── download
@@ -398,33 +400,37 @@ onMounted(async () => {
     <template #left>
       <div class="knowledge-left flex-col-fill">
         <template v-if="!subSidebarCollapsed">
-          <KnowledgeSideMenu
-            v-model:scope="scope"
-            v-model:query="query"
-            :entries="filteredEntries"
-            :loading="loading"
-            :collections="collections"
-            :collections-error="collectionsError"
-            :active-collection="activeCollection"
-            :tags="allTags"
-            :tag-filter="tagFilter"
-            :viewing-id="viewingId"
-            :busy-id="deletingId"
-            @upload="showUpload = true"
-            @download="downloadFiltered"
-            @new="newEntry"
-            @view="openViewer"
-            @edit="openEditor"
-            @download-entry="downloadEntry"
-            @delete="removeEntry"
-            @select-collection="selectCollection"
-            @new-collection="newCollection"
-            @edit-collection="editCollection"
-            @delete-collection="removeCollection"
-            @toggle-tag="toggleTagFilter"
-            @new-tag="newTag"
-            @edit-tag="editTag"
-          />
+          <!-- Hộp cuộn nằm TRONG side menu, nên neo overlay ở lớp bọc không cuộn này. -->
+          <div class="c-loading-host">
+            <CLoadingOverlay :active="deleting" />
+            <KnowledgeSideMenu
+              v-model:scope="scope"
+              v-model:query="query"
+              :entries="filteredEntries"
+              :loading="loading"
+              :collections="collections"
+              :collections-error="collectionsError"
+              :active-collection="activeCollection"
+              :tags="allTags"
+              :tag-filter="tagFilter"
+              :viewing-id="viewingId"
+              :busy-id="deletingId"
+              @upload="showUpload = true"
+              @download="downloadFiltered"
+              @new="newEntry"
+              @view="openViewer"
+              @edit="openEditor"
+              @download-entry="downloadEntry"
+              @delete="removeEntry"
+              @select-collection="selectCollection"
+              @new-collection="newCollection"
+              @edit-collection="editCollection"
+              @delete-collection="removeCollection"
+              @toggle-tag="toggleTagFilter"
+              @new-tag="newTag"
+              @edit-tag="editTag"
+            />
+          </div>
           <p v-if="error" class="err knowledge-msg panel-msg">{{ error }}</p>
           <p v-if="message" class="ok-msg knowledge-msg panel-msg">{{ message }}</p>
         </template>

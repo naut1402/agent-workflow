@@ -120,7 +120,7 @@ const actions = computed<TargetAction[]>(() => {
         titleKey: 'pipelineEditor.target.deleteProfile',
         labelKey: 'pipelineEditor.target.deleteProfile',
         danger: true,
-        disabled: !props.profileSelected,
+        disabled: props.saving || !props.profileSelected,
       },
     )
   }

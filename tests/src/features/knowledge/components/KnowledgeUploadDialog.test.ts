@@ -94,6 +94,11 @@ describe('KnowledgeUploadDialog — upload chặn thao tác khi đang chạy', (
     expect(uploadKnowledgeFile).toHaveBeenCalledTimes(1)
     const [file, opts] = uploadKnowledgeFile.mock.calls[0]
     expect((file as File).name).toBe('note.md')
-    expect(opts).toEqual({ scope: 'system', tags: ['pipeline', 'vue'], projectId: 'p1' })
+    expect(opts).toEqual({
+      scope: 'system',
+      tags: ['pipeline', 'vue'],
+      projectId: 'p1',
+      signal: expect.any(AbortSignal),
+    })
   })
 })
