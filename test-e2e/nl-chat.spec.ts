@@ -624,3 +624,144 @@ test('nl chat: the info popover carries the dashboard connection state in builde
   await expect(popover).toContainText('Kết nối')
   await expect(popover).toContainText('Dashboard đang kết nối')
 })
+
+// ── T9942d974 — sửa draft task do builder đề xuất (test-spec.md §10) ────────
+
+/** Draft lượt 1 (agent đề xuất) và lượt 2 (sau khi người dùng chat sửa tên). */
+const DRAFT_1 = { prompt: 'Sửa bug đăng nhập', name: 'Task ban đầu', profileName: 'review-pipeline' }
+const DRAFT_2 = { prompt: 'Sửa bug đăng nhập', name: 'Z' }
+
+/**
+ * Stub toàn bộ mặt mạng của luồng builder: lượt chat đầu trả draft task, lượt
+ * thứ hai trả draft đã đổi tên, `/api/pipeline-profiles` trả 2 profile thật để
+ * select có gì mà chọn. `POST /api/tasks` bị bắt lại để đọc body ở bước cuối.
+ */
+async function routeDraftFlow(page: Page) {
+  const created: Record<string, unknown>[] = []
+  let turnCall = 0
+
+  await page.route(/\/api\/pipeline-profiles/, (route) =>
+    route.request().method() === 'GET'
+      ? route.fulfill({
+          json: { profiles: [{ name: 'review-pipeline' }, { name: 'quality-first-pipeline' }] },
+        })
+      : route.continue(),
+  )
+  await page.route(/\/api\/nl-chat\/sessions(\?|$)/, (route) =>
+    route.fulfill({ json: { chatSessionId: 'nlchat-draft', job: { id: 'job-draft', status: 'queued' } } }),
+  )
+  await page.route(/\/api\/nl-chat\/sessions\/[^/?]+/, (route) => {
+    const req = route.request()
+    if (req.method() === 'POST') {
+      return route.fulfill({ json: { job: { id: 'job-draft', status: 'queued' } } })
+    }
+    turnCall += 1
+    return route.fulfill({
+      json: {
+        status: 'ready',
+        kind: 'draft',
+        entityType: 'task',
+        draft: turnCall === 1 ? DRAFT_1 : DRAFT_2,
+      },
+    })
+  })
+  await page.route(/\/api\/jobs\/job-draft/, (route) =>
+    route.fulfill({ json: { job: { id: 'job-draft', status: 'succeeded' } } }),
+  )
+  await page.route(/\/api\/tasks(\?|$)/, (route) => {
+    if (route.request().method() !== 'POST') return route.continue()
+    created.push(JSON.parse(route.request().postData() || '{}'))
+    return route.fulfill({ json: { taskId: 'T-e2e', ok: true } })
+  })
+
+  return { created }
+}
+
+/** Mở chat nổi, gửi một câu và chờ draft về — điểm xuất phát chung của TC-E1/TC-E2. */
+async function openDraftPreview(page: Page) {
+  await page.goto('/')
+  // ⚠️ Không dùng waitForLoadState('networkidle') — SSE task/job list (#348)
+  // giữ kết nối mở vô thời hạn nên network không bao giờ "idle".
+  await page.locator('.nl-chat-fab').click()
+  const win = page.locator('.nl-chat-window')
+  await expect(win).toBeVisible({ timeout: 15_000 })
+
+  const session = win.locator('.nl-chat-session:visible')
+  const composer = session.locator('.nl-chat-input-row textarea')
+  await composer.fill('tạo task sửa bug đăng nhập')
+  await session.locator('.nl-chat-send').click()
+
+  const jsonBox = session.locator('.nl-chat-draft-textarea')
+  await expect(jsonBox).toBeVisible({ timeout: 15_000 })
+  return { win, session, composer, jsonBox }
+}
+
+test('nl chat: draft task sửa được bằng form, bằng JSON và bằng chat (capture)', async ({ page }, testInfo) => {
+  const { created } = await routeDraftFlow(page)
+  const { session, composer, jsonBox } = await openDraftPreview(page)
+
+  // E1.1 — hồi quy chính của G2: panel draft và ô chat cùng hiện, không loại trừ nhau.
+  await expect(jsonBox).toBeVisible()
+  await expect(composer).toBeVisible()
+  await capture(page, testInfo, 'nl-chat-draft-preview')
+
+  // E1.2 — sửa `name` ở Form view, bật lại JSON view là thấy ngay.
+  await session.locator('.nl-chat-view-toggle button', { hasText: 'Form view' }).click()
+  const nameInput = session.locator('.nl-chat-draft-form input[id$="-name"]')
+  await nameInput.fill('Tên mới')
+  await nameInput.dispatchEvent('change')
+  await capture(page, testInfo, 'nl-chat-draft-form-view')
+  await session.locator('.nl-chat-view-toggle button', { hasText: 'JSON view' }).click()
+  await expect(jsonBox).toHaveValue(/"name": "Tên mới"/)
+
+  // E1.3 — chọn "dùng pipeline mặc định của project" ⇒ key BIẾN MẤT khỏi JSON.
+  await session.locator('.nl-chat-view-toggle button', { hasText: 'Form view' }).click()
+  await session.locator('.nl-chat-field--select .c-select-trigger').click()
+  await session.locator('.c-select-option').first().click()
+  await session.locator('.nl-chat-view-toggle button', { hasText: 'JSON view' }).click()
+  await expect(jsonBox).not.toHaveValue(/profileName/)
+  const beforeChat = await jsonBox.inputValue()
+
+  // E1.4 — chat sửa tiếp rồi Hoàn tác: bản trước lượt chat phải quay lại NGUYÊN VẸN.
+  await composer.fill('đổi tên thành Z')
+  await session.locator('.nl-chat-send').click()
+  await expect(jsonBox).toHaveValue(/"name": "Z"/, { timeout: 15_000 })
+  const banner = session.locator('.nl-chat-draft-banner')
+  await expect(banner).toBeVisible()
+  await capture(page, testInfo, 'nl-chat-draft-updated-by-chat')
+
+  await banner.locator('.nl-chat-draft-undo').click()
+  await expect(banner).toBeHidden()
+  await expect(jsonBox).toHaveValue(beforeChat)
+  await expect(jsonBox).toHaveValue(/"name": "Tên mới"/)
+  await expect(jsonBox).not.toHaveValue(/profileName/)
+
+  // E1.5 — body gửi lên khớp ĐÚNG nội dung đang hiển thị.
+  await session.locator('.nl-chat-preview-actions button', { hasText: 'Xác nhận & tạo' }).click()
+  await expect.poll(() => created.length, { timeout: 15_000 }).toBe(1)
+  expect(created[0].name).toBe('Tên mới')
+  expect('profileName' in created[0]).toBe(false)
+  expect(created[0].prompt).toBe(DRAFT_1.prompt)
+  await capture(page, testInfo, 'nl-chat-draft-created')
+})
+
+test('nl chat: locator ô chat cũ vẫn khớp đúng 1 phần tử ở bước preview (capture)', async ({ page }, testInfo) => {
+  // TC-E2 — hồi quy G10. 9 test E2E sẵn có địa chỉ composer bằng locator này
+  // (`nl-chat.spec.ts` › "an unsubmitted draft survives…"); màn gộp thêm
+  // textarea JSON + textarea `prompt` của form vào cùng cây, nên nếu một trong
+  // hai lọt vào `.nl-chat-input-row` thì strict mode của Playwright đỏ hàng loạt.
+  await routeDraftFlow(page)
+  const { session } = await openDraftPreview(page)
+  const legacy = page.locator('.nl-chat-session:visible .nl-chat-input-row textarea')
+
+  await expect(legacy).toHaveCount(1)
+
+  await session.locator('.nl-chat-view-toggle button', { hasText: 'Form view' }).click()
+  await expect(session.locator('.nl-chat-draft-form')).toBeVisible()
+  await expect(legacy).toHaveCount(1)
+  await capture(page, testInfo, 'nl-chat-draft-form-and-composer')
+
+  await session.locator('.nl-chat-view-toggle button', { hasText: 'JSON view' }).click()
+  await expect(session.locator('.nl-chat-draft-textarea')).toBeVisible()
+  await expect(legacy).toHaveCount(1)
+})

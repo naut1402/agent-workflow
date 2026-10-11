@@ -29,7 +29,16 @@ const session = {
   showLongChatNudge: ref(false),
   catalogAgentIds: ref<Set<string> | null>(null),
   catalogError: ref<string | null>(null),
+  catalogProfileNames: ref<Set<string> | null>(null),
+  profileError: ref<string | null>(null),
+  loadingProfiles: ref(false),
+  draftUpdatedByChat: ref(false),
+  draftAttachWarning: ref(false),
   sendMessage: vi.fn(async () => {}),
+  setDraft: vi.fn(),
+  undoDraftUpdate: vi.fn(),
+  dismissDraftUpdate: vi.fn(),
+  loadProfiles: vi.fn(),
   confirm: vi.fn(async () => {}),
   cancel: vi.fn(),
   reset: vi.fn(),
@@ -191,7 +200,6 @@ const VI_BEFORE_REST = {
   cancel: 'Huỷ',
   checkingAgents: 'Đang kiểm tra danh sách agent hợp lệ...',
   unknownAgents: (list: string) => `Agent không tồn tại trong catalog: ${list}`,
-  invalidDraftJson: 'Draft JSON không hợp lệ — vui lòng sửa lại trước khi xác nhận.',
   statusCreating: (s: number) => `Đang tạo… ${s}s`,
   statusThinking: (s: number) => `Agent đang suy nghĩ… ${s}s`,
   statusErrorWith: (msg: string) => `Có lỗi: ${msg}`,
@@ -261,15 +269,6 @@ describe('BuilderChatBody — khung preview, placeholder và trạng thái đã 
     expect(p.agentLabel.startsWith(VI_BEFORE_REST.agentScope)).toBe(true)
     expect(p.agentOptions).toEqual([VI_BEFORE_REST.agentScopeProject, VI_BEFORE_REST.agentScopeGlobal])
     expect(p.noProject).toBe(VI_BEFORE_REST.agentScopeNoProject)
-  })
-
-  it('bản `vi` của lỗi JSON draft giống HỆT chuỗi cứng cũ', async () => {
-    previewDraft('task')
-    const w = render('vi')
-    await w.find('.nl-chat-draft-textarea').setValue('{không phải json')
-    await w.findAll('.nl-chat-preview-actions button')[0]!.trigger('click')
-    expect(w.find('.nl-chat-error').text()).toBe(VI_BEFORE_REST.invalidDraftJson)
-    expect(session.confirm).not.toHaveBeenCalled()
   })
 
   it('bản `vi` của placeholder và trạng thái gửi lên header giống HỆT chuỗi cứng cũ', async () => {
