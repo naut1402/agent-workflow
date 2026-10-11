@@ -101,4 +101,42 @@ describe('KnowledgeUploadDialog — upload chặn thao tác khi đang chạy', (
       signal: expect.any(AbortSignal),
     })
   })
+
+  it('TC-40: đóng dialog (unmount) khi đang upload → huỷ request thật', async () => {
+    let signal!: AbortSignal
+    uploadKnowledgeFile.mockImplementationOnce(
+      (_file: File, opts: { signal: AbortSignal }) =>
+        new Promise((_, reject) => {
+          signal = opts.signal
+          signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))
+        }),
+    )
+    const w = mountDialog()
+
+    pickFile(w.find('input[type="file"]').element as HTMLInputElement)
+    await nextTick()
+    expect(signal.aborted).toBe(false)
+
+    w.unmount()
+    await flushPromises()
+
+    expect(signal.aborted).toBe(true)
+    expect(w.emitted('uploaded')).toBeUndefined()
+  })
+
+  it('TC-41: lỗi huỷ (AbortError) không hiện thông báo lỗi, lỗi thật thì có', async () => {
+    uploadKnowledgeFile.mockRejectedValueOnce(new DOMException('aborted', 'AbortError'))
+    const w = mountDialog()
+    const input = w.find('input[type="file"]').element as HTMLInputElement
+
+    pickFile(input)
+    await flushPromises()
+    expect(w.find('.err').exists()).toBe(false)
+    expect(w.find('.c-loading-overlay').exists()).toBe(false)
+
+    uploadKnowledgeFile.mockRejectedValueOnce(new Error('file quá lớn'))
+    pickFile(input)
+    await flushPromises()
+    expect(w.find('.err').text()).toContain('file quá lớn')
+  })
 })
