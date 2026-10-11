@@ -200,10 +200,22 @@ function removeListItem(def: TaskDraftFieldDef, index: number): void {
       <template v-if="def.key === 'profileName'">
         <template v-if="profile.state === 'error'">
           <p class="nl-chat-error">{{ profileErrorText }}</p>
-          <button type="button" class="nl-chat-profile-retry" @click="emit('retry-profiles')">
+          <button
+            type="button"
+            class="nl-chat-profile-retry"
+            :disabled="disabled"
+            @click="emit('retry-profiles')"
+          >
             {{ t('nlChat.draft.profileRetry') }}
           </button>
         </template>
+        <!-- `loading` cần dòng chữ riêng: `CSelect` khớp option mặc định ở vị trí 0
+             trước khi rơi về `placeholder`, nên với draft chưa có `profileName` cái
+             placeholder kia không bao giờ hiện. Thiếu dòng này thì `loading` là
+             trạng thái duy nhất người dùng không đọc được, chỉ khác ở `disabled`. -->
+        <p v-else-if="profile.state === 'loading'" class="nl-chat-hint">
+          {{ t('nlChat.draft.profileLoading') }}
+        </p>
         <p v-else-if="profile.state === 'empty'" class="nl-chat-hint">
           {{ t('nlChat.draft.profileEmptyHint') }}
         </p>

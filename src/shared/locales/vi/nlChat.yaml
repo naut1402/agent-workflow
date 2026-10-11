@@ -113,7 +113,7 @@ draft:
   updatedByChat: Draft đã cập nhật theo yêu cầu chat.
   undo: Hoàn tác
   dismiss: Bỏ thông báo
-  attachTooLong: Draft quá dài để gửi kèm — hãy mô tả rõ field cần sửa trong câu chat.
+  attachTooLong: Draft quá dài để gửi kèm — chỉnh tay của bạn không tới được trợ lý ở lượt này; hãy mô tả rõ field cần sửa trong câu chat.
   composerPlaceholder: Nhập yêu cầu sửa draft...
   conversationTitle: Hội thoại ({count})
   conversationCollapse: Thu gọn hội thoại
