@@ -35,6 +35,31 @@ type FeatureApiModule = {
 
 const featuresRoot = resolvePath(dirnameFromImportMeta(import.meta.url), '../features')
 
+type LoadedRoutes = { order: number; register: (app: Hono<HonoEnv>) => void }
+
+/** Kiểu cũ: `api.ts` export `registerRoutes` (+ `routeOrder`, mặc định 100); thiếu hàm thì bỏ qua. */
+function apiModuleRoutes(api: FeatureApiModule): LoadedRoutes[] {
+  if (typeof api.registerRoutes !== 'function') return []
+  return [{ order: typeof api.routeOrder === 'number' ? api.routeOrder : 100, register: api.registerRoutes }]
+}
+
+/**
+ * Kiểu mới: mọi class `@Controller` export từ module, mỗi class một lần (`seen`).
+ * Path đã khai được gom vào `declaredPaths` lúc đăng ký để gắn 405 sau cùng.
+ */
+function controllerRoutes(mod: Record<string, unknown>, seen: Set<unknown>, declaredPaths: string[]): LoadedRoutes[] {
+  const routes: LoadedRoutes[] = []
+  for (const value of Object.values(mod)) {
+    if (!isControllerClass(value) || seen.has(value)) continue
+    seen.add(value)
+    routes.push({
+      order: controllerOrder(value),
+      register: (a) => declaredPaths.push(...registerController(a, value)),
+    })
+  }
+  return routes
+}
+
 /**
  * Đăng ký route của mọi feature, hai kiểu chạy song song tới khi feature cuối chuyển xong:
  * - kiểu cũ: `api.ts` export `registerRoutes` + `routeOrder` (mặc định 100);
@@ -48,27 +73,12 @@ export async function registerFeatureRoutes(app: Hono<HonoEnv>): Promise<void> {
     entryDirs: ['controllers'],
   })
 
-  const loaded: { order: number; register: (app: Hono<HonoEnv>) => void }[] = []
+  const loaded: LoadedRoutes[] = []
   const seen = new Set<unknown>()
   const declaredPaths: string[] = []
   for (const { file, mod } of entries) {
-    if (file === 'api.ts') {
-      const api = mod as FeatureApiModule
-      if (typeof api.registerRoutes !== 'function') continue
-      loaded.push({
-        order: typeof api.routeOrder === 'number' ? api.routeOrder : 100,
-        register: api.registerRoutes,
-      })
-      continue
-    }
-    for (const value of Object.values(mod)) {
-      if (!isControllerClass(value) || seen.has(value)) continue
-      seen.add(value)
-      loaded.push({
-        order: controllerOrder(value),
-        register: (a) => declaredPaths.push(...registerController(a, value)),
-      })
-    }
+    if (file === 'api.ts') loaded.push(...apiModuleRoutes(mod as FeatureApiModule))
+    else loaded.push(...controllerRoutes(mod, seen, declaredPaths))
   }
   if (!loaded.length) {
     throw new Error(`registerFeatureRoutes: no features/<name>/{api.ts,controller.ts} under ${featuresRoot}`)
