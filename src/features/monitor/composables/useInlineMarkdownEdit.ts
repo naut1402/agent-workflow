@@ -1,5 +1,6 @@
 import { ref, nextTick, type ComponentPublicInstance, type Ref } from 'vue'
 import { splitMarkdownSections, joinMarkdownSections } from '../../../frontend/lib/markdownSections'
+import { useApiAction } from '../../../frontend/composables/useApiAction'
 
 export type EditSection = 'full' | number
 
@@ -29,7 +30,9 @@ export function useInlineMarkdownEdit(options: {
 }) {
   const editingSection = ref<EditSection | null>(null)
   const sectionDraft = ref('')
-  const saving = ref(false)
+  // Cờ ghi do `useApiAction` sở hữu: bật ngay ms đầu, `finally` luôn nhả (kể cả
+  // khi `onSave` ném), và blur lặp trong lúc đang lưu bị bỏ qua.
+  const { pending: saving, run: runSave } = useApiAction()
   const savedSection = ref<EditSection | null>(null)
   const editTextarea = ref<FocusableEditTarget | null>(null)
   let saveIndicatorTimer: ReturnType<typeof setTimeout> | null = null
@@ -101,16 +104,16 @@ export function useInlineMarkdownEdit(options: {
       return
     }
     const nextContent = applyDraft(section, sectionDraft.value)
-    saving.value = true
-    try {
+    // `flashSaved` + đóng editor phải chạy TRONG callback, tức trước khi `run`
+    // nhả cờ: `showSavedIndicator` là `!saving && savedSection === s`, nhả cờ
+    // trước thì có một nhịp render không hiện chỉ báo nào. Lỗi từ `onSave` được
+    // `run` ném lại nguyên vẹn sau khi nhả cờ; editor giữ mở vì
+    // `editingSection` chưa bị xoá.
+    await runSave(async () => {
       await options.onSave(nextContent)
       flashSaved(section)
       editingSection.value = null
-    } catch (e) {
-      saving.value = false
-      throw e
-    }
-    saving.value = false
+    })
   }
 
   function onKeydown(e: KeyboardEvent) {

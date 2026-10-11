@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { useApiAction } from '../../../frontend/composables/useApiAction'
 import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
+import { isAbortError } from '../../../frontend/http/client'
 import CLoadingOverlay from '../../../frontend/ui/CLoadingOverlay.vue'
 import { uploadKnowledgeFile } from '../scripts/KnowledgePanelApi'
 
@@ -21,7 +22,7 @@ async function onFileUpload(event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
   if (!file) return
-  await runUpload(async () => {
+  await runUpload(async (signal) => {
     error.value = ''
     try {
       const parsed = tags.value.split(/[,;]+/).map((s) => s.trim()).filter(Boolean)
@@ -29,9 +30,11 @@ async function onFileUpload(event: Event) {
         scope: scope.value,
         tags: parsed,
         projectId: props.projectId,
+        signal,
       })
       emit('uploaded', data.entry.id)
     } catch (e: any) {
+      if (isAbortError(e)) return
       error.value = String(e.message || e)
     } finally {
       // Reset để chọn lại đúng file vừa hỏng vẫn bắn `change`.

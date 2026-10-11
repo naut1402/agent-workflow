@@ -211,7 +211,8 @@ Bảng dưới map khái niệm ở cấp Component (sơ đồ bootstrap/runtime
 
 | Khái niệm | File |
 |---|---|
-| Client fetch dùng chung mọi feature (`apiGet`/`apiPost`/…) | `src/frontend/http/client.ts` |
+| Client fetch dùng chung mọi feature (`apiGet`/`apiPost`/…, huỷ qua `signal`, `isAbortError`) | `src/frontend/http/client.ts` |
+| Cờ `pending` + huỷ request cho action người dùng bấm (`useApiAction`/`useKeyedApiAction`) | `src/frontend/composables/useApiAction.ts` |
 | Suy diễn trạng thái phase (`PHASES`, `phasesFromPipeline`, `phaseStatus`) từ artifact + con trỏ live | `src/shared/lib/phase.ts` |
 
 ### 4.2 HTTP kernel
