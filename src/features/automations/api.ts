@@ -2,6 +2,8 @@ import type { Hono } from 'hono'
 import type { HonoEnv } from '../../backend/http/types.js'
 import { bind } from '../../backend/http/AbstractController.js'
 import { AutomationsController } from './controller.js'
+// Composition root: bind runner + start scheduler/event subscriber (side effect).
+import './business/bootstrap.js'
 
 export const routeOrder = 65
 

@@ -1,7 +1,7 @@
 {
   "name": "dev-team-dashboard",
   "private": true,
-  "version": "1.2.0",
+  "version": "1.2.1",
   "type": "module",
   "description": "Agent flow — AI harness system: thiết kế pipeline agent, chạy task qua runner, theo dõi HITL gate và artifact trên dashboard local-first",
   "keywords": [
@@ -34,6 +34,8 @@
     "lint:fix": "eslint . --fix",
     "lint:commit": "commitlint",
     "check:todo": "bun .github/scripts/check-todo-debt.ts",
+    "i18n:export": "bun scripts/i18n-export.ts",
+    "i18n:import": "bun scripts/i18n-import.ts",
     "format": "prettier --write .",
     "test": "bun .github/scripts/run-bun-tests.ts",
     "test:fe": "vitest run --coverage",
@@ -63,7 +65,7 @@
     "marked": "^12.0.2",
     "mermaid": "^11.6.0",
     "openai": "^6.49.0",
-    "vue": "^3.4.21",
+    "vue": "^3.5.0",
     "vue-i18n": "^11.4.6",
     "zod": "3.25.76"
   },

@@ -21,6 +21,7 @@ type IconName =
   | 'stop'
   | 'chevronLeft'
   | 'chevronRight'
+  | 'arrowUp'
   | 'paperclip'
   | 'info'
   | 'download'
@@ -48,6 +49,7 @@ const VIEW_BOX: Record<IconName, string> = {
   stop: '0 0 16 16',
   chevronLeft: '0 0 16 16',
   chevronRight: '0 0 16 16',
+  arrowUp: '0 0 16 16',
   paperclip: '0 0 16 16',
   // 24-grid, unlike the 16-grid icons around it — path kept verbatim from the
   // original hand-drawn SVG.
@@ -158,6 +160,9 @@ const viewBox = VIEW_BOX[props.name]
     </template>
     <template v-else-if="name === 'chevronRight'">
       <path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M6 3.5L10.5 8 6 12.5" />
+    </template>
+    <template v-else-if="name === 'arrowUp'">
+      <path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M8 13V3.5M3.8 7.7L8 3.5l4.2 4.2" />
     </template>
     <template v-else-if="name === 'paperclip'">
       <path

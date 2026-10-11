@@ -43,6 +43,16 @@ export interface ApiRequestOptions {
   errorMessage?: string | ((status: number, data: any) => string)
   /** Gắn thêm field lên Error (status/data/body). */
   attach?: 'data' | 'body' | 'none'
+  signal?: AbortSignal
+}
+
+export function isAbortError(err: unknown): boolean {
+  return (err as { name?: unknown } | null)?.name === 'AbortError'
+}
+
+function throwIfAborted(signal: AbortSignal | undefined) {
+  if (!signal?.aborted) return
+  throw signal.reason ?? new DOMException('Aborted', 'AbortError')
 }
 
 function buildUrl(path: string, query?: ApiQuery): string {
@@ -90,8 +100,9 @@ export async function apiRequest<T = any>(
   }
 
   try {
-    const r = await apiFetch(url, { method: upper, headers, body: body ?? undefined })
+    const r = await apiFetch(url, { method: upper, headers, body: body ?? undefined, signal: opts.signal })
     const data = await r.json().catch(() => ({}))
+    throwIfAborted(opts.signal)
     if (!r.ok) {
       const fallback =
         typeof opts.errorMessage === 'function'
@@ -103,16 +114,20 @@ export async function apiRequest<T = any>(
     }
     return data as T
   } catch (err) {
-    if ((err as any)?.status != null) throw err
+    if ((err as any)?.status != null || isAbortError(err)) throw err
     logApi('error', `${upper} ${url} failed`, err)
     throw err
   }
 }
 
 /** GET text (không parse JSON) — dùng cho download file thô (vd YAML). */
-export async function apiGetText(path: string, query?: ApiQuery): Promise<string> {
+export async function apiGetText(
+  path: string,
+  query?: ApiQuery,
+  opts: Pick<ApiRequestOptions, 'signal'> = {},
+): Promise<string> {
   const url = buildUrl(path, query)
-  const r = await apiFetch(url)
+  const r = await apiFetch(url, { signal: opts.signal })
   if (!r.ok) {
     logApi('error', `GET ${url} → ${r.status}`)
     throw makeError(`GET ${path} → ${r.status}`, r.status, undefined, 'none')

@@ -24,7 +24,7 @@ Kiến trúc frontend (component, DI/ModeRegistry): [`docs/architecture/README.m
 ## 2. `ModeEntry` — field & ý nghĩa
 
 - **`key`** — định danh mode, duy nhất; dùng làm route state.
-- **`labelKey`** — i18n key cho label sidebar.
+- **`labelKey`** — i18n key cho label sidebar (`common.modes.<key>`, khai ở `src/shared/locales/<locale>/common.yaml`).
 - **`titleKey?`** — i18n key cho tooltip nếu khác `labelKey`.
 - **`icon`** — tên icon đã đăng ký trong `RailIcon.vue`.
 - **`order`** — thứ tự hiển thị, **phải unique**; trùng thì thứ tự không xác định.

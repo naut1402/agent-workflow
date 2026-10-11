@@ -10,18 +10,15 @@
 export {
   ensureNlChatBuilderAgent,
   scanCustomAgents,
-  // fallow-ignore-next-line unused-export
   listPipelineProfileNames,
 } from '../../agent-editor/business/index.js'
-export { buildCatalog } from '../../pipeline-editor/business/catalog/index.js'
-// fallow-ignore-next-line unused-type
-export type { CatalogScanPatterns } from '../../pipeline-editor/business/catalog/index.js'
+export { buildCatalog } from '../../pipeline-editor/business/index.js'
+export type { CatalogScanPatterns } from '../../pipeline-editor/business/index.js'
 export { loadScanPatternsConfig } from '../../settings/business/index.js'
-// Barrel `automations/business` khởi động scheduler/event-trigger ở top-level
-// (chắn bằng `!process.env.BUN_TEST`) — an toàn ở đây vì không file FE nào
-// import `nl-chat/business/**`. Đừng import module này từ code FE.
-// fallow-ignore-next-line unused-export
-export { listAutomations } from '../../automations/business/index.js'
+// Barrel `automations/business` thuần (không side effect) nhưng kéo module
+// chỉ chạy trên server — đừng import module này từ code FE.
+export { listAutomations, KNOWN_AUTOMATION_EVENT_TYPES } from '../../automations/business/index.js'
+export type { AutomationActionKind } from '../../automations/business/index.js'
 export {
   submitJob,
   sendTaskFeedback,
@@ -44,7 +41,6 @@ export type { NlChatEntityType } from './nlChatSession.js'
 export { saveChatAttachments, checkAttachmentLimits } from './chatAttachments.js'
 export type { IncomingAttachment } from './chatAttachments.js'
 
-// fallow-ignore-next-line unused-export
 export { buildNlChatCatalog, renderNlChatCatalog } from './nlChatCatalog.js'
 // fallow-ignore-next-line unused-type
 export type { NlChatCatalog } from './nlChatCatalog.js'

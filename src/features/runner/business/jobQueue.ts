@@ -11,18 +11,16 @@ import {
   resolveDefaultRunner,
   resolveStepRunnerId,
   substituteConfig,
-  getProvider,
-  cleanupOrphanedMcpDeliveries,
 } from './registry.js'
+import { cleanupOrphanedMcpDeliveries, getProvider, providerFamilyOf } from './providers/providerRegistry.js'
 import { getConnection } from './connections.js'
 import { getCredential } from './credentials.js'
 import { resolveAgent } from './agentResolver.js'
 import { loadTaskSessionLedger, recordSessionUsage, resolveSessionPlan, mintSessionId, type SessionMode } from './sessionLedger.js'
-import { isAgentCliProviderId } from './providers/agentCli.js'
-import { captureJobUsage, captureTokenUsageFromExecute } from './usageCapture.js'
+import { captureTokenUsageFromExecute } from './usageCapture.js'
+import { ensureJobsDir, jobsDir, loadJob, saveJob, stepIdOf } from './jobRecords.js'
 import type { Connection, CredentialProfile, ExecuteResult, JobRecord, JobStatus, MutationResult } from './types.js'
 import type { RunTaskStepResult } from '../../monitor/business/tasks/runStep.js'
-import type { UsageSnapshot } from '../../../shared/log/schema.js'
 import { stepSummaryOf } from '../../../shared/lib/orchestrator.js'
 import {
   advanceStepOnJobSuccess,
@@ -36,7 +34,7 @@ import type { PendingFeedback } from './index.js'
 import { classifyJobFailure, parseUsageResetAt } from './classifyJobFailure.js'
 import { loadRecoverEntry, removeRecoverEntry, saveRecoverEntry } from './recoverLedger.js'
 import { bindRecoverPoller, startRecoverPoller } from './recoverPoller.js'
-import { loadRecoverySettings } from '../../settings/business/dashboardSettings.js'
+import { loadRecoverySettings } from '../../settings/business/index.js'
 import {
   DEFAULT_RECOVERY_SETTINGS,
   resolveRecoveryBackoffMs,
@@ -135,7 +133,7 @@ async function tryDispatchOrchestratorDecision(job: JobRecord, stdout: string): 
     }
 
     // Dynamic import avoids a static runner→monitor cycle (monitor's business
-    // index re-exports from runner's) — same pattern as usageCapture.ts.
+    // index re-exports from runner's).
     const { runTaskStep } = await import('../../monitor/business/tasks/runStep.js')
     const res: RunTaskStepResult = await runTaskStep(devTeamRoot, projectId || null, taskId, {
       targetStepId: decision.stepId,
@@ -162,7 +160,7 @@ function backoffMsFor(attemptCount: number, schedule: number[]): number {
 /**
  * In-flight `AbortController` per running job — the counterpart of `job.pid` for
  * providers with no OS subprocess to SIGTERM (`AgenticApiProvider` subclasses,
- * see providers/agenticApiProvider.ts). `cancelJob` aborts through this map;
+ * see providers/AgenticApiProvider.ts). `cancelJob` aborts through this map;
  * `runJob` always removes its entry once `provider.execute()` settles.
  */
 const jobAbortControllers = new Map<string, AbortController>()
@@ -187,7 +185,7 @@ function shouldPersistStdout(job: JobRecord, providerId: string | undefined): bo
   // agent-CLI (`*-api`, `console-command`) sẽ khiến quyết định biến mất và
   // pipeline đứng im — kết cục tệ hơn hẳn một lần halt tường minh.
   if (job.metadata?.orchestratorJob) return true
-  return Boolean(providerId && isAgentCliProviderId(providerId))
+  return Boolean(providerId && providerFamilyOf(providerId) === 'agent-cli')
 }
 
 /**
@@ -206,17 +204,6 @@ function shouldPersistStdout(job: JobRecord, providerId: string | undefined): bo
 function withStepSummary(record: JobRecord, stdout: string | undefined): JobRecord {
   const summary = stepSummaryOf(stdout)
   return summary ? { ...record, metadata: { ...record.metadata, stepSummary: summary } } : record
-}
-
-/**
- * The pipeline step a job belongs to. Pipeline run-step jobs tag
- * `pipelineStepId`; ad-hoc/quick-action jobs use `stepId`.
- */
-export function stepIdOf(job: JobRecord): string | undefined {
-  const meta = job.metadata || {}
-  if (typeof meta.stepId === 'string' && meta.stepId) return meta.stepId
-  if (typeof meta.pipelineStepId === 'string' && meta.pipelineStepId) return meta.pipelineStepId
-  return undefined
 }
 
 function credentialForConnection(conn: Connection): CredentialProfile | null {
@@ -270,18 +257,6 @@ reapOrphanedRunningJobs()
 // còn nằm TRONG repo người dùng kèm bản sao lưu `.cursor/mcp.json` gốc của họ.
 cleanupOrphanedMcpDeliveries()
 startRecoverPoller()
-
-function jobsDir(): string {
-  return joinPath(registryHome(), 'jobs')
-}
-
-function jobFile(id: string): string {
-  return joinPath(jobsDir(), `${id}.json`)
-}
-
-function ensureJobsDir(): void {
-  mkdirSync(jobsDir(), { recursive: true })
-}
 
 // Approval flow (see JobRecord's sessionId/applyTarget/approvalArtifact/
 // parentJobId doc comments in types.ts).
@@ -436,26 +411,8 @@ function foldProposalIntoScratch(job: JobRecord, stdout: string): void {
   // else: whole-file job with no stdout — keep whatever the agent wrote.
 }
 
-export function loadJob(id: string): JobRecord | null {
-  try {
-    return JSON.parse(readTextFileSync(jobFile(id)))
-  } catch {
-    return null
-  }
-}
-
-function saveJob(job: JobRecord): JobRecord {
-  ensureJobsDir()
-  writeTextFileAtomicSync(jobFile(job.id), JSON.stringify(job, null, 2))
-  return job
-}
-
-/** Merge usage onto an existing job record (usage capture path). */
-export function mergeJobUsage(id: string, usage: UsageSnapshot): JobRecord | null {
-  const cur = loadJob(id)
-  if (!cur) return null
-  return saveJob({ ...cur, usage })
-}
+// Đọc/ghi JobRecord nằm ở `jobRecords.ts` — giữ export ở đây cho caller hiện có.
+export { loadJob, stepIdOf }
 
 /**
  * Đánh dấu job orchestrator đã thi hành 1 quyết định qua `POST /api/orchestrator/decide`
@@ -642,9 +599,9 @@ async function runJob(job: JobRecord): Promise<void> {
 
   let resolvedAgent
   try {
-    // Console-command providers never merge an agent system prompt — ignore any
-    // agentRef the client may still send.
-    if (connection.providerId === 'console-command') {
+    // Provider không chạy agent (console-command — `acceptsAgent: false`) không
+    // ghép system prompt của agent — bỏ qua agentRef client có thể vẫn gửi.
+    if (!provider.acceptsAgent) {
       resolvedAgent = await resolveAgent('', { projectRoot, devTeamRoot })
     } else {
       resolvedAgent = await resolveAgent(job.agentRef, { projectRoot, devTeamRoot })
@@ -802,13 +759,12 @@ async function runJob(job: JobRecord): Promise<void> {
     })
   }
 
-  if (capturedSessionId && connection.providerId === 'claude-code-cli') {
+  // Usage provider tự đọc từ nguồn riêng (vd transcript Claude) — hook tuỳ chọn.
+  if (capturedSessionId && provider.captureUsage) {
     const current = loadJob(job.id) || job
-    void captureJobUsage(
-      { ...current, sessionId: capturedSessionId },
-      capturedSessionId,
-      connection.providerId,
-    ).catch(() => {})
+    void provider
+      .captureUsage({ job: { ...current, sessionId: capturedSessionId }, sessionId: capturedSessionId })
+      .catch(() => {})
   }
 
   // Cursor (and other parse-json CLIs) already emit usage on ExecuteResult —

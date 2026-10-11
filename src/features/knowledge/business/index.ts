@@ -1,5 +1,5 @@
 import { AbstractBusiness } from '../../../backend/business/AbstractBusiness.js'
-import { getKnowledgeDriver, loadKnowledgeConfig } from './fileDriver.js'
+import { getKnowledgeDriver, loadKnowledgeConfig } from './knowledgeDriverRegistry.js'
 
 /** Facade knowledge — HTTP đi qua `api.ts` + `controller.ts` như mọi feature. */
 export class KnowledgeBusiness extends AbstractBusiness {
@@ -16,14 +16,16 @@ export class KnowledgeBusiness extends AbstractBusiness {
   }
 }
 
+export { getKnowledgeDriver, loadKnowledgeConfig } from './knowledgeDriverRegistry.js'
+export type { KnowledgeDriver } from './KnowledgeDriver.js'
 export {
-  getKnowledgeDriver,
-  loadKnowledgeConfig,
-  createFileDriver,
-  knowledgeRoot,
+  listKnowledge,
+  listKnowledgeWithTags,
+  listKnowledgeTags,
   loadKnowledgeBundle,
-} from './fileDriver.js'
-export { KnowledgeDbError } from './knowledgeDb.js'
+} from './knowledgeEntries.js'
+export { KnowledgeDbError, knowledgeRoot } from './knowledgeDb.js'
+export { migrateKnowledgeToSqlite } from './collectionsYaml.js'
 export {
   listCollections,
   createCollection,

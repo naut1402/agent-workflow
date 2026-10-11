@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto'
-import type { TaskRef } from './decisionLoop.js'
+import type { TaskRef } from '../schemas/orchestrator.js'
 
 /**
  * Token → `TaskRef` cho API REST của orchestrator (`orchestrator/api.ts`).

@@ -16,6 +16,7 @@ import {
   resolveNotifyShowFloating,
   resolveNotifyShowSidebar,
 } from './configs/appSettings'
+import { OUTSIDE_CLICK_IGNORE } from './configs/outsideClickIgnore'
 import { resolveAutoscanIntervalMs } from '../features/settings/schemas/autoscan'
 import { useTaskPolling } from '../features/monitor/composables/useTaskPolling'
 import { useNotifications } from '../features/notifications/composables/useNotifications'
@@ -91,13 +92,12 @@ function modeBtnTitle(m: ModeEntry): string {
   return `${label} — ${action}`
 }
 
-// Ignore teleported modals so clicks inside them do not collapse the rail.
 onClickOutside(
   sidebarRef,
   () => {
     if (resolveCollapseAppSidebarOnOutside(settings.value)) sidebarCollapsed.value = true
   },
-  { ignore: ['.modal-backdrop'] },
+  { ignore: [...OUTSIDE_CLICK_IGNORE] },
 )
 
 // Central mode switch, so nested panels can navigate without bubbling a

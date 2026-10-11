@@ -7,8 +7,10 @@
  * Chiều ngược lại — monitor gọi orchestrator — **phải** dùng `import()` động để
  * không dựng vòng lúc module-eval.
  *
- * Side-effect khởi động đặt ở cuối file, cùng mẫu với `automations/business/index.ts`:
+ * Side-effect khởi động (đăng ký subscriber + hẹn giờ quét) đặt ở cuối file này:
  * dưới `bun test` không auto-start, test tự gọi `handleEvent` / `sweepStuckTasks`.
+ * (`automations` đã tách side effect sang `bootstrap.ts` cho barrel thuần — ở đây
+ * vẫn là mẫu cũ, chưa tách trong đợt này.)
  */
 
 export * from './brief.js'

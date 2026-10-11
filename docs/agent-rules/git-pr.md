@@ -537,7 +537,7 @@ Chore / docs / refactor chọn khối gần nhất. Mỗi ý 1–3 câu — đ�
 | HTTP | `src/features/<f>/api.ts`, `controller.ts` |
 | Domain | `…/business/` |
 | Schema | `…/schemas/` |
-| UI / FE API / i18n / style | `…/components/`, `composables/`, `scripts/`, `locales/`, `styles/` |
+| UI / FE API / i18n / style | `…/components/`, `composables/`, `scripts/`, `styles/`, `src/shared/locales/` |
 | Nền / feature khác | `src/backend/…`, `src/frontend/…`, `src/shared/…`, `src/features/<peer>/…` |
 
 - **Mỗi nhóm 1–vài gạch đầu dòng** — *làm gì* / *vì sao*, không dump toàn bộ diff.

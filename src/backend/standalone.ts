@@ -108,7 +108,7 @@ function main(): void {
   })
 
   server.listen(PORT, HOST, () => {
-    // Cho `claude-code-cli.ts` biết base URL gọi ngược vào chính server này
+    // Cho `SelfMcpServer` (`mcp/business/`) biết base URL gọi ngược vào chính server này
     // (route MCP orchestrator) — spawn con kế thừa qua `buildChildEnv` (spread
     // `process.env`) sẵn có, không cần plumbing thêm. Luôn `127.0.0.1`, KHÔNG
     // dùng `HOST` cấu hình được: child process gọi ngược luôn nằm trên cùng máy

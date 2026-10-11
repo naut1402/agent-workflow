@@ -21,16 +21,15 @@ export {
   type UsageSnapshot,
 } from '../../shared/log/schema.js'
 
-export { getLogDriver, setLogDriver, resetLogDriver, activeLogDriverKind, type LogDriver } from './driver.js'
-export { logsDir, logFile, appendFileLog } from './fileDriver.js'
-export { sqliteLogDriver } from './sqliteDriver.js'
-export { initLogDriverFromPrefs } from './driverInit.js'
+// Chỉ hợp đồng + get/set — hiện thực driver (file, sqlite) không lộ qua barrel; chỗ chọn là `driverInit.ts`.
+export type { LogDriver, LogQuery } from './driver.js'
+export { getLogDriver, setLogDriver, resetLogDriver, initLogDriverFromPrefs } from './driverInit.js'
 export {
   LOG_DRIVER_KINDS,
   type LogDriverKind,
 } from '../../shared/log/loggingPrefs.js'
-export { getLogDriverPref } from './loggingPrefsIo.js'
-export { appendLog, appendRequestLog, appendUsageLog, emitAudit } from './store.js'
+export { getLogDriverPref, isLogTypeEnabled } from './loggingPrefsIo.js'
+export { appendLog, appendRequestLog, appendUsageLog, emitAudit, queryLogs, logRevision } from './store.js'
 export {
   installEventLogSubscriber,
   uninstallEventLogSubscriberForTest,

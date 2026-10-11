@@ -1,0 +1,9 @@
+bell:
+  title: Notifications
+  empty: No notifications yet.
+  markAllRead: Mark all read
+message:
+  hitlPending: Task {taskId} is waiting for approval (HITL)
+  qaReady: Task {taskId} has QA ready
+flag:
+  unread: Unread

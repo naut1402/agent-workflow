@@ -29,11 +29,35 @@ Cấp **Code** của [`../README.md`](../README.md) §4 cho feature `src/feature
 
 ## 3. Phân loại family của provider
 
-`providerFamilyOf(providerId)` (`business/registry.ts`) quyết định runner nào chạy được agent (default AI, pin step, reader transcript). Thứ tự:
+`providerFamilyOf(providerId)` (`business/providers/providerRegistry.ts`) quyết định runner nào chạy được agent (default AI, pin step, reader transcript). Thứ tự:
 
-1. **`PROVIDER_CATALOG.family`** (`business/connections.ts`) — provider có sẵn.
+1. **`family` của bản dựng sẵn** — provider lắp ráp bằng `builtin(...)` trong `providerRegistry.ts`.
 2. **`family` provider tự khai** khi đăng ký qua `registerProvider`.
-3. **Quy tắc theo id** `providerFamilyFromId` (`business/providers/agentCli.ts`) — chỉ cho id không có khai báo nào: `console-command` · đuôi `-api` ⇒ `ai-api` · id agent CLI có sẵn ⇒ `agent-cli` · còn lại ⇒ `console-command`.
+3. **Quy tắc theo id** `providerFamilyFromId` (cùng file) — chỉ cho id không có khai báo nào: `console-command` · đuôi `-api` ⇒ `ai-api` · id agent CLI có sẵn ⇒ `agent-cli` · còn lại ⇒ `console-command`.
+
+`transcriptFormatOf(providerId)` theo cùng thứ tự; id lạ họ `ai-api` ⇒ `agent-sdk`, còn lại ⇒ `none`.
 
 - **FE dùng cùng thứ tự** — `familyOfProviderId` (`lib/runnerModelOptions.ts`) nhận catalog từ `GET /api/runners` (`providers`), rồi mới tới quy tắc theo id. Provider đăng ký runtime không có trong catalog FE nên ở FE nó rơi về quy tắc theo id.
 - **Id lạ vẫn rơi về `console-command`** — runner mặc định dùng provider như vậy nhận `reason: 'not-ai'` và hiện banner, không im lặng chạy runner khác.
+
+## 4. Bố cục `business/providers/`
+
+| File | Vai |
+|---|---|
+| `RunnerProvider.ts` | «interface» `RunnerProvider` + `ProviderDescriptor`, `ProviderFamily`, `TranscriptFormat` — hợp đồng, không chứa chi tiết nhà cung cấp |
+| `providerRegistry.ts` | Chỗ lắp ráp duy nhất: dựng provider, gắn cách giao MCP, đăng ký `CredentialResolver` cho `mcp`; tra cứu `getProvider` · `providerFamilyOf` · `transcriptFormatOf` · `listProviderCatalog` |
+| `AbstractAgentCliProvider.ts` | Template method cho Agent CLI — hiện thực chỉ khai `buildInvocation` |
+| `ClaudeCliProvider.ts` · `CursorCliProvider.ts` · `CodexCliProvider.ts` | Hiện thực Agent CLI |
+| `ConsoleCommandProvider.ts` | Lệnh shell, `acceptsAgent: false`, mang `NoMcpDelivery` |
+| `cliProcess.ts` | Spawn tiến trình con + dựng thông điệp lỗi — Agent CLI và console dùng chung |
+| `providerJobReport.ts` | Ghi log job: header từ metadata, nhãn agent, footer kết quả, dò artifact — cả ba họ provider |
+| `AgenticApiProvider.ts` (+ `agenticWorkspaceTools.ts`) | Vòng tool-use chung cho họ `ai-api` |
+| `AbstractCompatibleApiProvider.ts` | Lớp cha của hai hiện thực API: constructor + catalog, `listModels`, timeout, toolset + system prompt |
+| `AnthropicCompatibleProvider.ts` · `OpenAiCompatibleProvider.ts` | Hiện thực API theo giao thức |
+| `agentTranscriptStore.ts` | Transcript runner tự ghi cho họ `ai-api`; đọc lại bằng `agentTranscriptFile()` |
+
+Ngoài `providers/`: `jobRecords.ts` giữ đọc/ghi `JobRecord` (`loadJob` · `saveJob` · `mergeJobUsage` · `stepIdOf`) — `jobQueue.ts` và `usageCapture.ts` cùng dùng, nên hai file không import vòng nhau.
+
+- **Thêm provider** = một file hiện thực + một dòng `builtin(...)` trong `providerRegistry.ts`; FE đọc nhãn, kind, lệnh CLI từ `ProviderDescriptor` trong catalog.
+- **Hook tuỳ chọn** — `listModels` (danh sách model), `captureUsage` (usage từ nguồn riêng, vd transcript CLI), `complete` (một lượt hỏi-đáp ngoài job, chỉ provider API), `transcriptFormat`.
+- **Bù trường khi đăng ký** — `registerProvider` bù `family` / `acceptsAgent` / `mcpDelivery` (và hook của bản dựng sẵn cùng id) qua Proxy, không ghi lên object được đăng ký: stub test chép bằng `{ ...stub }` không mang theo giá trị suy của stub trước.

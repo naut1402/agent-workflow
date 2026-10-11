@@ -13,6 +13,8 @@ import CScreenLayout from '../../../frontend/ui/CScreenLayout.vue'
 import AgentSideMenu from './AgentSideMenu.vue'
 import CMarkdownView from '../../../frontend/ui/CMarkdownView.vue'
 import AgentFormDialog from './AgentFormDialog.vue'
+import { useKeyedApiAction } from '../../../frontend/composables/useApiAction'
+import CLoadingOverlay from '../../../frontend/ui/CLoadingOverlay.vue'
 
 const props = defineProps<{ projectId?: string | null; subSidebarCollapsed?: boolean }>()
 
@@ -27,7 +29,7 @@ const message = ref('')
 const viewing = ref<AgentMeta | null>(null)
 const viewContent = ref('')
 const viewLoading = ref(false)
-const deletingKey = ref<string | null>(null)
+const { pendingKey: deletingKey, pending: deleting, run: runDelete } = useKeyedApiAction()
 
 const showDialog = ref(false)
 const editingAgent = ref<AgentMeta | null>(null)
@@ -88,23 +90,23 @@ function newAgent() {
 }
 
 async function removeAgent(agent: AgentMeta) {
-  if (deletingKey.value) return // chặn double-click
+  // Kiểm cờ TRƯỚC `confirm()`: lượt bấm mà `run` sẽ bỏ qua không được hỏi lại.
+  if (deleting.value) return
   if (!confirm(t('agentEditor.messages.confirmDelete', { name: agent.name }))) return
-  deletingKey.value = keyOf(agent)
-  error.value = ''
-  try {
-    await deleteCustomAgent(agent.name, props.projectId ?? undefined, agent.scope)
-    if (viewing.value && keyOf(viewing.value) === keyOf(agent)) {
-      viewing.value = null
-      viewContent.value = ''
+  await runDelete(keyOf(agent), async () => {
+    error.value = ''
+    try {
+      await deleteCustomAgent(agent.name, props.projectId ?? undefined, agent.scope)
+      if (viewing.value && keyOf(viewing.value) === keyOf(agent)) {
+        viewing.value = null
+        viewContent.value = ''
+      }
+      await Promise.all([loadList(), loadCatalog()])
+      message.value = t('agentEditor.messages.deleted')
+    } catch (e: any) {
+      error.value = String(e.message || e)
     }
-    await Promise.all([loadList(), loadCatalog()])
-    message.value = t('agentEditor.messages.deleted')
-  } catch (e: any) {
-    error.value = String(e.message || e)
-  } finally {
-    deletingKey.value = null
-  }
+  })
 }
 
 async function handleDownloadAgent(agent: AgentMeta) {
@@ -177,32 +179,36 @@ async function onSaved(savedName: string) {
   >
     <template #left>
       <!-- class `.agent-editor` giữ nguyên: đây là neo ổn định của 2 spec e2e. -->
-      <div class="agent-editor">
+      <div class="agent-editor flex-col-fill">
         <template v-if="!subSidebarCollapsed">
-          <AgentSideMenu
-            :agents="agents"
-            :selected-key="selectedKey"
-            :busy-key="deletingKey"
-            @new="newAgent"
-            @download="handleDownloadAgent"
-            @duplicate="handleDuplicateAgent"
-            @upload-file="handleUploadAgentFile"
-            @view="openViewer"
-            @edit="openEditor"
-            @delete="removeAgent"
-          />
-          <p v-if="error" class="err agent-editor-msg">{{ error }}</p>
-          <p v-if="message" class="ok-msg agent-editor-msg">{{ message }}</p>
+          <!-- Hộp cuộn nằm TRONG side menu, nên neo overlay ở lớp bọc không cuộn này. -->
+          <div class="c-loading-host">
+            <CLoadingOverlay :active="deleting" />
+            <AgentSideMenu
+              :agents="agents"
+              :selected-key="selectedKey"
+              :busy-key="deletingKey"
+              @new="newAgent"
+              @download="handleDownloadAgent"
+              @duplicate="handleDuplicateAgent"
+              @upload-file="handleUploadAgentFile"
+              @view="openViewer"
+              @edit="openEditor"
+              @delete="removeAgent"
+            />
+          </div>
+          <p v-if="error" class="err agent-editor-msg panel-msg">{{ error }}</p>
+          <p v-if="message" class="ok-msg agent-editor-msg panel-msg">{{ message }}</p>
         </template>
       </div>
     </template>
 
     <template #main>
-      <div class="agent-main">
+      <div class="agent-main flex-col-fill">
         <!-- Sub-menu thu lại thì cột trái rộng 0 (override bên dưới), nên thông báo phải chuyển sang render ở main. -->
         <template v-if="subSidebarCollapsed">
-          <p v-if="error" class="err agent-editor-msg">{{ error }}</p>
-          <p v-if="message" class="ok-msg agent-editor-msg">{{ message }}</p>
+          <p v-if="error" class="err agent-editor-msg panel-msg">{{ error }}</p>
+          <p v-if="message" class="ok-msg agent-editor-msg panel-msg">{{ message }}</p>
         </template>
         <!-- `with-frontmatter`: agent đọc nguyên file `.md`, nên khối `---` đầu file được tách thành block metadata riêng. -->
         <CMarkdownView
@@ -231,28 +237,13 @@ async function onSaved(savedName: string) {
 </template>
 
 <style scoped lang="scss">
+// Cột flex lấp đầy lấy từ class chung `.flex-col-fill`; ở đây chỉ chặn tràn.
 .agent-editor {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-height: 0;
   overflow: hidden;
 }
 // Thu về 0 chứ không 48px mặc định: dải đó không chứa nút nào, giữ lại là cột xám rỗng vô ích.
 .agent-editor-layout :deep(.c-screen-layout__body--left-collapsed) {
   grid-template-columns: 0 1fr;
-}
-.agent-editor-msg {
-  margin: 0;
-  padding: 8px 10px;
-  font-size: 12px;
-  flex-shrink: 0;
-}
-.agent-main {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-height: 0;
 }
 // Root của component con nhận luôn scope id của cha, nên không cần `:deep`.
 .agent-main > .c-md-view {

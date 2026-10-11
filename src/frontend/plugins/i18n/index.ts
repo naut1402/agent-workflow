@@ -1,3 +1,4 @@
+import { reactive } from 'vue'
 import type { App, InjectionKey, Plugin } from 'vue'
 import { createI18n } from 'vue-i18n'
 import type { LocalePreference } from '../../configs/appSettings'
@@ -35,10 +36,10 @@ export type I18nHelpers = {
   registry: LocaleRegistry
 }
 
-const localeRegistry: LocaleRegistry = {
+const localeRegistry: LocaleRegistry = reactive({
   locales: [],
   defaultLocale: DEFAULT_LOCALE,
-}
+})
 
 export function getLocaleRegistry(): LocaleRegistry {
   return localeRegistry
@@ -55,7 +56,10 @@ localeRegistry.locales = initialLocales.includes('en')
   ? ['vi', 'en', ...initialLocales.filter((l) => l !== 'vi' && l !== 'en')]
   : initialLocales
 
-export const SUPPORTED_LOCALES: readonly AppLocale[] = ['vi', 'en']
+/** Bản sao danh sách locale hiện tại của registry. */
+export function supportedLocales(): readonly AppLocale[] {
+  return [...localeRegistry.locales]
+}
 
 export const i18n = createI18n({
   legacy: false,

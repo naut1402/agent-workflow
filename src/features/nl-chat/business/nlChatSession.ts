@@ -91,30 +91,15 @@ const AUTO_MODE_HEADER = [
   'Khi chốt draft, JSON trong code block phải là wrapper: { "entityType": "task" | "pipeline" | "agent" | "automation", "draft": { ...draft đúng schema của entityType đó... } }.',
 ].join('\n')
 
-// Đồng bộ thủ công với KNOWN_AUTOMATION_EVENT_TYPES (automations/business/index.ts) — không import vì hằng đó nằm cùng barrel với side-effect scheduler.
-const AUTOMATION_EVENT_TYPES_HINT = [
-  'job.queued',
-  'job.started',
-  'job.finished',
-  'job.failed',
-  'job.cancelled',
-  'job.awaiting_recovery',
-  'job.retry_scheduled',
-  'job.recovered',
-  'task.created',
-  'task.advanced',
-  'hitl.pending',
-  'hitl.resolved',
-  'entity.created',
-  'entity.updated',
-  'entity.deleted',
-  'webhook.received',
-  'webhook.triggered',
-  'usage.recorded',
-  'orchestrator.dispatched',
-  'orchestrator.halted',
-  'orchestrator.start_requested',
-].join(' | ')
+/** Mô tả từng loại action cho agent — thêm `kind` mới mà thiếu dòng ở đây thì typecheck đỏ. */
+const AUTOMATION_ACTION_HINTS = {
+  runTask: [
+    ' - { "kind": "runTask", "mode": "create", "prompt": "<nội dung request.md của task mới>" } (+ optional "name", "description", "profileName", "runnerId", "projectId")',
+    ' - { "kind": "runTask", "mode": "existing", "taskId": "<id task>" } (+ optional "name", "description", "runnerId", "projectId")',
+  ],
+  httpRequest: [' - { "kind": "httpRequest", "url": "<https URL>" } (+ optional "method" mặc định GET, "headers", "body")'],
+  runCommand: [' - { "kind": "runCommand", "runnerId": "<id runner>" } (+ optional "params")'],
+} satisfies Record<AutomationActionKind, string[]>
 
 function schemaHintFor(entityType?: NlChatEntityType | null): string {
   if (!entityType) {
@@ -160,13 +145,10 @@ function schemaHintFor(entityType?: NlChatEntityType | null): string {
         ' - { "kind": "timer", "startAt": "<ISO datetime>", "repeat": { "mode": "once" } }',
         ' - { "kind": "timer", "startAt": "<ISO datetime>", "repeat": { "mode": "interval", "everyMs": <số ms, tối thiểu 60000> } }',
         ' - { "kind": "timer", "startAt": "<ISO datetime>", "repeat": { "mode": "cron", "expr": "<biểu thức 5 field, vd \'0 9 * * 1-5\'>" } }',
-        ` - { "kind": "event", "eventType": "<một trong: ${AUTOMATION_EVENT_TYPES_HINT}>" }`,
+        ` - { "kind": "event", "eventType": "<một trong: ${KNOWN_AUTOMATION_EVENT_TYPES.join(' | ')}>" }`,
         'Rule chạy khi BẤT KỲ trigger nào khớp (OR). Nhiều action chạy TUẦN TỰ theo thứ tự mảng.',
         'Mỗi action là MỘT trong:',
-        ' - { "kind": "runTask", "mode": "create", "prompt": "<nội dung request.md của task mới>" } (+ optional "name", "description", "profileName", "runnerId", "projectId")',
-        ' - { "kind": "runTask", "mode": "existing", "taskId": "<id task>" } (+ optional "name", "description", "runnerId", "projectId")',
-        ' - { "kind": "httpRequest", "url": "<https URL>" } (+ optional "method" mặc định GET, "headers", "body")',
-        ' - { "kind": "runCommand", "runnerId": "<id runner>" } (+ optional "params")',
+        ...Object.values(AUTOMATION_ACTION_HINTS).flat(),
         '"profileName" của action runTask cũng phải nằm trong section [PIPELINE PROFILE] của khối catalog — bỏ trống nghĩa là dùng pipeline mặc định.',
         '"projectId" là id project trong registry — bỏ trống nghĩa là project hiện tại. KHÔNG tự bịa id.',
         '"runnerId" KHÔNG có trong catalog: chỉ điền khi người dùng nêu rõ, còn lại bỏ trống để hệ thống chọn runner mặc định.',
@@ -222,8 +204,9 @@ import {
   sendTaskFeedback,
   listJobs,
   closeTaskSession,
+  KNOWN_AUTOMATION_EVENT_TYPES,
 } from './index.js'
-import type { JobRecord, MutationResult } from './index.js'
+import type { AutomationActionKind, JobRecord, MutationResult } from './index.js'
 
 
 const CHAT_SESSION_PREFIX = 'nlchat-'

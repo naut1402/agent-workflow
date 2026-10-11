@@ -1,0 +1,9 @@
+icon:
+  title: Running jobs
+list:
+  title: Running jobs
+  empty: No jobs running.
+  unknownTask: Unassigned
+  unknownStep: Unknown step
+  jobCount: '{n} running'
+  truncated: And {n} more tasks…

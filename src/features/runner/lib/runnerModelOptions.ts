@@ -10,6 +10,7 @@
  */
 
 import type { ConnectionOption, ProviderEntry, ProviderFamily, RunnerDraft } from '../types'
+import { providerEntryOf } from './providerCatalog'
 
 /** Option khớp `CSelectOption` mà không phải kéo component vào lib. */
 export type RunnerModelOption = { value: string; label: string }
@@ -21,19 +22,24 @@ export type RunnerCatalogLike = {
   providers?: ProviderEntry[] | null
 } | null | undefined
 
-const AGENT_CLI_PROVIDER_IDS = ['claude-code-cli', 'cursor-cli', 'codex-cli']
+/**
+ * Luật dự phòng khi response thiếu catalog (`providers` rỗng / thiếu entry) —
+ * giữ để hành vi không đổi với nơi gọi truyền response không kèm catalog. BE
+ * luôn trả `providers[].family` nên đường chính là tra catalog.
+ */
+const LEGACY_AGENT_CLI_PROVIDER_IDS = ['claude-code-cli', 'cursor-cli', 'codex-cli']
 
-/** Bản FE của `providerFamilyOf` (`business/registry.ts`): catalog trước, quy tắc theo id sau. */
+/** Bản FE của `providerFamilyOf` (`business/providers/providerRegistry.ts`): catalog trước, quy tắc theo id sau. */
 export function familyOfProviderId(
   providerId: string | undefined,
   providers?: ProviderEntry[] | null,
 ): ProviderFamily {
   if (!providerId) return 'console-command'
-  const fromCatalog = (providers || []).find((p) => p?.id === providerId)?.family
+  const fromCatalog = providerEntryOf(providerId, providers)?.family
   if (fromCatalog) return fromCatalog
   if (providerId === 'console-command') return 'console-command'
   if (providerId === 'anthropic-api' || providerId.endsWith('-api')) return 'ai-api'
-  if (AGENT_CLI_PROVIDER_IDS.includes(providerId)) return 'agent-cli'
+  if (LEGACY_AGENT_CLI_PROVIDER_IDS.includes(providerId)) return 'agent-cli'
   return 'console-command'
 }
 

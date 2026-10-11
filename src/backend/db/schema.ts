@@ -6,7 +6,7 @@ import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'driz
  *
  * `payload` holds the full JSON-serialised `LogEntry` (schema.ts in core/log);
  * per-type fields stay in there so they never force a wide, mostly-NULL table.
- * `type`/`ts`/`project_id` are lifted out and indexed because `readLogs()`
+ * `type`/`ts`/`project_id` are lifted out and indexed because `LogDriver.query()`
  * filters and sorts on them; `level`/`trace_id` are spare columns for filters
  * that do not exist yet, so nothing reads them.
  */
