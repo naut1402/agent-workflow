@@ -14,7 +14,7 @@ export interface CredentialResolver {
 }
 
 /**
- * Hiện thực đã đăng ký cho tiến trình này. Bên nắm store (`runner/business/registry.ts`)
+ * Hiện thực đã đăng ký cho tiến trình này. Runner (`runner/business/providers/providerRegistry.ts`)
  * gọi `useCredentialResolver` lúc nạp module; caller không nhận resolver qua tham
  * số (`mcp/controller.ts`) lấy lại bằng `credentialResolver()`. Nhờ vậy `mcp` 🚫
  * import `runner` mà vẫn giải được credential — cạnh ngược đó là vòng `mcp` ⇄ `runner`.

@@ -792,7 +792,7 @@ export function stepResultOf(
   status: StepResult['status'],
 ): StepResult {
   // `job.stdout` ĐÃ được provider bóc khỏi khung JSON (`parse-json` làm việc đó
-  // ở `providers/claude-code-cli.ts`), nên ở đây nó luôn là text thuần. Bóc lần
+  // ở `providers/AbstractAgentCliProvider.ts`), nên ở đây nó luôn là text thuần. Bóc lần
   // thứ hai từng rơi vào nhánh "cắt từ `{` đầu tới `}` cuối" và vứt mất chính
   // dòng `STEP_SUMMARY` thật khi nút con có in một khối JSON trong câu trả lời.
   const text = stdoutOf(job)
