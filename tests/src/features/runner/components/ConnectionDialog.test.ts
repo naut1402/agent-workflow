@@ -45,6 +45,36 @@ vi.mock('@/features/mcp/scripts/mcpApi', () => ({
   fetchMcpServers: vi.fn(async () => ({ servers: [] })),
 }))
 
+/**
+ * Cắt đường tới sqlite — nếu không, CẢ suite này không nạp được.
+ *
+ * Nhóm `mcpDelivery` ở cuối file cố ý đọc catalog THẬT qua
+ * `@/features/runner/business/registry` (xem ghi chú ở đó: hằng gõ tay là thứ
+ * vẫn xanh sau khi giá trị thật đã đổi). Nhưng đồ thị import tĩnh của nó đi
+ * tiếp tới tận tầng lưu trữ:
+ *
+ *   business/registry → providers/providerRegistry → ClaudeCliProvider
+ *     → claudeUsageTranscript → usageCapture
+ *       → backend/log/store → log/driverInit → log/sqliteDriver
+ *         → backend/db/client  →  await import('bun:sqlite')
+ *
+ * `bun:sqlite` là builtin của Bun, Vite 🚫 không bundle được cho môi trường
+ * client ⇒ `Cannot bundle Node.js built-in "bun:sqlite"` và suite fail ở bước
+ * NẠP, trước khi chạy ca nào.
+ *
+ * Mock đặt ở **lá** (`backend/db/client`) chứ không ở `log/store`: đây là cắt
+ * nhỏ nhất đủ để `bun:sqlite` không bao giờ được resolve, trong khi
+ * `listProviderCatalog()` vẫn là hàm THẬT ⇒ giữ nguyên giá trị của nhóm
+ * `mcpDelivery`. Suite này là test component dưới jsdom, 🚫 không ca nào cần DB
+ * thật (`testing.md` §1: tầng business/sqlite thuộc **bun test**).
+ */
+vi.mock('@/backend/db/client', () => ({
+  getDb: vi.fn(async () => {
+    throw new Error('getDb() 🚫 không khả dụng trong suite component (jsdom) — xem vi.mock ở đầu file')
+  }),
+  resetDbForTest: vi.fn(() => {}),
+}))
+
 import {
   fetchCredentials,
   saveCredential,
