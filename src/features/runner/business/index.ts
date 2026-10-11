@@ -94,21 +94,6 @@ export { agentTranscriptFile } from './providers/agentTranscriptStore.js'
 /** Giải API key của credential cho provider API — dùng chung execute / complete (#448). */
 export { resolveProviderApiKey } from './oauthCredentials.js'
 export { listAvailableModels } from './modelCatalog.js'
-export type { ListModelsInput, ListModelsResult } from './modelCatalog.js'
-export { isAgentCliProvider } from './providers/AbstractAgentCliProvider.js'
-export type { AgentCliProvider, AgentCliCapabilities } from './providers/AbstractAgentCliProvider.js'
-export type {
-  CompletionRequest,
-  CompletionResult,
-  ModelListing,
-  ProviderDescriptor,
-  RegisteredProvider,
-  TokenUsage,
-  TranscriptFormat,
-  UsageCaptureInput,
-  UsageSource,
-  ProviderFamily as AgentProviderFamily,
-} from './providers/RunnerProvider.js'
 export {
   submitJob,
   submitAndWait,

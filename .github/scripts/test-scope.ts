@@ -129,7 +129,7 @@ export function resolveSpecifier(fromFile: string, spec: string): string | null 
 
 /**
  * Cạnh không có trong text: `apiServer.ts` nạp `features/<name>/api.ts` bằng
- * `loadModulesUnder` (quét thư mục lúc chạy), nên regex import không thấy gì —
+ * `loadEntriesUnder` (quét thư mục lúc chạy), nên regex import không thấy gì —
  * mà mọi route test đều dựng app qua đó. Thiếu cạnh này thì sửa controller/api
  * của một feature sẽ *không* kéo theo route test của chính nó.
  */
