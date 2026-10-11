@@ -10,7 +10,12 @@ import {
   updateTag,
 } from '../../../../../src/features/knowledge/business/tags'
 import { renameTag } from '../../../../../src/features/knowledge/business/collections'
-import { createFileDriver } from '../../../../../src/features/knowledge/business/fileDriver'
+import {
+  getKnowledgeDriver,
+  listKnowledge,
+  listKnowledgeTags,
+  type KnowledgeDriver,
+} from '../../../../../src/features/knowledge/business/index'
 import { resetDbForTest } from '../../../../../src/backend/db/client'
 
 /**
@@ -24,14 +29,14 @@ import { resetDbForTest } from '../../../../../src/backend/db/client'
  */
 
 let root: string
-let driver: ReturnType<typeof createFileDriver>
+let driver: KnowledgeDriver
 const prevHome = process.env.DEV_TEAM_DASHBOARD_HOME
 
 beforeEach(async () => {
   root = await fs.mkdtemp(path.join(os.tmpdir(), 'kn-tags-'))
   process.env.DEV_TEAM_DASHBOARD_HOME = path.join(root, '.home')
   resetDbForTest()
-  driver = createFileDriver(root)
+  driver = (await getKnowledgeDriver(root)).driver
 })
 afterEach(async () => {
   resetDbForTest()
@@ -40,7 +45,7 @@ afterEach(async () => {
   await fs.rm(root, { recursive: true, force: true })
 })
 
-const facets = async () => decorateTagFacets(root, await driver.listTags())
+const facets = async () => decorateTagFacets(root, await listKnowledgeTags(driver))
 
 describe('CRUD metadata tag', () => {
   test('tag CHƯA entry nào gắn vẫn tồn tại và liệt kê được với count 0 (E9)', async () => {
@@ -131,7 +136,7 @@ describe('decorateTagFacets — gộp hai store', () => {
       { tag: 'x', count: 1, color: 'slate', description: '', scope: 'project' },
     ])
     expect(await readTagAliasesSafe(root)).toEqual({})
-    expect(await driver.list()).toHaveLength(1)
+    expect(await listKnowledge(driver, root)).toHaveLength(1)
   })
 })
 
@@ -151,7 +156,7 @@ describe('đổi tên tag dời metadata (TC-41b)', () => {
       { tag: 'beta', count: 1, color: 'purple', description: '', scope: 'project' },
     ])
     // Alias sống: lọc theo tên cũ vẫn ra đúng entry.
-    expect((await driver.list({ tags: ['alpha'] })).map((e) => e.id)).toEqual(['project/e'])
+    expect((await listKnowledge(driver, root, { tags: ['alpha'] })).map((e) => e.id)).toEqual(['project/e'])
   })
 
   test('merge vào tag đã có metadata thì GIỮ màu của tag đích, không đẻ hàng thừa', async () => {

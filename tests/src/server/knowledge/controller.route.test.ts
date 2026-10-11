@@ -456,3 +456,66 @@ describe('bundle (nhóm I)', () => {
     expect(bundle.map((b: { content?: string }) => b.content?.trim())).toEqual(['a', 'b', 'c'])
   })
 })
+
+/**
+ * Characterization trước khi tách `KnowledgeDriver` khỏi rule nghiệp vụ (#443):
+ * những luật lẻ của bề mặt HTTP mà refactor phải giữ nguyên văn, kể cả ca lạ.
+ */
+describe('hành vi giữ nguyên khi tách driver (#443)', () => {
+  test('id không có scope hợp lệ: GET đọc như slug của `project`, DELETE → 404', async () => {
+    await create({ slug: 'foo', content: 'c' })
+
+    const read = await app.request(url('/api/knowledge?id=foo'))
+    expect(read.status).toBe(200)
+    expect((await read.json()).entry.id).toBe('project/foo')
+
+    const del = await app.request(url('/api/knowledge?id=foo'), { method: 'DELETE' })
+    expect(del.status).toBe(404)
+    expect((await (await app.request(url('/api/knowledge?id=project/foo'))).json()).entry.id).toBe('project/foo')
+  })
+
+  test('PUT với id mang scope lạ: scope/slug lấy từ body', async () => {
+    const res = await jsonReq('PUT', '/api/knowledge?id=bogus/x', { slug: 'y', scope: 'system', content: 'c' })
+    expect(res.status).toBe(200)
+    expect((await res.json()).entry.id).toBe('system/y')
+  })
+
+  test('include=tags: facet đếm trước khi lọc tag/query', async () => {
+    await create({ slug: 'a', tags: ['t1'], content: 'alpha' })
+    await create({ slug: 'b', tags: ['t2'], content: 'beta' })
+
+    const body = await (await app.request(url('/api/knowledge?include=tags&tags=t1'))).json()
+    expect(body.entries.map((e: { id: string }) => e.id)).toEqual(['project/a'])
+    expect(body.tags.map((t: { tag: string; count: number }) => [t.tag, t.count])).toEqual([
+      ['t1', 1],
+      ['t2', 1],
+    ])
+  })
+
+  test('danh sách không kèm content/path; bundle trả đúng năm khoá', async () => {
+    await create({ slug: 'k', tags: ['x'], content: 'kc' })
+
+    const { entries } = await (await app.request(url('/api/knowledge'))).json()
+    expect(Object.keys(entries[0]).sort()).toEqual(['id', 'scope', 'slug', 'tags', 'title', 'updated_at'])
+
+    const { bundle } = await (await app.request(url('/api/knowledge/bundle?ids=project/k'))).json()
+    expect(Object.keys(bundle[0]).sort()).toEqual(['content', 'id', 'path', 'tags', 'title'])
+  })
+
+  /**
+   * Ca lạ có sẵn: đổi tên một tên đã là alias. `renameTag` tìm entry qua bước
+   * giải alias nên khớp entry mang tag đích, ghi lại file mà không đổi tag nào,
+   * vẫn đếm `renamed` và vẫn phát event. Giữ nguyên — sửa thì tách issue.
+   */
+  test('đổi tên một tên đã là alias: ghi lại entry của tag đích, tag không đổi', async () => {
+    await create({ slug: 'e', tags: ['a'], content: 'c' })
+    await jsonReq('POST', '/api/knowledge/tags/rename', { from: 'a', to: 'b' })
+    events = []
+
+    const res = await jsonReq('POST', '/api/knowledge/tags/rename', { from: 'a', to: 'c' })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ renamed: 1, entries: ['project/e'], alias: ['a', 'c'] })
+    expect((await (await app.request(url('/api/knowledge?id=project/e'))).json()).entry.tags).toEqual(['b'])
+    expect(events.map((e) => e.type)).toEqual(['entity.updated'])
+  })
+})

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { getKnowledgeDriver, loadKnowledgeConfig } from '../../../../../src/features/knowledge/business/fileDriver'
+import { getKnowledgeDriver, loadKnowledgeConfig } from '../../../../../src/features/knowledge/business/index'
 
 let root: string
 beforeEach(async () => {
@@ -33,7 +33,16 @@ describe('loadKnowledgeConfig', () => {
 describe('getKnowledgeDriver', () => {
   test('returns a usable file driver + config', async () => {
     const { driver, config } = await getKnowledgeDriver(root)
-    expect(typeof driver.list).toBe('function')
+    expect(typeof driver.listEntries).toBe('function')
     expect(config.driver).toBe('file')
+  })
+})
+
+describe('getKnowledgeDriver — driver không hỗ trợ', () => {
+  test('rơi về driver file, config mang cảnh báo', async () => {
+    await fs.writeFile(path.join(root, 'knowledge.config.yaml'), 'driver: postgres\n')
+    const { driver, config } = await getKnowledgeDriver(root)
+    expect(typeof driver.read).toBe('function')
+    expect(config).toEqual({ driver: 'file', warning: 'unsupported driver "postgres", using file' })
   })
 })

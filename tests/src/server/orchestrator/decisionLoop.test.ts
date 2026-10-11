@@ -12,7 +12,7 @@ import {
 } from '../../../../src/features/orchestrator/business/decisionLoop.js'
 import { DECISION_SENTINEL } from '../../../../src/features/orchestrator/schemas/orchestrator.js'
 import { listJobs } from '../../../../src/features/runner/business/index.js'
-import { createFileDriver } from '../../../../src/features/knowledge/business/fileDriver.js'
+import { getKnowledgeDriver } from '../../../../src/features/knowledge/business/index.js'
 
 // Bảng quyết định §4.2.4 + các bất biến chống vòng lặp. Chấm bằng event phát ra
 // (`orchestrator.dispatched` / `orchestrator.halted`) — đúng bề mặt mà
@@ -733,7 +733,7 @@ describe('cấu hình orchestrator (system_prompt/knowledge_inputs) — T8eb1448
   })
 
   test('TC-CFG-03: knowledge_inputs trộn id hợp lệ + không tồn tại ⇒ không crash, cả hai phần đều thấy được', async () => {
-    await createFileDriver(root).write({
+    await (await getKnowledgeDriver(root)).driver.write({
       slug: 'huong-dan-po',
       scope: 'project',
       content: 'Nội dung knowledge hợp lệ về xử lý PO.',
