@@ -5,11 +5,7 @@ import { useFullscreen } from '@vueuse/core'
 import { parseMarkdown, renderMermaid } from '../../../frontend/lib/markdownLib'
 import { fetchArtifact, saveArtifact, fetchArtifactActions } from '../scripts/ArtifactPanelApi'
 import { fetchRunners } from '../../runner/scripts/runnerApi'
-import {
-  bindFocusableEditRef,
-  splitMarkdownSections,
-  useInlineMarkdownEdit,
-} from '../composables/useInlineMarkdownEdit'
+import { bindFocusableEditRef, useInlineMarkdownEdit } from '../composables/useInlineMarkdownEdit'
 import { useArtifactAction } from '../composables/useArtifactAction'
 import { useArtifactSelectionToolbar } from '../composables/useArtifactSelectionToolbar'
 import ArtifactProposalReview from './ArtifactProposalReview.vue'
@@ -20,12 +16,20 @@ import { useAppSettings } from '../../../frontend/composables/useAppSettings'
 import { attachMermaidControls } from '../../../frontend/composables/useMermaidControls'
 import { canNavigateToModeKey, navigateToModeKey } from '../../../frontend/shell/keys'
 import {
+  readArtifactSectionDefault,
   resolveArtifactViewMode,
   resolveArtifactSectionAccordion,
   resolveArtifactSectionDefault,
 } from '../../../frontend/configs/appSettings'
 import SectionSaveIndicator from './SectionSaveIndicator.vue'
 import MarkdownTextEditor from '../../../frontend/ui/MarkdownTextEditor.vue'
+import {
+  buildMarkdownBlocks,
+  collectNodePaths,
+  renderNodes,
+} from '../../../frontend/lib/markdownBlocks'
+import { useMarkdownCollapse } from '../../../frontend/composables/useMarkdownCollapse'
+import CMarkdownNodes from '../../../frontend/ui/CMarkdownNodes.vue'
 import { classifyArtifactHref } from '../lib/artifactLink'
 import type { ArtifactLinkTarget } from '../lib/artifactLink'
 
@@ -52,10 +56,8 @@ const content = ref('')
 const loadedKey = ref<string | null>(null)
 const loadedMtime = ref<number | null>(null)
 const blockMode = ref(resolveArtifactViewMode(settings.value) === 'block')
-const openBlocks = ref<Set<number>>(new Set())
 // Accordion đọc reactive từ settings: đổi setting là đổi luôn cách bấm section,
 // còn trạng thái đang mở thì giữ tới lần nạp tài liệu kế tiếp.
-// Logic gập section ở đây là bản sao độc lập của frontend/ui/CMarkdownView.vue — sửa một bên thì sửa cả hai.
 const accordionMode = computed(() => resolveArtifactSectionAccordion(settings.value))
 // Cờ "lần nạp đầu của tài liệu này" — chỉ lần đó mới seed lại `openBlocks`.
 const seedSectionsOnNextContent = ref(true)
@@ -292,17 +294,29 @@ onUnmounted(() => {
   selectionToolbar.detach()
 })
 
+// `buildMarkdownBlocks` dùng chung với `CMarkdownView` — với `withFrontmatter`
+// mặc định (false) nó cắt đúng bằng `splitMarkdownSections`, nên `source` và thứ
+// tự block giữ nguyên hợp đồng của inline edit + `blockLineRanges` bên dưới.
 const blocks = computed(() => {
-  return splitMarkdownSections(content.value).map((source) => {
-    const firstLine = source.split('\n')[0]
-    const isH2 = firstLine.startsWith('## ')
-    return {
-      heading: isH2 ? firstLine.replace(/^##\s+/, '') : null,
-      source,
-      html: parseMarkdown(source),
-    }
-  })
+  return buildMarkdownBlocks(content.value).map((b) => ({
+    ...b,
+    // `intro` chứ không `source`: phần của các mục con do `CMarkdownNodes` render.
+    html: parseMarkdown(b.intro),
+    // HTML của cả cây dựng SẴN ở đây — xem cảnh báo trong `renderNodes`.
+    children: renderNodes(b.children, parseMarkdown),
+  }))
 })
+
+/**
+ * Toàn văn: không có `<details>` nên cũng không có tầng mục con — phải render
+ * NGUYÊN khối, không phải `intro`, nếu không là mất sạch phần `###` trở xuống.
+ *
+ * Computed riêng chứ không thêm trường vào `blocks`: block mode không dùng tới,
+ * mà Vue chỉ tính computed khi có người đọc nên không parse thừa.
+ */
+const fullBlocks = computed(() =>
+  blocks.value.map((b) => (b.children.length ? parseMarkdown(b.source) : b.html)),
+)
 
 // 1-indexed start/end line of each block within the raw `content`, used to
 // give the selection toolbar a line range for the selected text (see
@@ -448,61 +462,26 @@ function onViewClick(ev: MouseEvent) {
   followLink(target, href)
 }
 
-function onBlockToggle(i: number, ev: Event) {
-  const el = ev.target as HTMLDetailsElement
-  if (el.open) {
-    // Accordion: mở block i ⇒ tập mở chỉ còn {i}. Các block anh em bị Vue đóng sẽ
-    // bắn `toggle` vọng lại, rơi vào nhánh dưới và chỉ `delete` — idempotent, không lặp.
-    openBlocks.value = accordionMode.value ? new Set([i]) : new Set(openBlocks.value).add(i)
-    scheduleMermaid()
-  } else {
-    const next = new Set(openBlocks.value)
-    next.delete(i)
-    openBlocks.value = next
-  }
-}
-
-// Nơi DUY NHẤT seed `openBlocks` từ preference. Accordion bật ⇒ resolver trả 'collapsed'.
-function applyDefaultSectionState() {
-  openBlocks.value =
-    resolveArtifactSectionDefault(settings.value) === 'expanded'
-      ? new Set(blocks.value.map((_, i) => i))
-      : new Set()
-  if (openBlocks.value.size) scheduleMermaid()
-}
+const collapse = useMarkdownCollapse({
+  blockCount: () => blocks.value.length,
+  nodePaths: () => collectNodePaths(blocks.value),
+  accordion: () => accordionMode.value,
+  blockDefault: () => resolveArtifactSectionDefault(settings.value),
+  // Mục con đọc giá trị LƯU, không qua resolver: resolver trả 'collapsed' bất cứ
+  // khi nào accordion bật (mặc định bật), mà accordion thì không áp cho mục con.
+  // Dùng resolver ở đây là mở một block ra chỉ thấy dãy tiêu đề rỗng — đổi hành
+  // vi hiện tại mà không ai yêu cầu.
+  nodeDefault: () => readArtifactSectionDefault(settings.value),
+  onOpened: scheduleMermaid,
+})
+const { openBlocks, allBlocksOpen } = collapse
 
 // Tiêu thụ cờ seed — lần gọi đầu thắng, các lần sau là no-op.
+// Đây vẫn là nơi DUY NHẤT seed trạng thái gập từ preference.
 function seedSectionsIfPending() {
   if (!seedSectionsOnNextContent.value) return
   seedSectionsOnNextContent.value = false
-  applyDefaultSectionState()
-}
-
-// Giữ nguyên lựa chọn của người dùng, chỉ bỏ index không còn block tương ứng.
-function pruneOpenBlocks() {
-  const max = blocks.value.length
-  openBlocks.value = new Set([...openBlocks.value].filter((i) => i < max))
-}
-
-function openAllBlocks() {
-  openBlocks.value = new Set(blocks.value.map((_, i) => i))
-  scheduleMermaid()
-}
-
-function closeAllBlocks() {
-  openBlocks.value = new Set()
-}
-
-const allBlocksOpen = computed(
-  () => blocks.value.length > 0 && openBlocks.value.size === blocks.value.length,
-)
-
-function toggleAllBlocks() {
-  if (allBlocksOpen.value) {
-    closeAllBlocks()
-  } else {
-    openAllBlocks()
-  }
+  collapse.seed()
 }
 
 watch(
@@ -540,7 +519,7 @@ watch(
 
 // Nạp lại cùng tài liệu (polling `mtime`, lưu inline edit, 409 conflict): giữ nguyên
 // section đang đọc, chỉ bỏ index không còn block tương ứng.
-watch(content, pruneOpenBlocks)
+watch(content, collapse.prune)
 
 watch(
   () => {
@@ -584,7 +563,7 @@ onUpdated(() => scheduleMermaid())
           :disabled="isEditing() || !!runningActionId"
           :title="allBlocksOpen ? t('monitor.artifact.collapseAll') : t('monitor.artifact.expandAll')"
           :aria-label="allBlocksOpen ? t('monitor.artifact.collapseAll') : t('monitor.artifact.expandAll')"
-          @click="toggleAllBlocks"
+          @click="collapse.toggleAll()"
         >
           <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
             <path
@@ -710,7 +689,7 @@ onUpdated(() => scheduleMermaid())
             class="block-item md-section-wrap"
             :data-block-index="i"
             :open="openBlocks.has(i)"
-            @toggle="onBlockToggle(i, $event)"
+            @toggle="collapse.onBlockToggle(i, $event)"
           >
             <SectionSaveIndicator
               :saving="showSavingIndicator(i)"
@@ -730,13 +709,26 @@ onUpdated(() => scheduleMermaid())
                 @blur="handleBlur"
               />
             </div>
+            <!-- Cây mục con nằm TRONG `.md-editable` để double-click vào thân một
+                 mục con vẫn mở editor của đúng block `i` — hành vi hôm nay.
+                 Double-click lên `<summary>` thì không, vì `shouldIgnoreClick`
+                 đã liệt `summary` trong danh sách selector bỏ qua. -->
             <div
               v-else
               class="md block-content md-editable"
-              v-html="block.html"
               :title="t('monitor.artifact.editSectionTitle')"
               @dblclick.prevent="startEdit(i, $event)"
-            />
+            >
+              <!-- eslint-disable-next-line vue/no-v-html -- parseMarkdown đã sanitise -->
+              <div v-html="block.html" />
+              <CMarkdownNodes
+                v-if="block.children.length"
+                :nodes="block.children"
+                :path="String(i)"
+                :is-open="collapse.isNodeOpen"
+                :on-toggle="collapse.onNodeToggle"
+              />
+            </div>
           </details>
         </div>
 
@@ -760,11 +752,11 @@ onUpdated(() => scheduleMermaid())
           </div>
           <template v-else>
             <div
-              v-for="(block, i) in blocks"
+              v-for="(html, i) in fullBlocks"
               :key="i"
               class="md md-editable"
               :data-block-index="i"
-              v-html="block.html"
+              v-html="html"
               :title="t('monitor.artifact.editTitle')"
               @dblclick.prevent="startEdit('full', $event)"
             />

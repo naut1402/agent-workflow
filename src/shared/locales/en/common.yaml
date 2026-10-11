@@ -69,6 +69,8 @@ markdownView:
   toBlock: Switch to block view
   expandAll: Expand all
   collapseAll: Collapse all
+scrollTop:
+  label: Back to top
 artifactNode:
   producesTitle: Artifacts
   knowledgeTitle: Knowledge
