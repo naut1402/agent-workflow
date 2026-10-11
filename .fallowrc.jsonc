@@ -125,6 +125,11 @@
       "exports": ["setLogDriver", "resetLogDriver", "LogQuery"]
     },
     {
+      // Test knowledge dựng driver giả theo hợp đồng `KnowledgeDriver`, import qua barrel.
+      "file": "src/features/knowledge/business/index.ts",
+      "exports": ["KnowledgeDriver"]
+    },
+    {
       // Seam test của runner (#440): `registerProvider` thay provider bằng stub.
       // `listProviderIds` / `transcriptFormatOf` / `providerDescriptorOf` /
       // `agentTranscriptFile` / `resolveProviderApiKey` là hook mở cho #441 · #445 ·
