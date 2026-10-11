@@ -101,3 +101,52 @@ taskChat:
   queued: New messages will be sent once the current step finishes.
 floating:
   open: Create by chatting
+draft:
+  jsonView: JSON view
+  formView: Form view
+  viewToggleLabel: Draft view mode
+  jsonLabel: Draft content as JSON
+  jsonInvalid: Invalid JSON — fix it to enable Form view.
+  jsonNotObject: The draft must be a JSON object.
+  formBlockedHint: The JSON has a syntax error — fix it before switching to Form view.
+  hasFieldError: Some fields are still invalid — see the errors in Form view.
+  updatedByChat: The draft was updated from your chat request.
+  undo: Undo
+  dismiss: Dismiss
+  attachTooLong: The draft is too long to attach — describe the fields to change in your message.
+  composerPlaceholder: Ask for a draft change...
+  conversationTitle: Conversation ({count})
+  conversationCollapse: Collapse conversation
+  conversationExpand: Expand conversation
+  jsonOnlyFields: 'Editable in JSON view only: {keys}'
+  profileDefaultOption: — Use the project's default pipeline —
+  profileLoading: Loading pipeline profiles…
+  profileRetry: Retry
+  profileEmptyHint: This project has no pipeline profile yet — the task will use the default pipeline.
+  profileUnknownSuffix: (not in the catalog)
+  knowledgeRemove: Remove knowledge
+  knowledgeEmpty: — none —
+  field:
+    name: Task name
+    prompt: Description / prompt
+    profileName: Pipeline profile
+    source: Source
+    taskId: Task ID
+    issueUrl: Issue URL
+    branch: Branch
+    parentTaskId: Parent task
+    runnerId: Runner
+    knowledgeInputs: Knowledge
+    autoReview: Auto review
+    exportJson: Export JSON
+    run: Run right after creating
+  source:
+    prompt: Prompt
+    issue: Issue
+  error:
+    required: This field is required.
+    tooShort: The value is too short.
+    tooLong: At most {max} characters.
+    invalidUrl: Invalid URL.
+    invalidPattern: The value does not match the allowed format.
+    invalid: Invalid value.
