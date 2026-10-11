@@ -79,7 +79,6 @@ function applyDefaultViewMode() {
 const {
   editingSection,
   sectionDraft,
-  saving,
   editTextarea,
   startEdit,
   cancelEdit,
