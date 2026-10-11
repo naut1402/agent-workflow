@@ -10,13 +10,11 @@ import {
   resolveRepoFallbackSkillPath,
   type CatalogAgentStore,
 } from './catalog/index.js'
-import { buildRules } from './rules/index.js'
 import {
   customAgentsDir,
   draftFromAgentMarkdown,
   globalAgentsDir,
   loadScanPatternsConfig,
-  profilesDir,
   sanitiseAgentName,
   scanCustomAgents,
 } from './index.js'
@@ -75,24 +73,6 @@ export class PipelineEditorBusiness extends AbstractBusiness {
     } catch (e: any) {
       return this.fail(500, String(e.message || e))
     }
-  }
-
-  async getRules() {
-    const gate = this.requireRoot()
-    if ('error' in gate) return gate
-    return buildRules(gate.root, { scanPatterns: loadScanPatternsConfig() })
-  }
-
-  profilesDir() {
-    const gate = this.requireRoot()
-    if ('error' in gate) return gate
-    return { root: gate.root, dir: profilesDir(gate.root) }
-  }
-
-  customAgentsDir() {
-    const gate = this.requireRoot()
-    if ('error' in gate) return gate
-    return { root: gate.root, dir: customAgentsDir(gate.root) }
   }
 }
 
