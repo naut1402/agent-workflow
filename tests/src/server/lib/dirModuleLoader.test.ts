@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { loadEntriesUnder, loadModulesUnder } from '../../../../src/backend/lib/dirModuleLoader.js'
+import { loadEntriesUnder } from '../../../../src/backend/lib/dirModuleLoader.js'
 
 let root: string
 
@@ -21,17 +21,18 @@ afterAll(async () => {
   await fs.rm(root, { recursive: true, force: true })
 })
 
-describe('loadModulesUnder', () => {
+// Ca một entry mỗi thư mục — trước #508 do `loadModulesUnder` (đã bỏ) đảm nhận.
+describe('loadEntriesUnder — một entry', () => {
   it('imports child dirs that have entryFile; skips others', async () => {
-    const mods = await loadModulesUnder<{ id: string }>(root, { entryFile: 'api.ts' })
-    expect(mods.map((m) => m.id).sort()).toEqual(['alpha', 'beta'])
+    const entries = await loadEntriesUnder<{ id: string }>(root, { entryFiles: ['api.ts'] })
+    expect(entries.map((e) => e.mod.id).sort()).toEqual(['alpha', 'beta'])
   })
 
   it('returns [] when no child has entryFile', async () => {
     const empty = await fs.mkdtemp(path.join(os.tmpdir(), 'dir-module-empty-'))
     try {
       await fs.mkdir(path.join(empty, 'alone'))
-      expect(await loadModulesUnder(empty, { entryFile: 'api.ts' })).toEqual([])
+      expect(await loadEntriesUnder(empty, { entryFiles: ['api.ts'] })).toEqual([])
     } finally {
       await fs.rm(empty, { recursive: true, force: true })
     }
