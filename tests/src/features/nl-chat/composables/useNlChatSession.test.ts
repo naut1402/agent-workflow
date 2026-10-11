@@ -593,3 +593,276 @@ describe('useNlChatSession', () => {
     expect(s.messages.value).toEqual([])
   })
 })
+
+// ── T9942d974 — sửa draft bằng chat (test-spec.md §6, TC-C1…TC-C12) ─────────
+// Lỗ hổng mà nhóm này lấp: chưa case nào gửi message khi đang ở `previewDraft`.
+// Stub riêng vì `stubApi` ở trên chỉ trả được MỘT `turn` cho mọi lượt, còn ở đây
+// lượt hai phải khác lượt một (draft A → draft B).
+
+interface SeqCtl {
+  /** Turn trả về cho lượt thứ n; vượt quá thì dùng phần tử cuối. */
+  turns: any[]
+  turnIndex: number
+  /** true ⇒ lượt gửi kế tiếp ném lỗi mạng. */
+  failSend: boolean
+}
+
+function stubSeq(turns: any[]) {
+  const ctl: SeqCtl = { turns, turnIndex: 0, failSend: false }
+  /** Body JSON của từng POST tới /api/nl-chat (start + messages), theo thứ tự. */
+  const sent: Record<string, any>[] = []
+  const fetchMock = vi.fn(async (input: any, init: any = {}) => {
+    const url = String(input)
+    const method = (init.method || 'GET').toUpperCase()
+    if (url.includes('/api/nl-chat/sessions') && method === 'POST') {
+      if (ctl.failSend) throw new Error('mạng hỏng')
+      sent.push(JSON.parse(String(init.body ?? '{}')))
+      return {
+        ok: true,
+        status: 201,
+        json: async () => ({ chatSessionId: 'nlchat-abc', job: { id: 'jobZ', status: 'queued' } }),
+      }
+    }
+    if (url.includes('/api/nl-chat/sessions/') && method === 'GET') {
+      const turn = ctl.turns[Math.min(ctl.turnIndex, ctl.turns.length - 1)]
+      ctl.turnIndex += 1
+      return { ok: true, status: 200, json: async () => turn }
+    }
+    if (url.includes('/api/jobs/') && method === 'GET') {
+      return { ok: true, status: 200, json: async () => ({ job: { id: 'jobZ', status: 'succeeded' } }) }
+    }
+    if (url.includes('/api/pipeline-profiles') && method === 'GET') {
+      return { ok: true, status: 200, json: async () => ({ profiles: [{ name: 'rev' }] }) }
+    }
+    if (url.includes('/api/tasks') && method === 'POST') {
+      return { ok: true, status: 200, json: async () => ({ ok: true }) }
+    }
+    throw new Error(`unexpected fetch: ${method} ${url}`)
+  })
+  vi.stubGlobal('fetch', fetchMock)
+  return { ctl, sent, fetchMock }
+}
+
+function draftTurn(draft: Record<string, unknown>) {
+  return { status: 'ready', kind: 'draft', entityType: 'task', draft }
+}
+
+describe('useNlChatSession — sửa draft bằng chat (T9942d974)', () => {
+  it('TC-C1: lỗi một lượt chat KHÔNG cướp màn preview', async () => {
+    const { ctl } = stubSeq([draftTurn({ name: 'a', prompt: 'p' })])
+    const s = make()
+    await s.sendMessage('m')
+    const A = s.draft.value
+    expect(s.step.value).toBe('previewDraft')
+
+    ctl.failSend = true
+    await s.sendMessage('đổi tên')
+
+    expect(s.step.value).toBe('previewDraft')
+    expect(s.draft.value).toBe(A)
+    expect(s.error.value).not.toBeNull()
+    expect(s.sending.value).toBe(false)
+  })
+
+  it('TC-C2 (không hồi quy): lỗi khi đang chatting vẫn rơi về error', async () => {
+    const { ctl } = stubSeq([{ status: 'ready', kind: 'question', text: '?' }])
+    const s = make()
+    ctl.failSend = true
+    await s.sendMessage('m')
+
+    expect(s.step.value).toBe('error')
+    expect(s.error.value).not.toBeNull()
+  })
+
+  it('TC-C3: body mang draft đang sửa, bong bóng chat KHÔNG mang JSON', async () => {
+    const { sent } = stubSeq([
+      draftTurn({ name: 'a', prompt: 'p' }),
+      { status: 'ready', kind: 'question', text: 'ok' },
+    ])
+    const s = make()
+    await s.sendMessage('m')
+    await s.sendMessage('đổi tên thành X')
+
+    const body = sent[sent.length - 1]
+    expect(body.message).toContain('đổi tên thành X')
+    expect(body.message).toContain('"name": "a"')
+    expect(s.messages.value[s.messages.value.length - 2]).toEqual({
+      role: 'user',
+      text: 'đổi tên thành X',
+    })
+  })
+
+  it('TC-C4a: vượt ngưỡng ⇒ gửi trần + cảnh báo', async () => {
+    const { sent } = stubSeq([
+      draftTurn({ prompt: 'x'.repeat(25_000) }),
+      { status: 'ready', kind: 'question', text: 'ok' },
+    ])
+    const s = make()
+    await s.sendMessage('m')
+    await s.sendMessage('sửa')
+
+    expect(sent[sent.length - 1].message).toBe('sửa')
+    expect(s.draftAttachWarning.value).toBe(true)
+  })
+
+  it('TC-C4b: cảnh báo được dọn ở đầu lượt gửi kế tiếp', async () => {
+    const { sent } = stubSeq([
+      draftTurn({ prompt: 'x'.repeat(25_000) }),
+      { status: 'ready', kind: 'question', text: 'ok' },
+    ])
+    const s = make()
+    await s.sendMessage('m')
+    await s.sendMessage('sửa')
+    expect(s.draftAttachWarning.value).toBe(true)
+
+    s.setDraft({ prompt: 'ngắn' })
+    await s.sendMessage('sửa')
+
+    expect(s.draftAttachWarning.value).toBe(false)
+    expect(sent[sent.length - 1].message).toContain('```json')
+  })
+
+  it('TC-C5a: turn draft thứ hai ⇒ banner + snapshot', async () => {
+    const A = { name: 'a', prompt: 'p' }
+    const B = { name: 'b', prompt: 'p' }
+    stubSeq([draftTurn(A), draftTurn(B)])
+    const s = make()
+    await s.sendMessage('m')
+    await s.sendMessage('đổi tên thành b')
+
+    expect(s.draft.value).toEqual(B)
+    expect(s.draftUpdatedByChat.value).toBe(true)
+    expect(s.draftSnapshot.value).toEqual(A)
+    expect(s.step.value).toBe('previewDraft')
+  })
+
+  it('TC-C5b: undoDraftUpdate() khôi phục bản trước', async () => {
+    const A = { name: 'a', prompt: 'p' }
+    stubSeq([draftTurn(A), draftTurn({ name: 'b', prompt: 'p' })])
+    const s = make()
+    await s.sendMessage('m')
+    await s.sendMessage('đổi tên thành b')
+    s.undoDraftUpdate()
+
+    expect(s.draft.value).toEqual(A)
+    expect(s.draftUpdatedByChat.value).toBe(false)
+    expect(s.draftSnapshot.value).toBeNull()
+  })
+
+  it('TC-C5c: hoàn tác lần hai là no-op, không lùi tiếp', async () => {
+    const A = { name: 'a', prompt: 'p' }
+    stubSeq([draftTurn(A), draftTurn({ name: 'b', prompt: 'p' })])
+    const s = make()
+    await s.sendMessage('m')
+    await s.sendMessage('đổi tên thành b')
+    s.undoDraftUpdate()
+    expect(() => s.undoDraftUpdate()).not.toThrow()
+
+    expect(s.draft.value).toEqual(A)
+  })
+
+  it('TC-C6: draft ĐẦU TIÊN của phiên ⇒ không có gì để hoàn tác', async () => {
+    const A = { name: 'a', prompt: 'p' }
+    stubSeq([draftTurn(A)])
+    const s = make()
+    await s.sendMessage('m')
+
+    expect(s.step.value).toBe('previewDraft')
+    expect(s.draft.value).toEqual(A)
+    expect(s.draftUpdatedByChat.value).toBe(false)
+    expect(s.draftSnapshot.value).toBeNull()
+  })
+
+  it('TC-C7: agent hỏi lại khi đang preview ⇒ giữ draft, không để snapshot mồ côi', async () => {
+    stubSeq([
+      draftTurn({ name: 'a', prompt: 'p' }),
+      { status: 'ready', kind: 'question', text: 'bạn muốn đổi gì?' },
+    ])
+    const s = make()
+    await s.sendMessage('m')
+    const A = s.draft.value
+    await s.sendMessage('hỏi lại đi')
+
+    expect(s.step.value).toBe('previewDraft')
+    expect(s.draft.value).toBe(A)
+    expect(s.messages.value[s.messages.value.length - 1]).toEqual({
+      role: 'assistant',
+      text: 'bạn muốn đổi gì?',
+    })
+    expect(s.draftSnapshot.value).toBeNull()
+  })
+
+  it('TC-C8: reset() dọn đủ 4 state mới', async () => {
+    stubSeq([draftTurn({ name: 'a', prompt: 'p' })])
+    const s = make()
+    await s.sendMessage('m')
+    // Bốn cờ không cùng bẩn được qua một luồng thật (`setDraft` gỡ banner,
+    // turn draft dọn `draftDirty`) nên đặt thẳng — đây là test của `reset()`.
+    s.draftSnapshot.value = { name: 'cũ' }
+    s.draftUpdatedByChat.value = true
+    s.draftDirty.value = true
+    s.draftAttachWarning.value = true
+
+    s.reset()
+
+    expect(s.draftSnapshot.value).toBeNull()
+    expect(s.draftUpdatedByChat.value).toBe(false)
+    expect(s.draftDirty.value).toBe(false)
+    expect(s.draftAttachWarning.value).toBe(false)
+  })
+
+  it('TC-C9: chỉnh tay khi banner đang hiện ⇒ banner tắt, snapshot bỏ', async () => {
+    stubSeq([draftTurn({ name: 'a', prompt: 'p' }), draftTurn({ name: 'b', prompt: 'p' })])
+    const s = make()
+    await s.sendMessage('m')
+    await s.sendMessage('đổi tên thành b')
+
+    const C = { name: 'c', prompt: 'p' }
+    s.setDraft(C)
+
+    expect(s.draft.value).toBe(C)
+    expect(s.draftDirty.value).toBe(true)
+    expect(s.draftUpdatedByChat.value).toBe(false)
+    expect(s.draftSnapshot.value).toBeNull()
+  })
+
+  it('TC-C10: dismissDraftUpdate() bỏ banner mà GIỮ draft mới', async () => {
+    const B = { name: 'b', prompt: 'p' }
+    stubSeq([draftTurn({ name: 'a', prompt: 'p' }), draftTurn(B)])
+    const s = make()
+    await s.sendMessage('m')
+    await s.sendMessage('đổi tên thành b')
+    s.dismissDraftUpdate()
+
+    expect(s.draft.value).toEqual(B)
+    expect(s.draftUpdatedByChat.value).toBe(false)
+    expect(s.draftSnapshot.value).toBeNull()
+  })
+
+  it('TC-C11 (không hồi quy): guard message rỗng', async () => {
+    const { sent } = stubSeq([draftTurn({ name: 'a', prompt: 'p' })])
+    const s = make()
+    await s.sendMessage('m')
+    const before = sent.length
+    const messagesBefore = [...s.messages.value]
+
+    await s.sendMessage('')
+    await s.sendMessage('   ')
+
+    expect(sent.length).toBe(before)
+    expect(s.messages.value).toEqual(messagesBefore)
+    expect(s.draftSnapshot.value).toBeNull()
+  })
+
+  it('TC-C12: đang sending thì lượt thứ hai bị bỏ qua', async () => {
+    const { sent } = stubSeq([draftTurn({ name: 'a', prompt: 'p' })])
+    const s = make()
+
+    const first = s.sendMessage('a')
+    await s.sendMessage('b')
+    await first
+
+    expect(sent).toHaveLength(1)
+    expect(s.messages.value.filter((m) => m.role === 'user')).toHaveLength(1)
+  })
+})
