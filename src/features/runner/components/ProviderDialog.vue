@@ -97,7 +97,7 @@ onMounted(applyPrefill)
     width="min(520px, 94vw)"
     @close="emit('close')"
   >
-    <div v-if="error" class="err-banner">{{ error }}</div>
+    <div v-if="error" class="err-banner banner-danger">{{ error }}</div>
     <p class="muted dialog-intro">{{ t('runner.providerDialog.intro') }}</p>
 
     <div class="field">
@@ -151,16 +151,8 @@ onMounted(applyPrefill)
 .field { margin-bottom: 0.75rem; }
 .field .cfg-input,
 .field .cfg-select { width: 100%; }
-.label-with-hint { display: inline-flex; align-items: center; gap: 0.3rem; white-space: nowrap; flex-direction: row; }
 .muted { color: var(--muted); font-size: 0.8rem; word-break: break-all; }
-.modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; padding-top: 1rem; }
+// `display: flex; justify-content: flex-end` lấy từ class chung `.modal-actions` (_shell.scss).
+.modal-actions { gap: 0.5rem; padding-top: 1rem; }
 .modal-actions .spacer { flex: 1; }
-.err-banner {
-  background: rgba(248, 81, 73, 0.12);
-  border: 1px solid var(--danger);
-  color: var(--danger);
-  padding: 0.5rem;
-  border-radius: 6px;
-  margin-bottom: 0.75rem;
-}
 </style>

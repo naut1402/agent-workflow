@@ -1,6 +1,5 @@
-import { appendTextFileSync, existsSync, joinPath } from '../../../../backend/lib/fileHelper.js'
 import { isDirectSecretType, resolveSecretRef } from '../credentials.js'
-import { formatJobLogFooter, formatJobLogHeader } from '../jobLogFormat.js'
+import { formatJobLogHeader } from '../jobLogFormat.js'
 import { resolveProviderApiKey } from '../oauthCredentials.js'
 import { mintSessionId } from '../sessionLedger.js'
 import { appendTranscriptTurn, loadSessionMessages, saveSessionMessages } from './agentTranscriptStore.js'
@@ -20,6 +19,7 @@ import {
   type TokenUsage,
   type TranscriptFormat,
 } from './RunnerProvider.js'
+import { agentLabelOf, collectProducedArtifacts, createJobLogAppender, describeExecuteResult, jobLogHeaderMeta } from './providerJobReport.js'
 
 /** Sent once when a turn comes back empty with no tool call — gives the model one chance to self-correct before the loop fails the job. */
 export const EMPTY_REPLY_NUDGE_TEXT =
@@ -193,50 +193,25 @@ export abstract class AgenticApiProvider implements RunnerProvider {
   // Logs panel is not empty just because this provider never spawns a subprocess. ----
 
   private describePayload(req: ExecuteRequest, runnerConfig: Record<string, any>, sessionId: string): string {
-    const agent = req.resolvedAgent
-    const agentLabel = agent.ref
-      ? `${agent.ref}${agent.name ? ` (${agent.name})` : ''}`
-      : `${agent.name || 'ad-hoc'} — không gắn agent, chạy prompt trực tiếp`
     const meta = req.metadata || {}
     const lines = [
       formatJobLogHeader({
         jobId: String(meta.jobId || req.jobId || ''),
         providerId: this.providerId,
-        runnerId: typeof meta.runnerId === 'string' ? meta.runnerId : undefined,
-        connectionId: typeof meta.connectionId === 'string' ? meta.connectionId : undefined,
-        projectId: typeof meta.projectId === 'string' ? meta.projectId : undefined,
-        taskId: typeof meta.taskId === 'string' ? meta.taskId : undefined,
-        stepId:
-          typeof meta.stepId === 'string'
-            ? meta.stepId
-            : typeof meta.pipelineStepId === 'string'
-              ? meta.pipelineStepId
-              : undefined,
+        ...jobLogHeaderMeta(meta),
         sessionId,
         resumeSessionId: req.resumeSessionId,
         workspace: req.workspace,
         mode: 'agentic-api',
       }).trimEnd(),
       '=== Payload gửi cho runner ===',
-      `Agent: ${agentLabel}`,
+      `Agent: ${agentLabelOf(req.resolvedAgent)}`,
       `Workspace: ${req.workspace}`,
       `Provider: ${this.providerId}${runnerConfig.model ? ` — model: ${runnerConfig.model}` : ''}`,
       '--- Prompt ---',
       req.userPrompt,
     ]
     return lines.join('\n')
-  }
-
-  private describeResult(result: ExecuteResult): string {
-    return formatJobLogFooter({
-      ok: result.ok,
-      exitCode: result.exitCode,
-      durationMs: result.durationMs,
-      sessionId: result.sessionId,
-      error: result.error,
-      artifactsFound: result.artifactsFound,
-      tokenUsage: result.tokenUsage,
-    })
   }
 
   /**
@@ -269,24 +244,19 @@ export abstract class AgenticApiProvider implements RunnerProvider {
   async execute(req: ExecuteRequest, runnerConfig: Record<string, any>, credential: CredentialProfile): Promise<ExecuteResult> {
     const started = Date.now()
     const logPath = req.metadata?.logPath as string | undefined
-    const appendLog = (text: string) => {
-      if (!logPath) return
-      try {
-        appendTextFileSync(logPath, text)
-      } catch {
-        /* ignore */
-      }
-    }
+    const appendLog = createJobLogAppender(logPath)
 
     const sessionId = req.resumeSessionId ?? req.sessionId ?? mintSessionId()
     appendLog(this.describePayload(req, runnerConfig, sessionId))
 
-    const key = await resolveProviderApiKey(credential, this.providerId)
-    if ('error' in key) {
-      const result: ExecuteResult = { ok: false, exitCode: null, durationMs: Date.now() - started, logPath, sessionId, error: key.error }
-      appendLog(this.describeResult(result))
+    const fail = (error: string): ExecuteResult => {
+      const result: ExecuteResult = { ok: false, exitCode: null, durationMs: Date.now() - started, logPath, sessionId, error }
+      appendLog(describeExecuteResult(result))
       return result
     }
+
+    const key = await resolveProviderApiKey(credential, this.providerId)
+    if ('error' in key) return fail(key.error)
     const apiKey = key.value
 
     const priorMessages = req.resumeSessionId ? loadSessionMessages(req.resumeSessionId) : []
@@ -295,11 +265,78 @@ export abstract class AgenticApiProvider implements RunnerProvider {
       appendTranscriptTurn(this.providerId, sessionId, { role: 'user', text: req.userPrompt })
     }
 
-    // Streamed as `runConversation()` progresses (see `AgenticStreamHandlers`)
-    // instead of only once at the very end. `streamed` tracks whether the
-    // subclass actually used these — if it never calls them (e.g. the older,
-    // non-streaming shape), `execute()` falls back to writing everything from
-    // the returned `result` in one shot below, exactly as before.
+    const stream = this.createStreamHandlers(req, sessionId, appendLog)
+
+    // Mở TRƯỚC vòng hội thoại và đóng trong `finally` của cùng khối: transport
+    // stdio là tiến trình con, nên một đường thoát quên `close()` là rò tiến
+    // trình theo từng job. Mở hụt 🚫 không làm hỏng job — chỉ mất tool.
+    const mcpBridge = await this.openMcpBridge(req, runnerConfig, appendLog)
+
+    let result: AgenticRunResult
+    try {
+      result = await this.runConversation({
+        req,
+        runnerConfig,
+        apiKey,
+        priorMessages,
+        workspace: req.workspace,
+        signal: req.signal,
+        handlers: stream.handlers,
+        mcpBridge,
+      })
+    } catch (err: any) {
+      stream.flushAssistantBuffer() // don't lose a partially-streamed turn if the loop threw mid-turn
+      // `.length` guard: avoid overwriting an already-persisted session with `[]`
+      // if some future throw site forgets to pass a full `messages` array.
+      if (err instanceof AgenticRunError && Array.isArray(err.partialMessages) && err.partialMessages.length) {
+        saveSessionMessages(sessionId, err.partialMessages)
+      }
+      return fail(String(err?.message ?? err))
+    } finally {
+      await mcpBridge?.close().catch(() => {})
+    }
+
+    if (!stream.streamed()) this.replayResult(result, sessionId, appendLog)
+    saveSessionMessages(sessionId, result.rawMessages)
+
+    const artifactsFound = collectProducedArtifacts(req.workspace, req.produces)
+
+    const final: ExecuteResult = {
+      ok: true,
+      exitCode: 0,
+      durationMs: Date.now() - started,
+      logPath,
+      stdout: result.finalText,
+      tokenUsage: result.usage,
+      sessionId,
+      artifactsFound,
+    }
+    appendLog(describeExecuteResult(final))
+    return final
+  }
+
+  /** Một tool call: một lượt transcript + một dòng `[tool]` trong log job. */
+  private recordToolCall(
+    sessionId: string,
+    call: AgenticRunResult['toolCalls'][number],
+    appendLog: (text: string) => void,
+  ): void {
+    appendTranscriptTurn(this.providerId, sessionId, { role: 'tool', tool: call.name, text: call.argsSummary })
+    const status = call.ok ? 'ok' : `FAIL: ${call.resultSummary}`
+    appendLog(`[tool] ${call.name} ${call.argsSummary} → ${status}\n`)
+  }
+
+  /**
+   * Handler stream cho `runConversation()` (xem `AgenticStreamHandlers`) — ghi
+   * transcript + log khi hội thoại đang chạy thay vì chỉ một lần ở cuối.
+   * `streamed()` cho biết subclass có thực sự gọi chúng không: không gọi (dạng
+   * cũ, không stream) thì `execute()` ghi lại mọi thứ từ `result` một lần, như trước.
+   */
+  private createStreamHandlers(
+    req: ExecuteRequest,
+    sessionId: string,
+    appendLog: (text: string) => void,
+  ): { handlers: AgenticStreamHandlers; flushAssistantBuffer: () => void; streamed: () => boolean } {
     let streamed = false
     let assistantBuffer = ''
     const flushAssistantBuffer = (): void => {
@@ -320,9 +357,7 @@ export abstract class AgenticApiProvider implements RunnerProvider {
       },
       onToolCall: (call) => {
         streamed = true
-        appendTranscriptTurn(this.providerId, sessionId, { role: 'tool', tool: call.name, text: call.argsSummary })
-        const status = call.ok ? 'ok' : `FAIL: ${call.resultSummary}`
-        appendLog(`[tool] ${call.name} ${call.argsSummary} → ${status}\n`)
+        this.recordToolCall(sessionId, call, appendLog)
       },
       onAssistantChunk: (text, opts) => {
         streamed = true
@@ -331,10 +366,15 @@ export abstract class AgenticApiProvider implements RunnerProvider {
         if (opts?.done !== false) flushAssistantBuffer()
       },
     }
+    return { handlers, flushAssistantBuffer, streamed: () => streamed }
+  }
 
-    // Mở TRƯỚC vòng hội thoại và đóng trong `finally` của cùng khối: transport
-    // stdio là tiến trình con, nên một đường thoát quên `close()` là rò tiến
-    // trình theo từng job. Mở hụt 🚫 không làm hỏng job — chỉ mất tool.
+  /** Mở tool MCP của job; lỗi chỉ thành cảnh báo trong log (job chạy tiếp, thiếu tool). */
+  private async openMcpBridge(
+    req: ExecuteRequest,
+    runnerConfig: Record<string, any>,
+    appendLog: (text: string) => void,
+  ): Promise<McpToolBridge | null> {
     let mcpBridge: McpToolBridge | null = null
     try {
       mcpBridge = await this.mcpDelivery.prepare({
@@ -352,66 +392,15 @@ export abstract class AgenticApiProvider implements RunnerProvider {
         `[runner] MCP: ${mcpBridge.tools.length} tool từ server đã bật → vòng tool-use của ${this.providerId}\n`,
       )
     }
+    return mcpBridge
+  }
 
-    let result: AgenticRunResult
-    try {
-      result = await this.runConversation({
-        req,
-        runnerConfig,
-        apiKey,
-        priorMessages,
-        workspace: req.workspace,
-        signal: req.signal,
-        handlers,
-        mcpBridge,
-      })
-    } catch (err: any) {
-      flushAssistantBuffer() // don't lose a partially-streamed turn if the loop threw mid-turn
-      // `.length` guard: avoid overwriting an already-persisted session with `[]`
-      // if some future throw site forgets to pass a full `messages` array.
-      if (err instanceof AgenticRunError && Array.isArray(err.partialMessages) && err.partialMessages.length) {
-        saveSessionMessages(sessionId, err.partialMessages)
-      }
-      const failure: ExecuteResult = {
-        ok: false,
-        exitCode: null,
-        durationMs: Date.now() - started,
-        logPath,
-        sessionId,
-        error: String(err?.message ?? err),
-      }
-      appendLog(this.describeResult(failure))
-      return failure
-    } finally {
-      await mcpBridge?.close().catch(() => {})
+  /** Subclass không stream: ghi tool call + câu trả lời cuối từ `result` một lần. */
+  private replayResult(result: AgenticRunResult, sessionId: string, appendLog: (text: string) => void): void {
+    for (const call of result.toolCalls) this.recordToolCall(sessionId, call, appendLog)
+    if (result.finalText?.trim()) {
+      appendTranscriptTurn(this.providerId, sessionId, { role: 'assistant', text: result.finalText })
+      appendLog(`${result.finalText}\n`)
     }
-
-    if (!streamed) {
-      for (const call of result.toolCalls) {
-        appendTranscriptTurn(this.providerId, sessionId, { role: 'tool', tool: call.name, text: call.argsSummary })
-        const status = call.ok ? 'ok' : `FAIL: ${call.resultSummary}`
-        appendLog(`[tool] ${call.name} ${call.argsSummary} → ${status}\n`)
-      }
-      if (result.finalText?.trim()) {
-        appendTranscriptTurn(this.providerId, sessionId, { role: 'assistant', text: result.finalText })
-        appendLog(`${result.finalText}\n`)
-      }
-    }
-    saveSessionMessages(sessionId, result.rawMessages)
-
-    const artifactsFound = (req.produces ?? []).filter((name) => existsSync(joinPath(req.workspace, name)))
-
-    const final: ExecuteResult = {
-      ok: true,
-      exitCode: 0,
-      durationMs: Date.now() - started,
-      logPath,
-      stdout: result.finalText,
-      tokenUsage: result.usage,
-      sessionId,
-      artifactsFound,
-    }
-    appendLog(this.describeResult(final))
-    return final
   }
 }

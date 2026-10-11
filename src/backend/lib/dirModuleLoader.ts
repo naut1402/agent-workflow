@@ -1,15 +1,5 @@
 import { access, joinPath, pathToFileURL, readDir, safeReadDir } from './fileHelper.js'
 
-export type LoadModulesUnderOptions = {
-  /** File that must exist for a child directory to be considered (e.g. `api.ts`). */
-  entryFile: string
-  /**
-   * Import try order under each child dir. Default: if `entryFile` ends with `.ts`,
-   * try the `.js` sibling first (Node ESM / Bun rewrite), then `entryFile`.
-   */
-  importFiles?: string[]
-}
-
 function defaultImportFiles(entryFile: string): string[] {
   if (entryFile.endsWith('.ts')) {
     return [entryFile.slice(0, -3) + '.js', entryFile]
@@ -39,30 +29,6 @@ async function importFirst<T>(dir: string, tryFiles: string[]): Promise<T> {
   throw lastErr
 }
 
-/**
- * Scan direct child directories of `rootDir`; for each that contains `entryFile`,
- * dynamic-import the module (try `importFiles` in order until one succeeds).
- *
- * Server/Bun only — do not import from Vite browser bundles.
- */
-export async function loadModulesUnder<T = unknown>(
-  rootDir: string,
-  opts: LoadModulesUnderOptions,
-): Promise<T[]> {
-  const tryFiles = opts.importFiles ?? defaultImportFiles(opts.entryFile)
-  const entries = await readDir(rootDir, { withFileTypes: true })
-  const mods: T[] = []
-
-  for (const ent of entries) {
-    if (!ent.isDirectory()) continue
-    const dir = joinPath(rootDir, ent.name)
-    if (!(await exists(joinPath(dir, opts.entryFile)))) continue
-    mods.push(await importFirst<T>(dir, tryFiles))
-  }
-
-  return mods
-}
-
 export type LoadEntriesUnderOptions = {
   /** File entry trong mỗi thư mục con, nạp theo đúng thứ tự này (vd `['api.ts', 'controller.ts']`). */
   entryFiles: string[]
@@ -79,7 +45,7 @@ export type LoadedEntry<T> = {
 }
 
 /**
- * Như `loadModulesUnder` nhưng nhiều entry mỗi thư mục con: từng file trong `entryFiles`
+ * Quét thư mục con trực tiếp của `rootDir`, dynamic-import nhiều entry mỗi thư mục: từng file trong `entryFiles`
  * có mặt, rồi mọi `*.ts` (trừ `.d.ts`) trong `entryDirs`. Thứ tự trả về: thư mục con theo
  * thứ tự đọc thư mục; trong một thư mục, theo thứ tự khai ở `opts`.
  *
