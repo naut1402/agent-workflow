@@ -10,10 +10,12 @@ Xác định **feature sở hữu** trước, rồi đặt artifact đúng lớp
 
 | Loại thay đổi | Đặt ở |
 |---------------|--------|
-| Route HTTP | `src/features/<f>/api.ts` (+ method trên `controller.ts`) |
-| Parse request / `c.json` / status | `controller.ts` — **không** nhét filesystem vào đây |
+| Route HTTP | `src/features/<f>/controller.ts` — `@Controller` + `@Get/@Post/@Put/@Patch/@Delete(path, XRequest)` ngay trên method; feature lớn tách `controllers/<resource>.ts` (§2.5) |
+| Validate request (DTO request, map tên trên dây, luật chéo field) | `XRequest extends FormRequest` trong `controller.ts` — tách `requests.ts` khi controller lớn |
+| Status / lỗi HTTP | handler trả object (200) · `this.fail(status, error)` · `this.json(status, body)` — **không** nhét filesystem vào controller |
 | Domain thuần (đọc/ghi root, rule nghiệp vụ) | `business/` |
-| Zod schema domain | `schemas/` của feature |
+| DTO / model dùng chung lúc chạy (FE · feature khác · `mcp/`) | `schemas/` của feature, khai qua `defineDto` |
+| Wrapper zod (`Dto<S>`, `defineDto`) · kiểu nguyên thuỷ toàn repo | `src/shared/type/` — chỉ khi có importer thật ở cả hai phía |
 | UI Vue / composable | `components/`, `composables/` |
 | FE gọi API | `scripts/*Api.ts` (dùng `apiGet` / `apiPost` từ `src/frontend/http/client`) |
 | Chuỗi UI | `src/shared/locales/vi/<namespace>.yaml` (+ `en/` khuyến nghị) — [`coding-guideline.md`](coding-guideline.md) §6 |
@@ -24,6 +26,7 @@ Xác định **feature sở hữu** trước, rồi đặt artifact đúng lớp
 | Helper kiểu dữ liệu / wrap package / FS | `src/backend/lib/` (Node) hoặc `src/frontend/lib/` (browser) |
 | Ghi audit / request log | `src/backend/log/` — feature `logs` chỉ đọc/stream |
 
+- **Giai đoạn chuyển:** `api.ts` + `bind()` + `AbstractController` (kiểu cũ) vẫn hợp lệ cho feature chưa chuyển — loader nạp song song cả hai kiểu, sắp chung theo order. Feature mới / feature đang sửa controller dùng kiểu decorator; kiểu cũ bị xoá ở lượt quét cuối.
 - **Không tạo cây song song** kiểu `server/<domain>` hay helper "misc" ngoài convention.
 - **Feature tự mang `styles/index.scss`** — glob eager ở `src/frontend/main.ts` tự nạp, không liệt kê tay, không sửa hub wiring.
 - **Chuỗi UI không nằm trong feature** — khai ở `src/shared/locales/<locale>/<namespace>.yaml`, tên file là namespace; thêm file là đủ, không đăng ký tay.
@@ -41,7 +44,7 @@ Xác định **feature sở hữu** trước, rồi đặt artifact đúng lớp
 |---|---|---|
 | **Là gì** | Hợp đồng và quy trình nghiệp vụ dựa vào | Cách hiện thực hợp đồng bằng một cơ chế cụ thể |
 | **Dạng** | `interface` vai trò · lớp `Abstract*` giữ trình tự cố định (template method) · rule nghiệp vụ thuần không I/O | Lớp / hàm gọi CLI, HTTP, SDK, file, DB, YAML cụ thể · tên env var, path, tên nhà cung cấp, định dạng thông điệp |
-| **Ví dụ trong repo** | `RunnerProvider`, `AgentCliProvider`, `*Store` (`runner`) · `AgenticApiProvider` · `AbstractMcpTools`, `ToolDef` | `claude-code-cli.ts`, `codex-cli.ts`, `anthropic-compatible-api.ts` · `tools/TaskTools.ts` |
+| **Ví dụ trong repo** | `RunnerProvider`, `AbstractAgentCliProvider` (template method), `*Store` (`runner`) · `AgenticApiProvider` · `AbstractMcpTools`, `ToolDef` | `ClaudeCliProvider.ts`, `CodexCliProvider.ts`, `AnthropicCompatibleProvider.ts` · `tools/TaskTools.ts` |
 | **Tần suất đổi** | Thấp nhất — đổi là đổi mọi hiện thực | Cao — đổi riêng từng hiện thực |
 
 Ba câu hỏi để xếp một đoạn logic:
@@ -68,14 +71,14 @@ Logic đơn lẻ (một hiện thực, không phải biên I/O) gom theo nghiệ
 |-----|--------|
 | `agents.ts` (CRUD + path + seed template + fetch URL an toàn) | `store.ts` + `paths.ts` + `fetch.ts` + `templates.ts` tách chỉ vì khác I/O |
 | `dashboardSettings.ts` / `autoscan.ts` | `autoscan/config.ts` + `scan.ts` khi cùng một cụm settings nhỏ |
-| Tách `catalog/scan.ts` khi scan đã lớn và biên rõ với `buildCatalog` | Tách `builtins.ts` / `dedupe.ts` 20 dòng chỉ vì "loại helper" |
+| Tách `catalog/catalogMarkdown.ts` khi phần đọc markdown đã lớn và biên rõ với `buildCatalog` | Tách `builtins.ts` / `dedupe.ts` 20 dòng chỉ vì "loại helper" |
 
 - **Ít file, ít phân tán** — chỉ tách khi biên rõ với người đọc domain, hoặc file đủ lớn / đủ độc lập để review và test riêng.
 - **Helper nhỏ** (sanitize tên, parse một format) gắn vào module đang dùng nó — không tạo file riêng chỉ vì "là sanitize" / "là parse".
 
 ### 2.4 Áp dụng cho code hiện có
 
-- **Không đổi tên / tách hàng loạt.** Code đang có (`runner/business/types.ts`, `providers/claude-code-cli.ts`…) giữ nguyên tới khi task sửa đáng kể vùng đó.
+- **Không đổi tên / tách hàng loạt.** Code đang có (`runner/business/types.ts`, `runner/business/registry.ts`…) giữ nguyên tới khi task sửa đáng kể vùng đó.
 - **Task tạo mới hoặc sửa đáng kể một vùng có abstraction** — đưa vùng đó về §2.2 trong cùng thay đổi, hoặc ghi nợ `docs/todo/`.
 
 ### 2.5 Ranh giới HTTP
@@ -84,10 +87,46 @@ Logic đơn lẻ (một hiện thực, không phải biên I/O) gom theo nghiệ
 - **Nhận `root` / dữ liệu đã parse**, trả data thuần hoặc `{ status, error }` / discriminated result.
 - **Facade `XxxBusiness extends AbstractBusiness` mỏng** — `requireRoot` → gọi hàm domain.
 
+**Controller kiểu decorator** (nền ở `src/backend/http/`; decorator chuẩn TC39 — 🚫 `experimentalDecorators`, 🚫 `reflect-metadata`):
+
+```ts
+class UsageStatsRequest extends FormRequest<typeof UsageStatsQuerySchema> {
+  static schema = UsageStatsQuerySchema            // source mặc định 'query' · 'body' · 'params'
+  static invalid = 'invalid usage stats query'     // chuỗi 400 khi schema fail
+  prepare(raw) { return { taskId: raw.task || undefined /* … */ } }   // tên trên dây → DTO
+  after() { return null }                          // luật chéo field: chuỗi → 400
+}
+
+@Controller({ order: 65, inject: (scope) => new StatisticsBusiness(scope.root) })
+export class StatisticsController extends AbstractHttpController {
+  constructor(private readonly biz: StatisticsBusiness) { super() }
+
+  @Get('/api/statistics/usage', UsageStatsRequest)
+  usageStats(req: UsageStatsRequest) { return this.biz.usageStats(req.data) }
+}
+```
+
+| Bước (`registerControllers`) | Hành vi |
+|---|---|
+| Root | Route `root: 'required'` (ở `@Controller` hoặc tham số thứ 3 của decorator route) thiếu root → 404 `{ error: 'unknown project', project }` |
+| Validate | Đọc theo `source` → `prepare(raw)` → `safeParse` → 400 `{ error: invalid }`; body không phải JSON → 400 `invalid JSON` |
+| `after()` | Trả chuỗi → 400 `{ error: <chuỗi> }` |
+| Inject | `inject({ root, projectId, ctx })` dựng business, truyền vào constructor; handler đọc phạm vi qua `this.scope` |
+| Kết quả | Object → 200 JSON · `this.fail(status, error, extra?)` / `this.json(status, body)` → status riêng · `Response` trả nguyên; JSON luôn `Cache-Control: no-store` |
+| 405 | Mỗi path đã khai tự có `app.all` → 405 `{ error: 'method not allowed' }`, gắn sau route của mọi feature — 🚫 viết tay |
+| `@Raw` | SSE, multipart, `Response` thô: handler nhận Hono `c` làm đối số đầu — `(c)` hoặc `(c, req)` |
+
+- **Một nơi khai request** — URL, FormRequest, DTO request nằm trong `controller.ts`; tsc ép chữ ký method khớp Request đã khai (lệch → TS1241).
+- **Thứ tự route = thứ tự khai** — path cụ thể (`/api/x/stream`) khai trước path có `:param` (`/api/x/:id`).
+- **Đặt DTO theo nơi dùng lúc chạy** — chỉ controller dùng → `controller.ts`; FE · feature khác · `mcp/` dùng giá trị → `schemas/`; business nhận làm kiểu → `schemas/` (business 🚫 import controller).
+- **FE và `mcp/` chỉ `import type` từ controller**; FE cũng chỉ `import type` từ `business/` — lint `@typescript-eslint/no-restricted-imports` + `allowTypeImports` chặn. `import type` bị xoá khi build nên không kéo Hono vào bundle.
+- **Loader** — `apiServer` nạp `api.ts` (kiểu cũ), `controller.ts` và `controllers/*.ts` của mọi feature (`loadEntriesUnder`), lấy mọi class export có `@Controller`; 🚫 liệt kê tay.
+
 ### 2.6 Cross-feature (peer)
 
-- **Chỉ `features/<A>/business/index.ts`** được import từ `features/<B>/business/**`.
-- **Trong feature A**, controller và các `business/*.ts` import peer qua `./business/index.js` (hoặc `./index.js` trong cùng `business/`).
+- **Chỉ cổng peer của feature A** được import từ `features/<B>/business/**`: `features/<A>/business/index.ts`, hoặc `features/<A>/business/peers.ts` khi feature có.
+- **`peers.ts` — cổng peer tách khỏi barrel**: dùng khi module trong `business/` (vd hiện thực ở thư mục con) cần peer mà import `./index.js` sẽ tạo vòng `index.ts` ⇄ module đó. Có `peers.ts` thì nó là file **duy nhất** của feature import feature khác; mỗi symbol lấy từ barrel của **feature chủ** (không đi vòng qua façade feature thứ ba); `index.ts` re-export phần controller cần từ `./peers.js`. Ví dụ: `automations/business/peers.ts`; `monitor/business/peers.ts` là tiền lệ cũ chưa theo đủ (index vẫn import peer trực tiếp) — đưa về khi sửa đáng kể vùng đó (§2.4).
+- **Trong feature A**, controller import peer qua `./business/index.js`; các `business/*.ts` qua `./index.js`, hoặc `./peers.js` khi feature có cổng đó.
 - **Không import sâu** `../../other-feature/business/foo.js` từ controller hay module nội bộ — **trừ** khi đi qua index tạo vòng barrel.
 - **Tránh vòng barrel↔barrel** — khi cần, index A re-export từ **module sâu** của B.
 - **Sanitize / rule chỉ thuộc một feature** đặt trong module sở hữu; feature khác dùng qua index.
@@ -108,12 +147,12 @@ Thứ tự quyết định:
 | Thao tác kiểu dữ liệu thuần | `*Utils` | `stringUtils`, `arrayUtils`, `dateUtils` |
 | Biên thư viện bên thứ ba | `*Lib` | `yamlLib`, `markdownLib`, `diffLib` |
 | Filesystem / path / URL file (Node) | `fileHelper` | `joinPath`, `readTextFile`, `pathToFileURL` |
-| Quét thư mục + dynamic `import` | `dirModuleLoader` | `loadModulesUnder` |
+| Quét thư mục + dynamic `import` | `dirModuleLoader` | `loadEntriesUnder` |
 
 - **`parseFrontmatter` / `readYamlSafe` nằm ở `yamlLib`.**
 - **Module dùng chung FE+BE không top-level import `node:*`** (Vite bundle) — I/O Node để `fileHelper` hoặc dynamic import có chủ đích.
 - **`business/` không import trực tiếp `node:fs` / `node:path` / `node:url`** — đi qua `fileHelper`. Cần thao tác fs mới thì bổ sung vào `fileHelper` (kèm overload nếu cần) rồi mới gọi từ business.
-- **`apiServer` không liệt kê feature tay** — `loadModulesUnder(featuresRoot, { entryFile: 'api.ts' })` rồi sort `routeOrder`; giữ `node:http` / `node:buffer` ở tầng transport.
+- **`apiServer` không liệt kê feature tay** — `loadEntriesUnder(featuresRoot, …)` nạp `api.ts` (kiểu cũ), `controller.ts` và `controllers/*.ts` rồi sort theo `routeOrder` / `@Controller({ order })` (§2.5); giữ `node:http` / `node:buffer` ở tầng transport.
 - **Đổi chữ ký helper → chạy `bun run typecheck`** (CI gate).
 
 ### 3.2 Không thuộc `*/lib`
@@ -151,7 +190,7 @@ Tiêu chí **duy nhất** chọn nơi đặt style là **bao nhiêu component re
 - **Kích thước file không phải lý do tách** — 300 dòng `<style scoped>` cạnh template vẫn dễ định vị hơn 300 dòng ở file rời.
 - **Đếm theo compound CUỐI của selector, không phải tổ tiên** — `scoped` gắn `[data-v-…]` vào compound cuối. Rule *bắc cầu* (tổ tiên ở SFC này, đích ở SFC khác) tính là **≥2 component**.
 - **Giữ đúng thứ tự nạp cũ khi gộp nhiều file** vào một `<style scoped>` — rule cùng specificity dựa vào source order để thắng.
-- **Giữ global, không scope hoá**: `src/frontend/styles/_tokens.scss` (`:root` vars), `_shell.scss`, `_scrollbar.scss`.
+- **Giữ global, không scope hoá**: `src/frontend/styles/_tokens.scss` (`:root` vars), `_shell.scss`, `_scrollbar.scss`, `_patterns.scss` (khối khai báo dùng chung xuyên feature: `.banner-danger`, `.label-with-hint`, `.flex-col-fill`, `.panel-msg`, nạp sau `_shell.scss`).
 
 Không làm:
 

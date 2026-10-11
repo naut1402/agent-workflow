@@ -14,6 +14,7 @@ import {
   type KnowledgeEntryMeta,
   type KnowledgeTagFacetView,
 } from '../scripts/KnowledgePanelApi'
+import { MAX_BUNDLE_IDS } from '../schemas/knowledge'
 import CScreenLayout from '../../../frontend/ui/CScreenLayout.vue'
 import CMarkdownView from '../../../frontend/ui/CMarkdownView.vue'
 import KnowledgeSideMenu from './KnowledgeSideMenu.vue'
@@ -268,15 +269,15 @@ function toMarkdownSection(item: any): string {
   ].join('\n')
 }
 
-/** Gộp entry đang lọc thành một file. Chia lô 50 — đúng trần `MAX_BUNDLE_IDS`. */
+/** Gộp entry đang lọc thành một file, chia lô theo trần `MAX_BUNDLE_IDS` của route bundle. */
 async function downloadFiltered() {
   const ids = filteredEntries.value.map((e) => e.id)
   if (!ids.length) return
   error.value = ''
   try {
     const items: any[] = []
-    for (let i = 0; i < ids.length; i += 50) {
-      const { bundle } = await fetchKnowledgeBundle(ids.slice(i, i + 50), props.projectId)
+    for (let i = 0; i < ids.length; i += MAX_BUNDLE_IDS) {
+      const { bundle } = await fetchKnowledgeBundle(ids.slice(i, i + MAX_BUNDLE_IDS), props.projectId)
       items.push(...bundle)
     }
     saveBlob(items.map(toMarkdownSection).join('\n\n'), `knowledge-${scope.value}-${stamp()}.md`)
@@ -395,7 +396,7 @@ onMounted(async () => {
     :hide-main="!viewingId"
   >
     <template #left>
-      <div class="knowledge-left">
+      <div class="knowledge-left flex-col-fill">
         <template v-if="!subSidebarCollapsed">
           <KnowledgeSideMenu
             v-model:scope="scope"
@@ -424,20 +425,20 @@ onMounted(async () => {
             @new-tag="newTag"
             @edit-tag="editTag"
           />
-          <p v-if="error" class="err knowledge-msg">{{ error }}</p>
-          <p v-if="message" class="ok-msg knowledge-msg">{{ message }}</p>
+          <p v-if="error" class="err knowledge-msg panel-msg">{{ error }}</p>
+          <p v-if="message" class="ok-msg knowledge-msg panel-msg">{{ message }}</p>
         </template>
       </div>
     </template>
 
     <template #main>
-      <div class="knowledge-main">
+      <div class="knowledge-main flex-col-fill">
         <!-- Sub-menu thu về rail thì cột trái rộng 0, nên chỗ duy nhất còn thấy
              được là main. Hai trạng thái loại trừ nhau nên thông báo không bao
              giờ render hai lần. -->
         <template v-if="subSidebarCollapsed">
-          <p v-if="error" class="err knowledge-msg">{{ error }}</p>
-          <p v-if="message" class="ok-msg knowledge-msg">{{ message }}</p>
+          <p v-if="error" class="err knowledge-msg panel-msg">{{ error }}</p>
+          <p v-if="message" class="ok-msg knowledge-msg panel-msg">{{ message }}</p>
         </template>
         <!-- 🚫 `with-frontmatter`: `driver.read()` đã bóc front-matter sẵn, nên
              chỉ còn phần text — đúng yêu cầu "không hiển thị siêu dữ liệu". -->
@@ -498,11 +499,8 @@ onMounted(async () => {
 </template>
 
 <style scoped lang="scss">
+// Cột flex lấp đầy lấy từ class chung `.flex-col-fill`; chỉ cột trái chặn tràn.
 .knowledge-left {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-height: 0;
   overflow: hidden;
 }
 // Thu về 0 chứ không 48px mặc định: dải đó không chứa nút nào, giữ lại là một
@@ -510,30 +508,20 @@ onMounted(async () => {
 .knowledge-layout :deep(.c-screen-layout__body--left-collapsed) {
   grid-template-columns: 0 1fr;
 }
-.knowledge-msg {
-  margin: 0;
-  padding: 8px 10px;
-  font-size: 12px;
-  flex-shrink: 0;
-}
-.knowledge-main {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-height: 0;
-}
 // Root của component con nhận luôn scope id của cha, nên không cần `:deep`.
-.knowledge-main > .c-md-view {
+// Viewer và empty state loại trừ nhau (v-if/v-else), cùng là lá lấp phần còn lại.
+.knowledge-main > .c-md-view,
+.knowledge-main-empty {
   flex: 1;
   min-height: 0;
+}
+.knowledge-main > .c-md-view {
   height: auto;
 }
 .knowledge-main-empty {
   display: flex;
   align-items: center;
   justify-content: center;
-  flex: 1;
-  min-height: 0;
   padding: 24px;
   text-align: center;
   font-size: 13px;

@@ -4,7 +4,7 @@
 // Run manually: `bun run scripts/migrate-knowledge-to-sqlite.ts`.
 // Only reads the YAML files — they stay on disk as a backup.
 // Idempotent: re-running inserts nothing (UNIQUE(store_key, collection_id)).
-import { migrateKnowledgeToSqlite } from '../src/backend/db/migrateKnowledge.js'
+import { migrateKnowledgeToSqlite } from '../src/features/knowledge/business/index.js'
 
 const results = await migrateKnowledgeToSqlite()
 let totalCollections = 0

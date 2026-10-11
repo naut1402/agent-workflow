@@ -1,12 +1,44 @@
+import { dirname } from '../../../../backend/lib/fileHelper.js'
+import type { CatalogAgentStore } from './CatalogAgentStore.js'
+import type { CatalogContext, CatalogScanPatterns, CatalogSource, ScanResult } from './CatalogSource.js'
+import { CursorSkillSource } from './sources/CursorSkillSource.js'
+import { CustomAgentSource } from './sources/CustomAgentSource.js'
+import { InstalledPluginSource } from './sources/InstalledPluginSource.js'
+import { PatternSource } from './sources/PatternSource.js'
+import { PluginCacheSource } from './sources/PluginCacheSource.js'
+import { ProjectClaudeSource } from './sources/ProjectClaudeSource.js'
+import { RepoPluginSource } from './sources/RepoPluginSource.js'
+import { UserClaudeSource } from './sources/UserClaudeSource.js'
+
+export type { CatalogAgentStore } from './CatalogAgentStore.js'
+export type { CatalogScanPatterns } from './CatalogSource.js'
+
+/**
+ * Chỗ lắp ráp DUY NHẤT của catalog: biết mọi hiện thực `CatalogSource` và thứ tự
+ * của chúng. Thứ tự là hành vi — `dedupeCatalogItems` giữ item gặp trước khi
+ * trùng priority, và chuỗi resolve thử nguồn theo đúng thứ tự này
+ * (`project`: convention rồi pattern · `plugin`: install rồi cache).
+ */
+const repoPlugins = new RepoPluginSource()
+const SOURCES: readonly CatalogSource[] = [
+  new InstalledPluginSource(),
+  new CursorSkillSource(),
+  new UserClaudeSource(),
+  new CustomAgentSource(),
+  new PluginCacheSource(),
+  repoPlugins,
+  new ProjectClaudeSource(),
+  new PatternSource(),
+]
+
+function sourcesOwning(source: string): CatalogSource[] {
+  return SOURCES.filter((s) => s.owns(source))
+}
+
 /** Priority of a catalog source when deduping items with the same name. */
 export function sourcePriority(source: string): number {
-  if (source === 'dashboard') return 55
-  if (source === 'project') return 50
-  if (source === 'user') return 20
-  if (source === 'cursor') return 10
-  if (typeof source === 'string' && source.startsWith('repo:')) return 40
-  if (typeof source === 'string' && source.startsWith('plugin:')) return 45
-  return 0
+  if (typeof source !== 'string') return 0
+  return SOURCES.find((s) => s.owns(source))?.priority ?? 0
 }
 
 /** Dedupe catalog items by `name`; `sourcePriority` decides the winner on collision. */
@@ -43,79 +75,36 @@ export const BUILTIN_CATALOG = {
   ],
 }
 
-import { basename, dirname, homeDir, joinPath, resolvePath, statSafe } from '../../../../backend/lib/fileHelper.js'
-import {
-  findMarketplaceJson,
-  latestPluginCacheDir,
-  loadEnabledPluginInstalls,
-  resolveAgentPathByPatterns,
-  resolveSkillPathByPatterns,
-  scanCursorSkills,
-  scanEnabledInstalledPlugins,
-  scanPluginCache,
-  scanProjectClaude,
-  scanAgentsByPatterns,
-  scanRepoPlugins,
-  scanSkillsByPatterns,
-  scanUserAgents,
-  scanUserSkills,
-  type ScanResult,
-} from './scan.js'
-
-
 export interface Catalog {
   skills: any[]
   agents: any[]
 }
 
-/** Custom scan patterns, injected by the controller — catalog never reads settings itself. */
-export interface CatalogScanPatterns {
-  agents?: string[]
-  skills?: string[]
-  rules?: string[]
+function contextOf(
+  root: string,
+  projectRoot: string,
+  agentStore: Partial<CatalogAgentStore>,
+  scanPatterns: CatalogScanPatterns | null | undefined,
+): CatalogContext {
+  return { root, projectRoot, agentStore, scanPatterns: scanPatterns ?? null }
 }
 
 /**
- * `deps.scanCustomAgents` is injected to keep this module decoupled from the
- * agents module; `deps.scanPatterns` comes from global settings and only adds
- * to the default sources.
+ * `deps` là phần port `CatalogAgentStore` mà lời gọi có (tối thiểu
+ * `scanCustomAgents`); `deps.scanPatterns` lấy từ settings và chỉ cộng thêm
+ * vào các nguồn mặc định.
  */
 export async function buildCatalog(
   root: string,
-  deps: {
-    scanCustomAgents: (root: string) => Promise<any[]>
+  deps: Pick<CatalogAgentStore, 'scanCustomAgents'> & Partial<CatalogAgentStore> & {
     scanPatterns?: CatalogScanPatterns | null
   },
 ): Promise<Catalog> {
-  const projectRoot = dirname(root)
-  const catalogOpts = { includeContractSkills: true }
-  const enabledInstalls = await loadEnabledPluginInstalls()
-  const enabledPluginNames = enabledInstalls.length
-    ? new Set(enabledInstalls.map((i) => i.name))
-    : null
+  const { scanPatterns, ...agentStore } = deps
+  const ctx = contextOf(root, dirname(root), agentStore, scanPatterns)
 
-  const batches: ScanResult[] = [
-    await scanEnabledInstalledPlugins(),
-    await scanCursorSkills(catalogOpts),
-    await scanUserSkills(catalogOpts),
-    await scanUserAgents(),
-    { skills: [], agents: await deps.scanCustomAgents(root) },
-    ...(enabledInstalls.length ? [] : [await scanPluginCache(catalogOpts)]),
-    await scanRepoPlugins(projectRoot, {
-      ...catalogOpts,
-      enabledPluginNames: enabledPluginNames || undefined,
-    }),
-    await scanProjectClaude(projectRoot, catalogOpts),
-  ]
-
-  // Must stay after the convention sources: on equal priority, dedupeCatalogItems keeps the first-seen item.
-  const patterns = deps.scanPatterns
-  if (patterns?.agents?.length || patterns?.skills?.length) {
-    batches.push({
-      skills: await scanSkillsByPatterns(projectRoot, patterns.skills, catalogOpts),
-      agents: await scanAgentsByPatterns(projectRoot, patterns.agents),
-    })
-  }
+  const batches: ScanResult[] = []
+  for (const source of SOURCES) batches.push(await source.scan(ctx))
 
   const allSkills: any[] = []
   const allAgents: any[] = []
@@ -136,59 +125,42 @@ export async function buildCatalog(
 
 /** Pure parser for the `<source>:<name>` id shape, shared by agents and skills. */
 export function parseCatalogItemId(id: unknown): { source: string; name: string } | null {
-  if (typeof id !== 'string' || !id.includes(':')) return null
-  const i = id.lastIndexOf(':')
-  if (i <= 0) return null
-  return { source: id.slice(0, i), name: id.slice(i + 1) }
+  if (typeof id !== 'string') return null
+  // `:` cuối cùng tách name; không có `:` (-1) hoặc `:` đứng đầu (0) đều không có source.
+  const sep = id.lastIndexOf(':')
+  return sep > 0 ? { source: id.slice(0, sep), name: id.slice(sep + 1) } : null
+}
+
+/** Chuỗi resolve: hỏi lần lượt các nguồn sở hữu `source`, nguồn đầu tiên trả path thắng. */
+async function resolveThroughSources(
+  source: string,
+  resolve: (s: CatalogSource) => Promise<string | null> | undefined,
+): Promise<string | null> {
+  for (const s of sourcesOwning(source)) {
+    const found = await resolve(s)
+    if (found) return found
+  }
+  return null
 }
 
 /**
- * `source === 'project'` can come from the fixed convention path or a
- * `scanPatterns.agents` match — both share the `project:<name>` id shape, so
- * convention must be tried first or pattern-only entries can never resolve.
+ * Path file agent của một id catalog. Không sanitise `name` — xem
+ * `resolveCatalogSkillPath`; route xem agent cũng chưa vá khe này.
  */
 export async function resolveCatalogAgentPath(
   projectRoot: string,
   root: string,
   id: string,
-  deps: { customAgentsDir: (root: string) => string; scanPatterns?: string[] | null },
+  deps: Pick<CatalogAgentStore, 'customAgentsDir'> & Partial<CatalogAgentStore> & {
+    scanPatterns?: string[] | null
+  },
 ): Promise<string | null> {
   const parsed = parseCatalogItemId(id)
   if (!parsed?.name) return null
   const { source, name } = parsed
-  const fileName = `${name}.md`
-
-  if (source === 'dashboard') {
-    return joinPath(deps.customAgentsDir(root), fileName)
-  }
-  if (source === 'user') {
-    return joinPath(homeDir(), '.claude', 'agents', fileName)
-  }
-  if (source === 'project') {
-    const conventional = joinPath(projectRoot, '.claude', 'agents', fileName)
-    if ((await statSafe(conventional)).exists) return conventional
-    return resolveAgentPathByPatterns(projectRoot, name, deps.scanPatterns)
-  }
-  if (source.startsWith('repo:')) {
-    const pluginName = source.slice('repo:'.length)
-    const found = await findMarketplaceJson(projectRoot)
-    if (!found) return null
-    const plugins = Array.isArray(found.data.plugins) ? found.data.plugins : []
-    const hit = plugins.find((p: any) => (p.name || basename(p.source)) === pluginName)
-    if (!hit?.source) return null
-    return joinPath(resolvePath(found.dir, hit.source), 'agents', fileName)
-  }
-  if (source.startsWith('plugin:')) {
-    const pluginName = source.slice('plugin:'.length)
-    const installs = await loadEnabledPluginInstalls()
-    const install = installs.find((i) => i.name === pluginName)
-    if (install?.installPath) {
-      return joinPath(install.installPath, 'agents', fileName)
-    }
-    const cacheDir = await latestPluginCacheDir(pluginName)
-    if (cacheDir) return joinPath(cacheDir, 'agents', fileName)
-  }
-  return null
+  const { scanPatterns, ...agentStore } = deps
+  const ctx = contextOf(root, projectRoot, agentStore, { agents: scanPatterns ?? undefined })
+  return resolveThroughSources(source, (s) => s.resolveAgentPath?.(ctx, source, name))
 }
 
 /**
@@ -204,30 +176,28 @@ export async function resolveCatalogSkillPath(
   if (!parsed?.name) return null
   const { source, name } = parsed
   if (deps.sanitiseName(name) !== name) return null
+  const ctx = contextOf('', projectRoot, {}, { skills: deps.scanPatterns ?? undefined })
+  return resolveThroughSources(source, (s) => s.resolveSkillPath?.(ctx, source, name))
+}
 
-  if (source === 'user') return joinPath(homeDir(), '.claude', 'skills', name, 'SKILL.md')
-  if (source === 'cursor') return joinPath(homeDir(), '.cursor', 'skills-cursor', name, 'SKILL.md')
-  if (source === 'project') {
-    const conventional = joinPath(projectRoot, '.claude', 'skills', name, 'SKILL.md')
-    if ((await statSafe(conventional)).exists) return conventional
-    return resolveSkillPathByPatterns(projectRoot, name, deps.scanPatterns)
-  }
-  if (source.startsWith('repo:')) {
-    const pluginName = source.slice('repo:'.length)
-    const found = await findMarketplaceJson(projectRoot)
-    if (!found) return null
-    const plugins = Array.isArray(found.data.plugins) ? found.data.plugins : []
-    const hit = plugins.find((p: any) => (p.name || basename(p.source)) === pluginName)
-    if (!hit?.source) return null
-    return joinPath(resolvePath(found.dir, hit.source), 'skills', name, 'SKILL.md')
-  }
-  if (source.startsWith('plugin:')) {
-    const pluginName = source.slice('plugin:'.length)
-    const installs = await loadEnabledPluginInstalls()
-    const install = installs.find((i) => i.name === pluginName)
-    if (install?.installPath) return joinPath(install.installPath, 'skills', name, 'SKILL.md')
-    const cacheDir = await latestPluginCacheDir(pluginName)
-    if (cacheDir) return joinPath(cacheDir, 'skills', name, 'SKILL.md')
-  }
-  return null
+/**
+ * Fallback `<projectRoot>/plugins/<plugin>` cho id `repo:` mà chuỗi resolve không
+ * ra — hook riêng, chỉ route xem nội dung gọi, để chuỗi resolve public giữ nguyên.
+ * ⚠️ Không sanitise `pluginName` (hành vi có sẵn của route agent).
+ */
+export async function resolveRepoFallbackAgentPath(projectRoot: string, id: string): Promise<string | null> {
+  const parsed = parseCatalogItemId(id)
+  if (!parsed) return null
+  return repoPlugins.fallbackAgentPath(projectRoot, parsed.source, parsed.name)
+}
+
+/** Như `resolveRepoFallbackAgentPath` cho skill — `name` và `pluginName` đều qua `sanitiseName`. */
+export async function resolveRepoFallbackSkillPath(
+  projectRoot: string,
+  id: string,
+  sanitiseName: (name: string) => string | null,
+): Promise<string | null> {
+  const parsed = parseCatalogItemId(id)
+  if (!parsed) return null
+  return repoPlugins.fallbackSkillPath(projectRoot, parsed.source, parsed.name, sanitiseName)
 }

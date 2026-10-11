@@ -155,6 +155,8 @@ export const AutomationAction = z
     }
   })
 export type AutomationAction = z.infer<typeof AutomationAction>
+/** Loại action — nguồn chân lý cho registry executor (BE), form (FE) và hint nl-chat. */
+export type AutomationActionKind = NonNullable<AutomationAction['kind']>
 
 export const AutomationRuleRecord = z.object({
   version: z.literal(1),

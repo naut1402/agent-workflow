@@ -14,13 +14,17 @@
   // glob lúc chạy. Thiếu mục này thì mỗi feature mới đều kéo theo một loạt
   // `unused-file` + `unused-export` cho toàn bộ cây của nó.
   "dynamicallyLoaded": [
-    // Backend: `registerFeatureRoutes` quét `src/features/<name>/api.ts` bằng
-    // `loadModulesUnder` (`src/backend/apiServer.ts`). Đây là điểm nạp feature
-    // DUY NHẤT của backend — mọi thứ khác của feature treo dưới file này.
+    // Backend: `registerFeatureRoutes` quét `src/features/<name>/` bằng
+    // `loadEntriesUnder` (`src/backend/apiServer.ts`): `api.ts` kiểu cũ và
+    // `controller.ts` / `controllers/*.ts` kiểu decorator (#508). Đây là các điểm
+    // nạp feature DUY NHẤT của backend — mọi thứ khác của feature treo dưới chúng.
     "src/features/*/api.ts",
+    "src/features/*/controller.ts",
+    "src/features/*/controllers/*.ts",
     // Frontend: `import.meta.glob(..., { eager: true })` ở `frontend/main.ts`
-    // (mode registry).
-    "src/features/*/registerMode.ts"
+    // (mode registry, style theo feature).
+    "src/features/*/registerMode.ts",
+    "src/features/*/styles/index.scss"
   ],
 
   // ── 2. Gói chỉ dòng test dùng / chỉ dòng test resolve được ───────────────
@@ -44,9 +48,22 @@
   // tĩnh nào tới method, và Fallow báo mọi handler mới là `unused-class-member`.
   // Đây là khuôn của TOÀN BỘ controller trong repo (`backend/http/AbstractController.ts`),
   // không riêng feature nào ⇒ tắt theo đường dẫn thay vì rắc suppression từng method.
+  // Controller kiểu decorator (#508) cũng vậy: `@Get(path)` ghi tên method vào
+  // metadata, `registerControllers` gọi lại theo tên.
   "overrides": [
     {
-      "files": ["src/features/*/controller.ts"],
+      "files": ["src/features/*/controller.ts", "src/features/*/controllers/*.ts"],
+      "rules": { "unused-class-members": "off" }
+    },
+    {
+      // Thành viên chỉ được gọi qua hợp đồng, không qua tên lớp cụ thể — Fallow không
+      // nối member của interface / lớp cha với hiện thực:
+      // - `FormRequest`: `registerControllers` đọc `schema` / `source` / `invalid` qua
+      //   kiểu `FormRequestClass` và gọi `prepare()` / `after()` mà lớp con ghi đè.
+      // - Provider runner: caller lấy provider từ `getProvider(id)` (Map) dưới kiểu
+      //   `RunnerProvider`, nên `execute`, `catalog`, `transcriptFormat`, `complete`…
+      //   của từng hiện thực không có tham chiếu tĩnh nào.
+      "files": ["src/backend/http/FormRequest.ts", "src/features/runner/business/providers/*.ts"],
       "rules": { "unused-class-members": "off" }
     }
   ],
@@ -79,6 +96,76 @@
       // Test đọc thẳng tầng đĩa của i18n (bundle chưa memo, ETag, gốc repo).
       "file": "src/features/i18n/business/index.ts",
       "exports": ["REPO_LOCALES", "localeEtag", "readLocaleBundle"]
+    },
+    {
+      // Bộ decorator đầy đủ của khuôn controller (#508). Mới `statistics` chuyển sang
+      // decorator và chỉ dùng `@Get`; các decorator còn lại có test riêng và là đích
+      // của các feature chuyển sau.
+      "file": "src/backend/http/decorators.ts",
+      "exports": ["Post", "Put", "Patch", "Delete", "Raw"]
+    },
+    {
+      // Gắn cả danh sách controller trong một lệnh — test dựng app nhỏ bằng nó;
+      // `apiServer` gọi `registerController` từng cái để xen với `api.ts` kiểu cũ.
+      "file": "src/backend/http/registerControllers.ts",
+      "exports": ["registerControllers"]
+    },
+    {
+      // Cặp `Dto` / `DtoInput` của `src/shared/type` — test khoá kiểu đầu vào.
+      "file": "src/shared/type/dto.ts",
+      "exports": ["DtoInput"]
+    },
+    {
+      // Test thay driver log (driver giả ghi lại `LogQuery`) rồi trả về mặc định.
+      "file": "src/backend/log/driverInit.ts",
+      "exports": ["resetLogDriver"]
+    },
+    {
+      "file": "src/backend/log/index.ts",
+      "exports": ["setLogDriver", "resetLogDriver", "LogQuery"]
+    },
+    {
+      // Test knowledge dựng driver giả theo hợp đồng `KnowledgeDriver`, import qua barrel.
+      "file": "src/features/knowledge/business/index.ts",
+      "exports": ["KnowledgeDriver"]
+    },
+    {
+      // Seam test của runner (#440): `registerProvider` thay provider bằng stub.
+      // `listProviderIds` / `transcriptFormatOf` / `providerDescriptorOf` /
+      // `agentTranscriptFile` / `resolveProviderApiKey` là hook mở cho #441 · #445 ·
+      // #448 — test hợp đồng gọi qua barrel.
+      "file": "src/features/runner/business/providers/providerRegistry.ts",
+      "exports": ["registerProvider", "listProviderIds", "transcriptFormatOf"]
+    },
+    {
+      "file": "src/features/runner/business/index.ts",
+      "exports": [
+        "registerProvider",
+        "listProviderIds",
+        "transcriptFormatOf",
+        "providerDescriptorOf",
+        "agentTranscriptFile",
+        "resolveProviderApiKey"
+      ]
+    },
+    {
+      // Re-export giữ path import cũ cho test khi #440 tách `providers/` — chỉ test còn
+      // import qua hai path này. Test chuyển sang `providers/…` thì xoá re-export.
+      "file": "src/features/runner/business/registry.ts",
+      "exports": ["cleanupOrphanedMcpDeliveries", "getProvider", "listProviderCatalog", "providerFamilyOf"]
+    },
+    {
+      "file": "src/features/runner/business/types.ts",
+      "exports": ["ExecuteRequest", "ExecuteResult", "McpDelivery", "ProviderFamily", "RunnerProvider", "UsageCaptureInput"]
+    },
+    {
+      // Test gọi thẳng: nhận diện provider Agent CLI · argv parse-json của cursor.
+      "file": "src/features/runner/business/providers/AbstractAgentCliProvider.ts",
+      "exports": ["isAgentCliProvider"]
+    },
+    {
+      "file": "src/features/runner/business/providers/CursorCliProvider.ts",
+      "exports": ["buildCursorJsonArgs"]
     }
   ],
 

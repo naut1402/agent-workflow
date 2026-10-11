@@ -30,6 +30,24 @@ export const OrchestratorConfig = z
 export type OrchestratorConfig = z.infer<typeof OrchestratorConfig>
 
 /**
+ * Task mà orchestrator đang nói về — khoá của token điều phối, của bộ nhớ quan
+ * sát và của mọi hành động. `projectId` rỗng khi event không mang id và registry
+ * không tra ra được (project chưa đăng ký).
+ *
+ * Đặt ở `schemas/` (không ở `decisionLoop.ts`) để `orchestratorTokens.ts` lấy
+ * type này mà không import ngược module đang import nó.
+ */
+export const TaskRef = z.object({
+  taskId: z.string(),
+  root: z.string(),
+  projectId: z.string(),
+})
+
+// `Required<>`: repo chạy `strict: false`, khi đó `z.infer` biến mọi khoá thành
+// optional — mà cả ba khoá của `TaskRef` đều luôn có mặt.
+export type TaskRef = Required<z.infer<typeof TaskRef>>
+
+/**
  * Quyết định của agent điều phối, đọc từ dòng `ORCHESTRATOR_DECISION: {json}`.
  *
  * `stepId` bắt buộc với `start`/`resume`/`respawn` (kiểm thêm "có trong

@@ -55,9 +55,9 @@ const avgValue = computed(() => {
 </script>
 
 <template>
-  <div class="report-card">
-    <div v-if="loading" class="report-card-state">{{ t('statistics.loading') }}</div>
-    <div v-else-if="!ranking.length" class="report-card-state">{{ t('statistics.emptyChart') }}</div>
+  <div class="report-card flex-col-fill">
+    <div v-if="loading" class="report-card-state card-state">{{ t('statistics.loading') }}</div>
+    <div v-else-if="!ranking.length" class="report-card-state card-state">{{ t('statistics.emptyChart') }}</div>
     <div v-else class="report-card-body">
       <table class="report-table">
         <thead>
@@ -96,18 +96,6 @@ const avgValue = computed(() => {
 </template>
 
 <style scoped lang="scss">
-.report-card {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-.report-card-state {
-  color: var(--text-muted);
-  font-size: 0.85rem;
-  padding: 2rem 0.5rem;
-  text-align: center;
-}
 .report-card-body {
   flex: 1 1 auto;
   min-height: 0;

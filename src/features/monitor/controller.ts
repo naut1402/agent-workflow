@@ -1001,16 +1001,11 @@ export class MonitorController extends AbstractController {
       detail: { action: parsed.data.halted ? 'orchestrator-halt' : 'orchestrator-resume' },
     })
     if (parsed.data.halted) {
-      emit('orchestrator.halted', {
-        taskId: id,
-        projectId: this.projectId || undefined,
-        devTeamRoot: root,
-        reason: 'user_stop',
-      })
-      // Đường Stop này KHÔNG đi qua `haltTask()` của decisionLoop (đường riêng) —
-      // thu hồi token ngay, không đợi job quyết định của agent tự thoát.
-      const { revokeOrchestratorTokensFor } = await import('../orchestrator/business/index.js')
-      revokeOrchestratorTokensFor({ root, taskId: id })
+      // Cờ halted đã ghi ở trên ⇒ chỉ còn phần "báo dừng" (emit + thu hồi token)
+      // dùng chung với `haltTask()`. 🚫 Không đi qua `haltTask()`: nó ghi lại cờ
+      // và quên bộ nhớ của task — đường Stop xưa nay không quên.
+      const { announceHalt } = await import('../orchestrator/business/index.js')
+      announceHalt({ root, taskId: id, projectId: this.projectId || '' }, 'user_stop')
     } else {
       // Không `await`: lượt agent là một job, kết quả đọc ở `job.finished`.
       const { startOrchestratorTurn } = await import('../orchestrator/business/index.js')

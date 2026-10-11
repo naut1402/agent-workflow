@@ -1,86 +1,21 @@
-import { and, desc, eq, inArray } from 'drizzle-orm'
-import { getDb } from '../../../backend/db/client.js'
-import { logEntries } from '../../../backend/db/schema.js'
-import { readTextFile } from '../../../backend/lib/fileHelper.js'
-import { activeLogDriverKind } from '../../../backend/log/driver.js'
-import { logFile } from '../../../backend/log/fileDriver.js'
-import { isLogTypeEnabled } from '../../../backend/log/loggingPrefsIo.js'
-import { parseLogLine, type LogEntry, type LogType } from '../../../shared/log/schema.js'
+import { queryLogs, type LogEntry, type LogType } from '../../../backend/log/index.js'
 
 type ReadLogsOpts = { type?: LogType; project?: string | null; limit?: number }
 
 const DEFAULT_LIMIT = 200
 
-/** `null` = mọi project — caller truyền `undefined` hay `null` đều nghĩa là không lọc. */
-function projectFilterOf(opts: ReadLogsOpts): string | null {
-  return opts.project ?? null
-}
+/** Type đọc khi không chỉ định — `events` chỉ xem khi chọn riêng. */
+const DEFAULT_TYPES: readonly LogType[] = ['request', 'audit', 'usage']
 
 /**
- * SQLite read path — same filters, sort and limit as the file path. `limit` applies
- * in SQL before parsing, so unparseable payloads shorten the result below `limit`.
+ * Read log entries newest-first (feature UI). Write path và đường đọc theo driver
+ * sống ở `src/backend/log` (`queryLogs`). Missing store → []. Malformed entries are
+ * skipped. `limit` defaults to 200. Disabled types (settings) → skipped / empty.
  */
-async function readLogsFromSqlite(types: LogType[], opts: ReadLogsOpts): Promise<LogEntry[]> {
-  const enabledTypes = types.filter((t) => isLogTypeEnabled(t))
-  if (!enabledTypes.length) return []
-  const project = projectFilterOf(opts)
-  try {
-    const conditions = [inArray(logEntries.type, enabledTypes)]
-    if (project !== null) conditions.push(eq(logEntries.projectId, project))
-    const db = await getDb()
-    const rows = db
-      .select()
-      .from(logEntries)
-      .where(and(...conditions))
-      .orderBy(desc(logEntries.ts))
-      .limit(opts.limit ?? DEFAULT_LIMIT)
-      .all()
-    const out: LogEntry[] = []
-    for (const row of rows) {
-      const entry = parseLogLine(row.payload)
-      if (entry) out.push(entry)
-    }
-    return out
-  } catch {
-    return []
-  }
+export function readLogs(opts: ReadLogsOpts = {}): Promise<LogEntry[]> {
+  return queryLogs({
+    type: opts.type ? opts.type : DEFAULT_TYPES,
+    project: opts.project ?? null,
+    limit: opts.limit ?? DEFAULT_LIMIT,
+  })
 }
-
-/** JSONL read path — mỗi type một file, parse phòng thủ, sort và cắt `limit` trong bộ nhớ. */
-async function readLogsFromFile(types: LogType[], opts: ReadLogsOpts): Promise<LogEntry[]> {
-  const project = projectFilterOf(opts)
-  const out: LogEntry[] = []
-  for (const t of types) {
-    if (!isLogTypeEnabled(t)) continue
-    let raw: string
-    try {
-      raw = await readTextFile(logFile(t))
-    } catch {
-      continue
-    }
-    for (const line of raw.split('\n')) {
-      const entry = parseLogLine(line)
-      if (!entry) continue
-      if (project !== null && entry.projectId !== project) continue
-      out.push(entry)
-    }
-  }
-  out.sort((a, b) => b.ts - a.ts)
-  return out.slice(0, opts.limit ?? DEFAULT_LIMIT)
-}
-
-/**
- * Read log entries newest-first (feature UI). Write path sống ở `src/backend/log`.
- * Missing file → []. Malformed lines are skipped. `limit` defaults to 200.
- * Disabled types (settings) → skipped / empty.
- * Read backend follows the active log driver (`logging.driver` — file or sqlite).
- */
-export async function readLogs(opts: ReadLogsOpts = {}): Promise<LogEntry[]> {
-  const types: LogType[] = opts.type ? [opts.type] : ['request', 'audit', 'usage']
-  return activeLogDriverKind() === 'sqlite'
-    ? readLogsFromSqlite(types, opts)
-    : readLogsFromFile(types, opts)
-}
-
-// Re-export write helpers so existing `logs/business` imports keep working.
-export { appendLog, appendRequestLog, emitAudit } from '../../../backend/log/store.js'

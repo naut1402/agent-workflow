@@ -9,11 +9,13 @@
 import type { Hono } from 'hono'
 import type { HonoEnv } from '../../backend/http/types.js'
 import { bind } from '../../backend/http/AbstractController.js'
+import { SelfMcpServer } from '../mcp/business/index.js'
 import { OrchestratorController } from './controller.js'
 import './business/index.js'
 
 export function registerRoutes(app: Hono<HonoEnv>): void {
   app.get('/api/orchestrator/status', bind(OrchestratorController, 'getStatus'))
   app.get('/api/orchestrator/output', bind(OrchestratorController, 'getOutput'))
-  app.post('/api/orchestrator/decide', bind(OrchestratorController, 'postDecide'))
+  // Path decide là hợp đồng với tiến trình `mcp/` (tool `orchestrator_decide`) — đọc hằng, 🚫 literal.
+  app.post(SelfMcpServer.DECIDE_PATH, bind(OrchestratorController, 'postDecide'))
 }

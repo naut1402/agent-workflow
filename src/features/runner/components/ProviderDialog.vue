@@ -3,7 +3,7 @@ import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { computed, onMounted, ref } from 'vue'
 import { slugify } from '../../../shared/lib/stringUtils'
 import { saveProviderConfig, deleteProviderConfig } from '../scripts/ProviderDialogApi'
-import { DEFAULT_BASE_URLS } from '../scripts/agenticProviderDefaults'
+import { defaultBaseUrlOf } from '../lib/providerCatalog'
 import type { ProviderConfigOption, ProviderEntry } from '../types'
 import { useApiAction } from '../../../frontend/composables/useApiAction'
 import CDialog from '../../../frontend/ui/CDialog.vue'
@@ -30,7 +30,7 @@ const providerId = ref('')
 const baseURL = ref('')
 const { pending: saving, run: runSave } = useApiAction()
 const error = ref('')
-const baseUrlPlaceholder = computed(() => DEFAULT_BASE_URLS[providerId.value] || '')
+const baseUrlPlaceholder = computed(() => defaultBaseUrlOf(providerId.value, props.providers))
 
 const aiProviders = computed(() => props.providers.filter((p) => p.kind === 'ai-provider'))
 const aiProviderSelectOptions = computed(() => aiProviders.value.map((p) => ({ value: p.id, label: p.label })))
@@ -97,7 +97,7 @@ onMounted(applyPrefill)
     width="min(520px, 94vw)"
     @close="emit('close')"
   >
-    <div v-if="error" class="err-banner">{{ error }}</div>
+    <div v-if="error" class="err-banner banner-danger">{{ error }}</div>
     <p class="muted dialog-intro">{{ t('runner.providerDialog.intro') }}</p>
 
     <div class="field">
@@ -151,16 +151,8 @@ onMounted(applyPrefill)
 .field { margin-bottom: 0.75rem; }
 .field .cfg-input,
 .field .cfg-select { width: 100%; }
-.label-with-hint { display: inline-flex; align-items: center; gap: 0.3rem; white-space: nowrap; flex-direction: row; }
 .muted { color: var(--muted); font-size: 0.8rem; word-break: break-all; }
-.modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; padding-top: 1rem; }
+// `display: flex; justify-content: flex-end` lấy từ class chung `.modal-actions` (_shell.scss).
+.modal-actions { gap: 0.5rem; padding-top: 1rem; }
 .modal-actions .spacer { flex: 1; }
-.err-banner {
-  background: rgba(248, 81, 73, 0.12);
-  border: 1px solid var(--danger);
-  color: var(--danger);
-  padding: 0.5rem;
-  border-radius: 6px;
-  margin-bottom: 0.75rem;
-}
 </style>

@@ -1,7 +1,20 @@
-// Shared types for the runner execution plane (U0005).
+// Dữ liệu / store của runner (U0005). Hợp đồng provider (`RunnerProvider`,
+// `ExecuteRequest/Result`, `TokenUsage`, `ProviderFamily`, `McpDelivery`) nằm ở
+// `providers/RunnerProvider.ts`; re-export dưới đây giữ cho nơi import cũ trong
+// giai đoạn chuyển.
 
 import type { UsageSnapshot } from '../../../shared/log/schema.js'
-import type { McpJobDelivery } from './mcpDelivery/McpJobDelivery.js'
+import type { McpDelivery, ProviderDescriptor } from './providers/RunnerProvider.js'
+
+export type {
+  ExecuteRequest,
+  ExecuteResult,
+  McpDelivery,
+  ProviderDescriptor,
+  ProviderFamily,
+  RunnerProvider,
+  UsageCaptureInput,
+} from './providers/RunnerProvider.js'
 
 export interface CredentialProfile {
   id: string
@@ -11,19 +24,6 @@ export interface CredentialProfile {
 }
 
 export type ConnectionKind = 'local-console' | 'ai-provider'
-
-/** Provider category — Agent CLI vs console argv vs remote API. */
-export type ProviderFamily = 'agent-cli' | 'console-command' | 'ai-api'
-
-/** How a provider receives the `mcpServers` config the dashboard declares. */
-export type McpDelivery =
-  /** Per-invocation flag: `--mcp-config <file> --strict-mcp-config` (claude). */
-  | 'config-file-flag'
-  /** File read from the workspace, with no flag pointing at it (cursor). */
-  | 'workspace-config-file'
-  /** Tools injected into the provider's own tool-use loop (ai-api). */
-  | 'bridge-tools'
-  | 'unsupported'
 
 export interface Connection {
   id: string
@@ -45,7 +45,7 @@ export interface Connection {
    * — optional and absent on connections created before this key existed,
    * which then get only the base tools (unchanged behavior). For
    * `local-console` with `providerId: 'claude-code-cli'`, `model` is read
-   * as the `--model` argv value (see `claude-code-cli.ts`).
+   * as the `--model` argv value (see `ClaudeCliProvider.ts`).
    *
    * `mcpServers?: string[]` lists the MCP server ids this Connection opts into
    * (`features/mcp` store). Absent/empty — the default for every connection
@@ -55,16 +55,11 @@ export interface Connection {
   config?: Record<string, unknown>
 }
 
-export interface ProviderCatalogEntry {
-  id: string
-  kind: ConnectionKind
-  label: string
-  /** agent-cli may be set as default AI runner; console-command may not. */
-  family: ProviderFamily
-  /**
-   * How this provider receives MCP config — `listProviderCatalog` (registry.ts)
-   * fills it in from `RunnerProvider.mcpDelivery.kind`.
-   */
+/**
+ * Một dòng catalog provider trả cho UI — `ProviderDescriptor` + cách giao MCP
+ * lấy từ delivery đã lắp ráp (`listProviderCatalog`, providerRegistry.ts).
+ */
+export type ProviderCatalogEntry = ProviderDescriptor & {
   mcpDelivery?: McpDelivery
 }
 
@@ -105,76 +100,6 @@ export interface ResolvedAgent {
   skills: string[]
   model?: string
   agentFilePath?: string
-}
-
-export interface ExecuteRequest {
-  jobId: string
-  resolvedAgent: ResolvedAgent
-  userPrompt: string
-  workspace: string
-  produces?: string[]
-  timeoutMs?: number
-  metadata?: Record<string, unknown>
-  // Approval-flow session continuity (see jobQueue.ts submitApprovalJob /
-  // sendJobFeedback): exactly one of these is set for an approval job.
-  // `sessionId` picks a fresh conversation id for the CLI to persist
-  // (`--session-id`); `resumeSessionId` continues that exact conversation on a
-  // follow-up feedback round (`--resume`) so the agent remembers what it
-  // already proposed instead of starting over.
-  sessionId?: string
-  resumeSessionId?: string
-  /**
-   * Aborted when `cancelJob` is called for this job. Providers with no OS
-   * subprocess to SIGTERM (AgenticApiProvider subclasses) should thread this
-   * into their fetch/SDK calls; subprocess-spawning providers can ignore it
-   * (they are killed via `job.pid` instead).
-   */
-  signal?: AbortSignal
-}
-
-export interface ExecuteResult {
-  ok: boolean
-  exitCode: number | null
-  durationMs: number
-  logPath?: string
-  artifactsFound?: string[]
-  error?: string
-  /**
-   * The runner's raw stdout. Quick-action approval jobs use this as the
-   * proposed content (the agent is told to "respond with the improved text"),
-   * so a prompt that prints its result instead of writing a file still produces
-   * a reviewable change. See jobQueue.ts runJob.
-   */
-  stdout?: string
-  /**
-   * Bản `stdout` đã mask secret MCP — DÀNH RIÊNG cho biên persist/API
-   * (`JobRecord.stdout`, `metadata.stepSummary`, `GET /api/jobs`).
-   *
-   * 🚫 Không dùng cho đường chức năng: `foldProposalIntoScratch` và
-   * `parseOrchestratorDecision` đọc `stdout` THÔ — mask là split/join mù, nó cắt
-   * giữa artifact và giữa dòng `ORCHESTRATOR_DECISION`.
-   *
-   * Không set khi job không bật MCP server nào ⇒ caller rơi về `stdout`, hành vi
-   * cũ không đổi một byte.
-   */
-  maskedStdout?: string
-  /** Captured CLI session id (preset-uuid or parse-json providers). */
-  sessionId?: string | null
-  /** True when runProcess() killed the child after timeoutMs elapsed (SIGTERM).
-   * Lets classifyJobFailure() recognize a timeout deterministically instead of
-   * matching the CLI's own stdout/stderr text (e.g. Claude Code's interrupt
-   * markers "Execution error" / "[Request interrupted by user]"). */
-  timedOut?: boolean
-  /** Optional token usage (Agent CLI); see providers/agentCli.ts. */
-  tokenUsage?: {
-    inputTokens?: number
-    outputTokens?: number
-    cacheReadTokens?: number
-    cacheWriteTokens?: number
-    totalTokens?: number
-    model?: string
-    estimated?: boolean
-  }
 }
 
 // `awaiting_approval`: an approval-flow job (see jobQueue.ts) finished
@@ -295,30 +220,6 @@ export interface ProviderConfigsStore {
 export interface CommandsStore {
   version: number
   commands: CustomCommand[]
-}
-
-// A provider plugs a concrete execution backend (e.g. the Claude Code CLI) into
-// the runner plane behind a uniform contract.
-export interface RunnerProvider {
-  providerId: string
-  /** Defaults inferred from providerId when omitted (legacy providers). */
-  family?: ProviderFamily
-  /**
-   * How this provider receives the job's MCP servers. Omitted ⇒ the provider
-   * takes no MCP (catalog reports `'unsupported'`) — console-command and test
-   * stubs registered via `registerProvider`. Assembled in `registry.ts`.
-   */
-  mcpDelivery?: McpJobDelivery<unknown>
-  validateRunnerConfig(config: Record<string, unknown> | undefined): { ok: boolean; errors: string[] }
-  validateCredential(profile: CredentialProfile | undefined): { ok: boolean; errors: string[] }
-  capabilities(): { supportsAgentFile: boolean; supportsStreaming: boolean; maxConcurrency: number }
-  execute(
-    req: ExecuteRequest,
-    runnerConfig: Record<string, any>,
-    credential: CredentialProfile,
-    onLog?: (chunk: string) => void,
-    onStart?: (info: { pid: number | null }) => void,
-  ): Promise<ExecuteResult>
 }
 
 // Mutation result shape shared by registry/credentials/job CRUD. `ok:false`

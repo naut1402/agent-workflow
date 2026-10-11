@@ -8,10 +8,11 @@
  * không thì thôi — và `resolveDecisionRoute` đọc đúng `canAttach()` để chốt tuyến
  * nên prompt không bao giờ dạy agent gọi một tool không tồn tại.
  *
- * Lớp này còn là HỢP ĐỒNG XUYÊN PROCESS: tên server, biến mode, cờ `--mode=full`
- * và hai biến token / base URL được đọc ở cả hai đầu — dashboard (ghi entry, bơm
- * env cho CLI) và tiến trình `mcp/stdio.ts` (`DashboardMcpServer`,
- * `OrchestratorTools`). Khai một chỗ thì hai đầu không thể lệch nhau.
+ * Lớp này còn là HỢP ĐỒNG XUYÊN PROCESS: tên server, biến mode, cờ `--mode=full`,
+ * hai biến token / base URL, header token và path của API điều phối được đọc ở cả
+ * hai đầu — dashboard (ghi entry, bơm env cho CLI, khai route) và tiến trình
+ * `mcp/stdio.ts` (`DashboardMcpServer`, `OrchestratorTools`). Khai một chỗ thì
+ * hai đầu không thể lệch nhau.
  *
  * ⚠️ Tiến trình stdio nạp barrel `mcp` để đọc các hằng này ⇒ file này 🚫 không có
  * side effect lúc nạp (timer, I/O, import `runner`) — `docs/mcp/server.md` §8.1.
@@ -39,6 +40,23 @@ export class SelfMcpServer extends StdioMcpServer {
   static readonly TOKEN_ENV = 'DASHBOARD_ORCHESTRATOR_TOKEN'
   /** Base URL của dashboard mà tool `orchestrator_decide` gọi về. */
   static readonly BASE_URL_ENV = 'DASHBOARD_ORCHESTRATOR_BASE_URL'
+  /**
+   * Header mang token của lượt điều phối khi gọi API REST của orchestrator.
+   * 🚫 KHÔNG dùng `Authorization`: `createJwtMiddleware()` đọc header đó cho JWT
+   * dashboard và sẽ chặn nhầm. Tên header case-insensitive theo chuẩn HTTP.
+   */
+  static readonly TOKEN_HEADER = 'X-Dashboard-Orchestrator-Token'
+  /** Route nhận quyết định điều phối — `orchestrator/api.ts` khai, tool `orchestrator_decide` gọi. */
+  static readonly DECIDE_PATH = '/api/orchestrator/decide'
+
+  /**
+   * Base URL của CHÍNH tiến trình dashboard (`standalone.ts` / `devTeamApi.ts`
+   * đặt lúc listen) — nơi DUY NHẤT đọc `DEV_TEAM_SELF_BASE_URL`. Trả nguyên văn,
+   * 🚫 không trim: caller tự quyết cách coi chuỗi rỗng / khoảng trắng.
+   */
+  static selfBaseUrl(): string | undefined {
+    return process.env.DEV_TEAM_SELF_BASE_URL
+  }
 
   /** Chỉ `forJob` dựng được — entry tự gắn 🚫 đọc từ đĩa hay từ API. */
   private constructor(config: McpStdioServer) {
@@ -73,7 +91,7 @@ export class SelfMcpServer extends StdioMcpServer {
    * nên không bao giờ có job mang tool mà thiếu token của tool đó.
    */
   private static orchestratorEnv(metadata: JobMetadata): Record<string, string> | null {
-    const baseUrl = process.env.DEV_TEAM_SELF_BASE_URL
+    const baseUrl = SelfMcpServer.selfBaseUrl()
     if (metadata?.orchestratorJob !== true || typeof metadata.orchestratorToken !== 'string' || !baseUrl) {
       return null
     }

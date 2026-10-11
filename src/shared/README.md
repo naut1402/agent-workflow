@@ -1,8 +1,9 @@
 # `src/shared/` — dùng chung backend ⟷ frontend
 
-Bucket **hẹp có chủ đích**: chỉ logic/type thuần, không hạ tầng. Hiện có đúng 4 module —
-`lib/phase.ts`, `lib/stringUtils.ts`, `log/schema.ts` và `log/loggingPrefs.ts` — cả bốn đều
-chỉ import `zod` hoặc không import gì, và đều có importer thật ở cả hai phía.
+Bucket **hẹp có chủ đích**: chỉ logic/type thuần, không hạ tầng. Hiện có đúng 5 module —
+`lib/phase.ts`, `lib/stringUtils.ts`, `log/schema.ts`, `log/loggingPrefs.ts` và `type/dto.ts`
+(wrapper zod `Dto<S>` / `defineDto` cho DTO) — cả năm đều chỉ import `zod` hoặc không import
+gì, và đều có importer thật ở cả hai phía.
 
 ## Đặt file mới ở đây khi — và chỉ khi — cả 3 điều đúng
 

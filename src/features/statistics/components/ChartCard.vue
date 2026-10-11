@@ -224,8 +224,8 @@ watch(
 
 <template>
   <div class="chart-card" :class="{ 'is-loading': loading }">
-    <div v-if="loading" class="chart-card-state">{{ t('statistics.loading') }}</div>
-    <div v-else-if="!hasData" class="chart-card-state">{{ t('statistics.emptyChart') }}</div>
+    <div v-if="loading" class="chart-card-state card-state">{{ t('statistics.loading') }}</div>
+    <div v-else-if="!hasData" class="chart-card-state card-state">{{ t('statistics.emptyChart') }}</div>
     <div v-else class="chart-card-body" :style="{ height: `${styleConfig?.height ?? 300}px` }">
       <canvas ref="canvasRef" role="img" />
     </div>
@@ -240,12 +240,6 @@ watch(
   display: flex;
   flex-direction: column;
   min-height: 0;
-}
-.chart-card-state {
-  color: var(--text-muted);
-  font-size: 0.85rem;
-  padding: 2rem 0.5rem;
-  text-align: center;
 }
 .chart-card-body {
   position: relative;

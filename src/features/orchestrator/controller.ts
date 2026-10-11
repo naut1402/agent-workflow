@@ -1,25 +1,17 @@
 import { AbstractController } from '../../backend/http/AbstractController.js'
 import { loadJob, markDirectDecisionApplied } from '../runner/business/index.js'
 import { readJobLogDelta, resolveTaskJobId } from '../logs/business/index.js'
-import { loadPipelineConfig } from '../pipeline-editor/business/pipeline/index.js'
+import { SelfMcpServer } from '../mcp/business/index.js'
 import { validateDecision } from './business/decision.js'
 import {
-  applyDecision,
-  hasPendingStep,
+  applyCheckedDecision,
   isOrchestratorJob,
   liveJobsOfTask,
   readTaskPhase,
   recentOf,
-  type TaskRef,
 } from './business/decisionLoop.js'
 import { resolveOrchestratorToken } from './business/orchestratorTokens.js'
-
-/** Header riêng cho token của orchestrator — KHÔNG dùng `Authorization`, tránh
- * `createJwtMiddleware()` (đọc `Authorization` cho JWT dashboard) chặn nhầm.
- * Tên header case-insensitive theo chuẩn HTTP — phải khớp giá trị được
- * `claude-code-cli.ts` cấp vào env `DASHBOARD_ORCHESTRATOR_TOKEN` cho tiến
- * trình con, và giá trị agent tự đọc lại khi chạy `curl`. */
-export const ORCHESTRATOR_TOKEN_HEADER = 'X-Dashboard-Orchestrator-Token'
+import type { TaskRef } from './schemas/orchestrator.js'
 
 /**
  * Job orchestrator đang chạy CỦA ĐÚNG `ref` — tự soi lại `devTeamRoot` (G3 +
@@ -40,8 +32,14 @@ function currentOrchestratorJobId(ref: TaskRef): string | null {
  * bằng shell command (`curl`) — hướng dẫn nằm trong `buildDecisionPrompt`.
  */
 export class OrchestratorController extends AbstractController {
+  /**
+   * Token đọc từ `SelfMcpServer.TOKEN_HEADER` — hằng hợp đồng chung với tool
+   * `orchestrator_decide` của tiến trình `mcp/`. Giá trị token do
+   * `SelfMcpServer.childEnv` bơm vào env `DASHBOARD_ORCHESTRATOR_TOKEN` của
+   * tiến trình con; agent tự đọc lại khi chạy `curl`.
+   */
   private resolveRef(): TaskRef | null {
-    const token = this.c.req.header(ORCHESTRATOR_TOKEN_HEADER)
+    const token = this.c.req.header(SelfMcpServer.TOKEN_HEADER)
     return token ? resolveOrchestratorToken(token) : null
   }
 
@@ -84,20 +82,19 @@ export class OrchestratorController extends AbstractController {
     const body = await this.parseBody()
     if (!body.ok) return this.json(400, { error: 'invalid JSON' })
 
-    const pipeline = await loadPipelineConfig(ref.root, ref.taskId)
-    const stepIds = (pipeline.steps || []).map((s: any) => s?.id).filter(Boolean)
-    const decision = validateDecision(body.value, stepIds)
+    const decision = await applyCheckedDecision(
+      ref,
+      (stepIds) => validateDecision(body.value, stepIds),
+      // Đánh dấu TRƯỚC KHI thi hành: `applyDecision` (action `start`) tạo ngay
+      // một job step mới, và `resolveTaskJobId` ưu tiên job MỚI NHẤT — đánh dấu
+      // sau sẽ vô tình gắn cờ lên job step đó thay vì job orchestrator đang gọi
+      // API này (chống double-dispatch với sentinel cuối output).
+      () => {
+        const currentJobId = currentOrchestratorJobId(ref)
+        if (currentJobId) markDirectDecisionApplied(currentJobId)
+      },
+    )
     if ('error' in decision) return this.json(400, { error: decision.error })
-
-    // Đánh dấu TRƯỚC KHI thi hành: `applyDecision` (action `start`) tạo ngay một
-    // job step mới, và `resolveTaskJobId` ưu tiên job MỚI NHẤT — đánh dấu sau sẽ
-    // vô tình gắn cờ lên job step đó thay vì job orchestrator đang gọi API này
-    // (chống double-dispatch với sentinel cuối output).
-    const currentJobId = currentOrchestratorJobId(ref)
-    if (currentJobId) markDirectDecisionApplied(currentJobId)
-
-    const at = await readTaskPhase(ref.root, ref.taskId)
-    await applyDecision(ref, decision, { gatePending: at.gatePending, completed: !hasPendingStep(at) })
     return this.json(200, { applied: decision.action })
   }
 }

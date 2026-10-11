@@ -1,6 +1,6 @@
 /**
- * Splits a job log's raw text into the sections `claude-code-cli.ts` /
- * `agenticApiProvider.ts` / `console-command.ts` already write with `=== ... ===` /
+ * Splits a job log's raw text into the sections `AbstractAgentCliProvider.ts` /
+ * `AgenticApiProvider.ts` / `ConsoleCommandProvider.ts` already write with `=== ... ===` /
  * `--- ... ---` marker lines, so `JobLogDialog.vue` can render each part labeled instead
  * of dumping the whole file into one `<pre>`.
  */

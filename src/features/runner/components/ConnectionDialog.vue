@@ -18,7 +18,7 @@ import {
 } from '../scripts/ConnectionDialogApi'
 import { fetchProviderConfigs, saveProviderConfig, deleteProviderConfig } from '../scripts/ProviderDialogApi'
 import { fetchMcpServers } from '../../mcp/scripts/mcpApi'
-import { DEFAULT_MODEL_HINTS, DEFAULT_SECRET_ENV_HINTS } from '../scripts/agenticProviderDefaults'
+import { hasStaticModelsOf, inferProviderIdFromCommand, modelHintOf, secretEnvHintOf } from '../lib/providerCatalog'
 import type { ConnectionKind, ConnectionOption, ProviderConfigOption, ProviderEntry } from '../types'
 import { useApiAction } from '../../../frontend/composables/useApiAction'
 import CComboSelect from '../../../frontend/ui/CComboSelect.vue'
@@ -116,7 +116,7 @@ const newCred = ref({ label: '', secretValue: '', secretRef: '' })
 const selectedCredential = computed(() => credentials.value.find((c) => c.id === credentialId.value) || null)
 /** Hint only — must stay a placeholder, not a prefilled value, or "field left untouched" becomes indistinguishable from "field filled with the hint". */
 const secretRefPlaceholder = computed(
-  () => DEFAULT_SECRET_ENV_HINTS[selectedProviderConfig.value?.providerId || ''] || 'env:ANTHROPIC_API_KEY',
+  () => secretEnvHintOf(selectedProviderConfig.value?.providerId, props.providers) || 'env:ANTHROPIC_API_KEY',
 )
 
 const filteredCredentials = computed(() =>
@@ -148,19 +148,19 @@ const oauthFlow = ref<{ state: string; status: OAuthFlowStatus; authorizeUrl: st
 const oauthPasteInput = ref('')
 let oauthPollTimer: ReturnType<typeof setInterval> | null = null
 
-const modelPlaceholder = computed(() => DEFAULT_MODEL_HINTS[selectedProviderConfig.value?.providerId || ''] || '')
+const modelPlaceholder = computed(() => modelHintOf(selectedProviderConfig.value?.providerId, props.providers))
 
 const modelOptions = ref<string[]>([])
 const loadingModels = ref(false)
 const modelFetchError = ref('')
-/** local-console model selector shows only for the claude-code-cli command — no equivalent for Cursor/Codex. */
-const isClaudeCliSelected = computed(
-  () => kind.value === 'local-console' && selectedCommand.value?.providerId === 'claude-code-cli',
+/** local-console model selector shows only for a CLI whose catalog declares a static model list (`modelListing: 'static'`). */
+const isStaticModelCliSelected = computed(
+  () => kind.value === 'local-console' && hasStaticModelsOf(selectedCommand.value?.providerId, props.providers),
 )
-/** A key to fetch models with — an existing credential, or a not-yet-saved secret typed in "+ Credential"; claude-code-cli needs neither (static alias list). */
+/** A key to fetch models with — an existing credential, or a not-yet-saved secret typed in "+ Credential"; a static-list CLI needs neither. */
 const canFetchModels = computed(
   () =>
-    isClaudeCliSelected.value ||
+    isStaticModelCliSelected.value ||
     Boolean(selectedProviderConfig.value && (credentialId.value || newCred.value.secretValue.trim())),
 )
 /** Fetched models ∪ already-selected ones — so a model saved before a fresh "Load models" fetch still shows up. */
@@ -371,33 +371,31 @@ async function saveNewCredential() {
   }
 }
 
-async function loadModels() {
-  if (isClaudeCliSelected.value) {
-    modelFetchError.value = ''
-    loadingModels.value = true
-    try {
-      const data = await fetchAvailableModels({ providerId: 'claude-code-cli' })
-      modelOptions.value = data.models || []
-      if (!modelOptions.value.length) modelFetchError.value = t('runner.connectionDialog.noModelsFound')
-    } catch (e: any) {
-      modelFetchError.value = e?.message ? String(e.message) : t('runner.connectionDialog.loadModelsFailed')
-    } finally {
-      loadingModels.value = false
-    }
-    return
-  }
-
+/**
+ * Query for "Load models": a static-list CLI needs only its providerId; an API
+ * provider needs its config plus a key (saved credential, or a secret typed in
+ * "+ Credential" — the typed one wins). `null` = nothing to fetch with.
+ */
+function modelListQuery(): Parameters<typeof fetchAvailableModels>[0] | null {
+  if (isStaticModelCliSelected.value) return { providerId: selectedCommand.value?.providerId || '' }
   const pc = selectedProviderConfig.value
-  if (!pc) return
+  if (!pc) return null
+  const secretValue = newCred.value.secretValue.trim()
+  return {
+    providerId: pc.providerId,
+    baseURL: pc.baseURL || undefined,
+    credentialId: !secretValue ? credentialId.value || undefined : undefined,
+    secretValue: secretValue || undefined,
+  }
+}
+
+async function loadModels() {
+  const query = modelListQuery()
+  if (!query) return
   modelFetchError.value = ''
   loadingModels.value = true
   try {
-    const data = await fetchAvailableModels({
-      providerId: pc.providerId,
-      baseURL: pc.baseURL || undefined,
-      credentialId: !newCred.value.secretValue.trim() ? credentialId.value || undefined : undefined,
-      secretValue: newCred.value.secretValue.trim() || undefined,
-    })
+    const data = await fetchAvailableModels(query)
     modelOptions.value = data.models || []
     if (!modelOptions.value.length) modelFetchError.value = t('runner.connectionDialog.noModelsFound')
   } catch (e: any) {
@@ -496,10 +494,7 @@ function inferProviderFromPath(pathOrCmd: string): string {
       ?.replace(/\.(exe|cmd|bat|ps1)$/i, '') || ''
   const known = scanned.value.find((c) => c.command === base || c.id === base)
   if (known) return known.providerId
-  if (/^claude$/i.test(base)) return 'claude-code-cli'
-  if (/^(agent|cursor-agent)$/i.test(base) || /cursor-agent/i.test(pathOrCmd)) return 'cursor-cli'
-  if (/codex/i.test(base)) return 'codex-cli'
-  return 'console-command'
+  return inferProviderIdFromCommand(pathOrCmd, props.providers) || 'console-command'
 }
 
 /**
@@ -724,7 +719,7 @@ async function save() {
         const resolvedProvider = cmd.providerId
         const id = buildConnectionId(resolvedProvider)
         const localConfig: Record<string, unknown> = {}
-        if (resolvedProvider === 'claude-code-cli' && selectedModels.value.length) {
+        if (hasStaticModelsOf(resolvedProvider, props.providers) && selectedModels.value.length) {
           localConfig.model = selectedModels.value[0]
         }
         // Chỉ ghi khi khác rỗng — connection cũ không được mọc khoá thừa.
@@ -836,7 +831,7 @@ onUnmounted(() => {
     min-height="560px"
     @close="emit('close')"
   >
-    <div v-if="error" class="err-banner">{{ error }}</div>
+    <div v-if="error" class="err-banner banner-danger">{{ error }}</div>
 
     <div class="field">
       <label class="cfg-label">{{ t('runner.connectionDialog.labelField') }}
@@ -911,7 +906,7 @@ onUnmounted(() => {
         </p>
       </div>
 
-      <div class="field" v-if="isClaudeCliSelected">
+      <div class="field" v-if="isStaticModelCliSelected">
         <div class="row-actions">
           <span class="cfg-label label-with-hint">
             {{ t('runner.connectionDialog.modelField') }}
@@ -1220,7 +1215,7 @@ onUnmounted(() => {
     width="min(440px, 92vw)"
     @close="showRegisterCommand = false"
   >
-    <div v-if="registerError" class="err-banner">{{ registerError }}</div>
+    <div v-if="registerError" class="err-banner banner-danger">{{ registerError }}</div>
     <div class="field">
       <label class="cfg-label">{{ t('runner.registerDialog.commandField') }}
         <input v-model="registerDraft.command" class="cfg-input" :placeholder="t('runner.registerDialog.commandPlaceholder')" />
@@ -1263,9 +1258,9 @@ onUnmounted(() => {
 .connection-dialog .cfg-hint { margin: 0.2rem 0 0; font-size: 11px; opacity: 0.75; }
 .kind-radios { display: flex; gap: 1rem; margin-top: 0.35rem; flex-wrap: wrap; }
 .extra-tools-group { display: flex; flex-direction: column; gap: 0.4rem; margin-top: 0.35rem; }
+.kind-radio,
+.icon-btn-group { display: inline-flex; align-items: center; }
 .kind-radio {
-  display: inline-flex;
-  align-items: center;
   gap: 0.4rem;
   cursor: pointer;
   font-size: 0.9rem;
@@ -1281,23 +1276,18 @@ onUnmounted(() => {
   margin-bottom: 0.35rem;
 }
 .row-btns { display: flex; gap: 0.35rem; }
-.label-with-hint { display: inline-flex; align-items: center; gap: 0.3rem; white-space: nowrap; flex-direction: row; }
-.command-row {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-.command-row .cfg-input,
-.command-row .cfg-select { flex: 1; min-width: 0; }
-.cfg-combo-select { flex: 1; min-width: 0; }
+.command-row,
 .credential-row {
   display: flex;
   align-items: center;
   gap: 0.4rem;
 }
+.command-row .cfg-input,
+.command-row .cfg-select,
 .credential-row .cfg-input,
-.credential-row .cfg-select { flex: 1; min-width: 0; }
-.icon-btn-group { display: inline-flex; align-items: center; gap: 0.15rem; flex-shrink: 0; }
+.credential-row .cfg-select,
+.cfg-combo-select { flex: 1; min-width: 0; }
+.icon-btn-group { gap: 0.15rem; flex-shrink: 0; }
 .path-hint { margin: 0.35rem 0 0; }
 .muted { color: var(--muted); font-size: 0.8rem; word-break: break-all; }
 .new-cred {
@@ -1314,13 +1304,6 @@ onUnmounted(() => {
 .advanced-secret-ref { margin-bottom: 0.75rem; }
 .advanced-secret-ref summary { cursor: pointer; font-size: 0.8rem; }
 .advanced-secret-ref .field { margin-top: 0.5rem; margin-bottom: 0; }
-.modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; padding-top: 1rem; }
-.err-banner {
-  background: rgba(248, 81, 73, 0.12);
-  border: 1px solid var(--danger);
-  color: var(--danger);
-  padding: 0.5rem;
-  border-radius: 6px;
-  margin-bottom: 0.75rem;
-}
+// `display: flex; justify-content: flex-end` lấy từ class chung `.modal-actions` (_shell.scss).
+.modal-actions { gap: 0.5rem; padding-top: 1rem; }
 </style>

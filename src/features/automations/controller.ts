@@ -3,8 +3,6 @@ import { AbstractController } from '../../backend/http/AbstractController.js'
 import { emitAudit } from '../../backend/log/store.js'
 import { emitEntity, on } from '../../backend/events/index.js'
 import { sseResponse } from '../../backend/http/sseHelper.js'
-import { getConnection, listRunners, providerFamilyOf } from '../runner/business/index.js'
-import { profilesDir } from '../monitor/business/index.js'
 import {
   AUTOMATION_ID_PATTERN,
   CreateAutomationRequest,
@@ -12,6 +10,7 @@ import {
   UpdateAutomationRequest,
 } from './schemas/automation.js'
 import * as automationsBusiness from './business/index.js'
+import { getConnection, listRunners, profilesDir, providerFamilyOf } from './business/index.js'
 
 /** Event type nào kích hoạt đẩy lại snapshot automations qua SSE. */
 const AUTOMATION_STREAM_EVENTS = new Set([

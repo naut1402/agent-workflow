@@ -378,7 +378,7 @@ onMounted(applyPrefill)
     width="min(620px, 94vw)"
     @close="emit('close')"
   >
-    <div v-if="error" class="err-banner">{{ error }}</div>
+    <div v-if="error" class="err-banner banner-danger">{{ error }}</div>
     <p v-if="secretsCleared" class="warn-text">{{ t('mcp.dialog.copySecretsCleared') }}</p>
 
     <div class="field">
@@ -572,7 +572,6 @@ onMounted(applyPrefill)
 .kv-row { display: flex; gap: 0.4rem; align-items: flex-end; margin-bottom: 0.35rem; }
 .kv-row .cfg-input { flex: 1; min-width: 0; }
 .checkbox-label { display: inline-flex; align-items: center; gap: 0.35rem; flex-direction: row; }
-.label-with-hint { display: inline-flex; align-items: center; gap: 0.3rem; white-space: nowrap; flex-direction: row; }
 .req { color: var(--danger); }
 .id-hint { display: inline-flex; align-items: center; gap: 0.3rem; margin: 0.25rem 0 0; }
 .timeout-field { display: flex; flex-direction: column; flex: 1; min-width: 0; }
@@ -584,13 +583,6 @@ onMounted(applyPrefill)
 .ok-text { color: var(--done); font-size: 0.85rem; margin: 0; }
 .err-text { color: var(--danger); font-size: 0.85rem; margin: 0; }
 .warn-text { color: var(--warn, var(--muted)); font-size: 0.8rem; margin: 0.25rem 0 0; }
-.modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; padding-top: 1rem; }
-.err-banner {
-  background: rgba(248, 81, 73, 0.12);
-  border: 1px solid var(--danger);
-  color: var(--danger);
-  padding: 0.5rem;
-  border-radius: 6px;
-  margin-bottom: 0.75rem;
-}
+// `display: flex; justify-content: flex-end` lấy từ class chung `.modal-actions` (_shell.scss).
+.modal-actions { gap: 0.5rem; padding-top: 1rem; }
 </style>

@@ -1,42 +1,20 @@
-import { emptyDraft, heuristicDraftFromDescription } from './agentMarkdown.js'
+import type { AgentDraft, DraftGenerator } from './DraftGenerator.js'
+import { AnthropicDraftGenerator } from './generators/AnthropicDraftGenerator.js'
+import { HeuristicDraftGenerator } from './generators/HeuristicDraftGenerator.js'
 
 /**
- * Generate an AgentDraft from a natural-language description. Uses the Anthropic
- * API when ANTHROPIC_API_KEY is set, otherwise falls back to a local heuristic.
+ * Chỗ lắp ráp duy nhất biết hiện thực `DraftGenerator` cụ thể.
+ * Thử lần lượt các generator LLM; generator nào trả `null` thì sang cái kế tiếp,
+ * hết thì rơi về heuristic (luôn trả draft).
  */
-export async function generateDraftFromNl(description: string) {
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  if (apiKey && description?.trim()) {
-    try {
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-        },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 2048,
-          messages: [{
-            role: 'user',
-            content: `Tạo JSON AgentDraft cho agent Claude Code từ mô tả sau. Trả về CHỈ JSON hợp lệ với keys: name, description, model, skills (array), parameters (array of {name, description}), sections (object role/skills/workflow/guardrail/output), section_order.\n\nMô tả: ${description}`,
-          }],
-        }),
-        signal: AbortSignal.timeout(60000),
-      })
-      if (res.ok) {
-        const data: any = await res.json()
-        const text = data.content?.[0]?.text || ''
-        const match = text.match(/\{[\s\S]*\}/)
-        if (match) {
-          const parsed = JSON.parse(match[0])
-          return { ...emptyDraft(), ...parsed, sections: { ...emptyDraft().sections, ...parsed.sections } }
-        }
-      }
-    } catch {
-      /* fallback heuristic */
-    }
+const llmGenerators: DraftGenerator[] = [new AnthropicDraftGenerator()]
+const fallbackGenerator = new HeuristicDraftGenerator()
+
+/** Generate an AgentDraft from a natural-language description. */
+export async function generateDraftFromNl(description: string): Promise<AgentDraft> {
+  for (const generator of llmGenerators) {
+    const draft = await generator.generate(description)
+    if (draft) return draft
   }
-  return heuristicDraftFromDescription(description || '')
+  return fallbackGenerator.generate(description)
 }

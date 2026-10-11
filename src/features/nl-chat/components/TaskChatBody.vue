@@ -128,7 +128,7 @@ const status = computed<{ kind: 'idle' | 'busy' | 'done' | 'error'; text: string
 watch(status, (s) => emit('status', s), { immediate: true })
 watch(chat.runner, (r) => emit('runner', r), { immediate: true })
 
-// Tool-activity turns arrive every 2s while a step runs (sessionTranscript.ts), so only follow the tail when already at it — an unconditional scroll would yank the user back while reading older history.
+// Tool-activity turns arrive every 2s while a step runs (monitor/business/transcripts/), so only follow the tail when already at it — an unconditional scroll would yank the user back while reading older history.
 watch([() => chat.turns.value.length, () => chat.pending.value.length], () => {
   if (isNearBottom()) void scrollToEnd()
 })
