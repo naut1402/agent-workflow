@@ -7,21 +7,13 @@ import type { UsageSnapshot } from '../../../shared/log/schema.js'
 import type { McpDelivery, ProviderDescriptor } from './providers/RunnerProvider.js'
 
 export type {
-  CompletionRequest,
-  CompletionResult,
   ExecuteRequest,
   ExecuteResult,
   McpDelivery,
-  ModelListing,
-  ProviderCatalogInfo,
   ProviderDescriptor,
   ProviderFamily,
   RunnerProvider,
-  RegisteredProvider,
-  TokenUsage,
-  TranscriptFormat,
   UsageCaptureInput,
-  UsageSource,
 } from './providers/RunnerProvider.js'
 
 export interface CredentialProfile {

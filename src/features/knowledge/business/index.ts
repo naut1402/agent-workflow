@@ -17,14 +17,12 @@ export class KnowledgeBusiness extends AbstractBusiness {
 }
 
 export { getKnowledgeDriver, loadKnowledgeConfig } from './knowledgeDriverRegistry.js'
-export type { KnowledgeDriver } from './KnowledgeDriver.js'
 export {
   listKnowledge,
   listKnowledgeWithTags,
   listKnowledgeTags,
   loadKnowledgeBundle,
 } from './knowledgeEntries.js'
-export type { KnowledgeBundleItem } from '../schemas/knowledge.js'
 export { KnowledgeDbError, knowledgeRoot } from './knowledgeDb.js'
 export { migrateKnowledgeToSqlite } from './collectionsYaml.js'
 export {
