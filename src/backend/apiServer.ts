@@ -5,7 +5,13 @@ import { HTTPException } from 'hono/http-exception'
 import type { HonoEnv, RegistryContext } from './http/types.js'
 import { j, json } from './http/responseHelper.js'
 import { dirnameFromImportMeta, resolvePath } from './lib/fileHelper.js'
-import { loadModulesUnder } from './lib/dirModuleLoader.js'
+import { loadEntriesUnder } from './lib/dirModuleLoader.js'
+import {
+  controllerOrder,
+  isControllerClass,
+  registerController,
+  registerMethodNotAllowed,
+} from './http/registerControllers.js'
 import { appendRequestLog } from './log/store.js'
 import { installEventLogSubscriber } from './log/eventLogSubscriber.js'
 import { initLogDriverFromPrefs } from './log/driverInit.js'
@@ -29,25 +35,50 @@ type FeatureApiModule = {
 
 const featuresRoot = resolvePath(dirnameFromImportMeta(import.meta.url), '../features')
 
-/** Đăng ký route từ mọi feature `api.ts`, sắp theo `routeOrder` (mặc định 100). */
+/**
+ * Đăng ký route của mọi feature, hai kiểu chạy song song tới khi feature cuối chuyển xong:
+ * - kiểu cũ: `api.ts` export `registerRoutes` + `routeOrder` (mặc định 100);
+ * - kiểu mới: class `@Controller({ order })` export từ `controller.ts` / `controllers/*.ts`.
+ * Sắp chung theo order; cùng order giữ thứ tự nạp (thư mục feature, rồi api → controller).
+ * 405 cho path đã khai bằng decorator gắn sau cùng.
+ */
 export async function registerFeatureRoutes(app: Hono<HonoEnv>): Promise<void> {
-  const mods = await loadModulesUnder<FeatureApiModule>(featuresRoot, { entryFile: 'api.ts' })
-  if (!mods.length) {
-    throw new Error(`registerFeatureRoutes: no features/<name>/api.ts under ${featuresRoot}`)
-  }
+  const entries = await loadEntriesUnder<Record<string, unknown>>(featuresRoot, {
+    entryFiles: ['api.ts', 'controller.ts'],
+    entryDirs: ['controllers'],
+  })
 
-  const loaded = mods
-    .filter(
-      (m): m is FeatureApiModule & { registerRoutes: (app: Hono<HonoEnv>) => void } =>
-        typeof m.registerRoutes === 'function',
-    )
-    .map((m) => ({
-      order: typeof m.routeOrder === 'number' ? m.routeOrder : 100,
-      register: m.registerRoutes,
-    }))
+  const loaded: { order: number; register: (app: Hono<HonoEnv>) => void }[] = []
+  const seen = new Set<unknown>()
+  const declaredPaths: string[] = []
+  for (const { file, mod } of entries) {
+    if (file === 'api.ts') {
+      const api = mod as FeatureApiModule
+      if (typeof api.registerRoutes !== 'function') continue
+      loaded.push({
+        order: typeof api.routeOrder === 'number' ? api.routeOrder : 100,
+        register: api.registerRoutes,
+      })
+      continue
+    }
+    for (const value of Object.values(mod)) {
+      if (!isControllerClass(value) || seen.has(value)) continue
+      seen.add(value)
+      loaded.push({
+        order: controllerOrder(value),
+        register: (a) => declaredPaths.push(...registerController(a, value)),
+      })
+    }
+  }
+  if (!loaded.length) {
+    throw new Error(`registerFeatureRoutes: no features/<name>/{api.ts,controller.ts} under ${featuresRoot}`)
+  }
 
   loaded.sort((a, b) => a.order - b.order)
   for (const item of loaded) item.register(app)
+  // 405 của controller kiểu mới gắn sau route của MỌI feature — `app.all` viết tay ở `api.ts`
+  // kiểu cũ vẫn nằm ngay sau route của feature đó.
+  registerMethodNotAllowed(app, declaredPaths)
 }
 
 export async function createApp(ctx: RegistryContext): Promise<Hono<HonoEnv>> {

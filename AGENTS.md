@@ -170,8 +170,9 @@ Chốt ngay trong `design.md` những gì Review sẽ kiểm — sai ở đây t
 
 Quy ước: [`feature-architecture-guideline.md`](docs/agent-rules/feature-architecture-guideline.md). Nguyên tắc vị trí code & coupling: checklist Review › **Kiến trúc**.
 
-- [ ] **Tạo `src/features/<name>/`** — `api.ts`, `controller.ts`, `business/`, và (tuỳ) `components`, `composables`, `scripts`, `styles/index.scss`, `schemas/`; chuỗi UI khai ở `src/shared/locales/<locale>/<namespace>.yaml`.
-- [ ] **Kế thừa abstract** — controller `extends AbstractController`; business `extends AbstractBusiness`.
+- [ ] **Tạo `src/features/<name>/`** — `controller.ts` (feature lớn: `controllers/<resource>.ts`), `business/`, và (tuỳ) `components`, `composables`, `scripts`, `styles/index.scss`, `schemas/`; chuỗi UI khai ở `src/shared/locales/<locale>/<namespace>.yaml`. 🚫 `api.ts` cho feature mới.
+- [ ] **Controller kiểu decorator** — `@Controller({ order, inject })` + `@Get/@Post/@Put/@Patch/@Delete(path, XRequest)`, `extends AbstractHttpController`; request validate qua `XRequest extends FormRequest` khai trong controller ([`feature-architecture-guideline.md`](docs/agent-rules/feature-architecture-guideline.md) §2.5).
+- [ ] **Kế thừa abstract** — business `extends AbstractBusiness`; controller kiểu cũ (`api.ts` + `bind()`) `extends AbstractController` — chỉ còn ở feature chưa chuyển.
 - [ ] **Chạy `bun run typecheck` + `bun run build`** — khi đụng cả FE và Node.
 - [ ] **Thêm mode ở FE shell** — theo checklist **Thêm mode mới ở FE shell** dưới đây.
 
@@ -251,8 +252,8 @@ Dùng khi review PR đụng `src/features/*`, `src/backend/**`, `src/frontend/**
 <summary><b>Kiến trúc — vị trí code & coupling</b></summary>
 
 - [ ] **Đặt đúng feature** — thay đổi domain nằm đúng feature; không vá logic domain vào feature khác hoặc vào `core`.
-- [ ] **Kiểm soát route** — mới/sửa chỉ ở `features/<f>/api.ts` + `controller.ts`; controller không đọc/ghi filesystem phức tạp.
-- [ ] **Đặt đúng schema domain** — ở `features/<f>/schemas/`; không nhét schema shell vào feature, không đẩy schema domain vào `src/frontend/configs`.
+- [ ] **Kiểm soát route** — mới/sửa chỉ ở `features/<f>/controller.ts` (decorator; feature chưa chuyển: `api.ts` + `controller.ts`); controller không đọc/ghi filesystem phức tạp; không viết tay `app.all` → 405 cho controller decorator (loader tự sinh).
+- [ ] **Đặt đúng schema domain** — DTO request/response chỉ controller dùng → `controller.ts` (FormRequest); shape FE · feature khác · `mcp/` dùng lúc chạy → `features/<f>/schemas/`; không nhét schema shell vào feature, không đẩy schema domain vào `src/frontend/configs`.
 - [ ] **Chuẩn hoá UI string & FE API** — string qua i18n (`src/shared/locales/`); gọi API qua `scripts/*Api.ts` + `apiGet` / `apiPost`.
 - [ ] **Không wiring thủ công** — không thêm tay nếu glob/auto-load đã đủ (route / `apiServer` registry / styles / locales / `registerMode`).
 - [ ] **Đặt style đúng tầng** — 1 component render selector gốc → `<style scoped>`; ≥2 cùng feature → `features/<f>/styles/`; xuyên feature → `src/frontend/styles/`. Không thêm file `styles/*.scss` chỉ-comment.
@@ -262,6 +263,7 @@ Dùng khi review PR đụng `src/features/*`, `src/backend/**`, `src/frontend/**
 - [ ] **Chia file theo abstraction ↔ hiện thực** — trong `business/` / `mcp/`: một abstraction một file, một hiện thực một file; abstraction không chứa chi tiết (env var, path, tên nhà cung cấp); không gom interface vào `types.ts` chung.
 - [ ] **Module không có abstraction thì gom theo nghiệp vụ** — không tách file theo kiểu thao tác (`store` / `fetch` / `paths` / `scan` mỏng).
 - [ ] **Không phụ thuộc Hono** — `business/` không import Hono, không phụ thuộc `c.req`.
+- [ ] **FE · `mcp/` chỉ `import type` từ controller** — FE cũng chỉ `import type` từ `business/`; `business/` không import controller. Lint `@typescript-eslint/no-restricted-imports` chặn.
 - [ ] **Ranh giới `src/backend` ⟂ `src/frontend` ⟂ `src/shared` giữ nguyên** — lint chặn, không whitelist; chi tiết ở `src/{backend,frontend,shared}/README.md`.
 - [ ] **ESM thuần, không import tĩnh `bun:*` trên đường nạp `vite.config.ts`** — [`coding-guideline.md`](docs/agent-rules/coding-guideline.md) §1.
 - [ ] **Import peer qua index** — chỉ `business/index.ts` import cây `business` của feature khác.
