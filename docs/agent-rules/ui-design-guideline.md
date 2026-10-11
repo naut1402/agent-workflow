@@ -196,7 +196,7 @@ Feature chỉ viết phần thân: nội dung vào slot mặc định (nằm tro
 | Slot `head` | Phần phụ trên header, đứng giữa tiêu đề và nút ✕ (vd bộ đếm bước) |
 | Slot `subhead` | Vùng cố định giữa header và body, không cuộn (stepper, lỗi của cả form) |
 | Slot `footer` | Hàng nút — nằm ngoài vùng cuộn và ngoài overlay |
-| `loading` · `loadingLabel` | Cờ `pending` của `useApiAction` |
+| `loading` · `loadingLabel` | Cờ `pending` của `useApiAction` — đóng dialog thì request đang chạy bị huỷ (§3.4) |
 | `closeOnEscape` | `false` khi một lớp phủ không phải `CDialog` (picker, popover) đang mở và tự nghe `Escape` |
 | `closeDisabled` | Chặn cả ba đường đóng trong lúc action chưa xong |
 | `width` · `height` · `minHeight` · `maxHeight` | Giá trị CSS, ghi đè kích thước mặc định của `.modal` |
@@ -210,3 +210,32 @@ Feature chỉ viết phần thân: nội dung vào slot mặc định (nằm tro
 - **Layout phần thân thì bọc một lớp.** `.modal-body` cũng thuộc `CDialog`, nên `.modal-body { gap: … }` trong style của feature không khớp. Cần `gap` riêng thì đặt một `div` (vd `.knowledge-tag-body`) làm con của slot mặc định, và **không** khai `overflow` cho nó — vùng cuộn vẫn chỉ là `.modal-body` (§2.1 mục 4).
 - **Dialog lồng nhau không cần cờ chặn `Escape`.** `CDialog` giữ một stack theo thứ tự mount (`useDialogStack`), chỉ dialog trên cùng nhận `Escape`. Phím `Escape` đã bị control con `preventDefault` (vd `CSelect` đóng menu) thì dialog bỏ qua.
 - **Thứ tự chồng theo DOM.** Mọi `CDialog` teleport ra cuối `body` lúc mount nên dialog mở sau tự nằm trên; không thêm `z-index` riêng (`.nested-backdrop`).
+
+### 3.4 Huỷ request khi đóng dialog
+
+`useApiAction` / `useKeyedApiAction` (`src/frontend/composables/useApiAction.ts`) tạo một `AbortController` cho mỗi lượt `run` và đưa `signal` cho callback. Dialog đóng là component unmount → scope dispose → request đang chạy bị huỷ thật, không chỉ nhả cờ `pending`.
+
+```ts
+const { pending: saving, run: runSave } = useApiAction()
+
+await runSave(async (signal) => {
+  try {
+    await saveThing(payload, { signal })   // *Api.ts chuyển tiếp xuống ApiRequestOptions.signal
+  } catch (e) {
+    if (isAbortError(e)) return            // người dùng tự huỷ — không hiện lỗi
+    error.value = String(e.message || e)
+  }
+})
+```
+
+| Thành phần | Hành vi |
+|---|---|
+| `ApiRequestOptions.signal` (`src/frontend/http/client.ts`) | Chuyển xuống `fetch`. Signal đã huỷ thì `apiRequest` reject `AbortError` — kể cả khi huỷ lúc đang đọc body — và không ghi log `[api] … failed`. `apiGetText` nhận `signal` ở tham số thứ ba |
+| `isAbortError(err)` (`src/frontend/http/client.ts`) | `true` khi `err.name === 'AbortError'` — tách lỗi huỷ khỏi lỗi thật ở call site |
+| Callback của `run` | Tham số `signal` là tuỳ chọn: callback cũ `async () => …` vẫn chạy, chỉ là request của nó không bị huỷ |
+| `abort()` | Huỷ lượt đang chạy và nhả `pending` ngay; lượt `run` kế tiếp chạy được luôn. Unmount gọi đúng hàm này |
+| Lượt bị huỷ | `run` trả `undefined` như lượt bị bỏ qua, nếu callback để `AbortError` nổi lên. Lỗi khác vẫn nổi nguyên vẹn |
+
+- **Truyền `signal` tới tận `*Api.ts`** — hàm trong `scripts/*Api.ts` nhận `signal` trong options rồi đặt vào `ApiRequestOptions`; call site chưa truyền thì hành vi như trước.
+- **Huỷ chỉ dừng phía trình duyệt.** Request đã tới server có thể vẫn được xử lý và persist; sau khi huỷ, đừng giả định server không đổi gì.
+- **Không hiện lỗi cho lượt người dùng tự huỷ** — chặn bằng `isAbortError` trong `catch`, không so chuỗi thông điệp.
