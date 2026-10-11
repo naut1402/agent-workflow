@@ -5,9 +5,9 @@ import os from 'node:os'
 import path from 'node:path'
 import {
   buildConsoleInvocation,
-  createConsoleCommandProvider,
+  ConsoleCommandProvider,
   splitCommandArgs,
-} from '../../../../../src/features/runner/business/providers/console-command.js'
+} from '../../../../../src/features/runner/business/providers/ConsoleCommandProvider.js'
 import type { CredentialProfile, ResolvedAgent } from '../../../../../src/features/runner/business/types.js'
 
 const credential: CredentialProfile = {
@@ -66,14 +66,14 @@ describe('buildConsoleInvocation', () => {
   })
 })
 
-describe('createConsoleCommandProvider', () => {
+describe('ConsoleCommandProvider', () => {
   test('spawns plain argv and ignores agent system prompt / allowedTools', async () => {
     const home = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-console-'))
     const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-workspace-'))
     try {
       const { cliPath, flags: cliFlags } = nodeCli(['echo-args'])
       const logPath = makeLogPath(home)
-      const provider = createConsoleCommandProvider()
+      const provider = new ConsoleCommandProvider()
 
       const result = await provider.execute(
         {
@@ -115,7 +115,7 @@ describe('createConsoleCommandProvider', () => {
     const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-workspace-'))
     try {
       const { cliPath, flags } = nodeCli(['hang'])
-      const provider = createConsoleCommandProvider()
+      const provider = new ConsoleCommandProvider()
 
       const result = await provider.execute(
         {
@@ -146,7 +146,7 @@ describe('createConsoleCommandProvider', () => {
     const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'dtd-workspace-'))
     try {
       const { cliPath, flags } = nodeCli(['ok'])
-      const provider = createConsoleCommandProvider()
+      const provider = new ConsoleCommandProvider()
       const result = await provider.execute(
         {
           jobId: 'job-console-2',

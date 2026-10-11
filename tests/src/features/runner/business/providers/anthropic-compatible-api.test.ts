@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { AnthropicCompatibleProvider } from '../../../../../../src/features/runner/business/providers/anthropic-compatible-api.js'
+import { AnthropicCompatibleProvider } from '../../../../../../src/features/runner/business/providers/AnthropicCompatibleProvider.js'
 import type { CredentialProfile, ExecuteRequest } from '../../../../../../src/features/runner/business/types.js'
 
 const originalFetch = globalThis.fetch

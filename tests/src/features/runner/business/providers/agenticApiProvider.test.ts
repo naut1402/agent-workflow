@@ -8,7 +8,8 @@ import {
   AgenticRunError,
   type AgenticRunContext,
   type AgenticRunResult,
-} from '../../../../../../src/features/runner/business/providers/agenticApiProvider.js'
+} from '../../../../../../src/features/runner/business/providers/AgenticApiProvider.js'
+import * as workspaceTools from '../../../../../../src/features/runner/business/providers/agenticWorkspaceTools.js'
 import { readTranscriptTurns, loadSessionMessages } from '../../../../../../src/features/runner/business/providers/agentTranscriptStore.js'
 import { storeSecret } from '../../../../../../src/features/runner/business/secretVault.js'
 import type { CredentialProfile, ExecuteRequest } from '../../../../../../src/features/runner/business/types.js'
@@ -43,53 +44,53 @@ class FakeAgenticProvider extends AgenticApiProvider {
     return this.runConversationImpl(ctx)
   }
 
-  // Expose the protected sandbox helpers for direct unit testing.
+  // Expose the sandbox helpers (agenticWorkspaceTools) for direct unit testing.
   read(ws: string, p: string) {
-    return this.readWorkspaceFile(ws, p)
+    return workspaceTools.readWorkspaceFile(ws, p)
   }
   write(ws: string, p: string, content: string) {
-    return this.writeWorkspaceFile(ws, p, content)
+    return workspaceTools.writeWorkspaceFile(ws, p, content)
   }
   edit(ws: string, p: string, oldStr: string, newStr: string) {
-    return this.editWorkspaceFile(ws, p, oldStr, newStr)
+    return workspaceTools.editWorkspaceFile(ws, p, oldStr, newStr)
   }
   list(ws: string, p?: string) {
-    return this.listWorkspaceDirectory(ws, p)
+    return workspaceTools.listWorkspaceDirectory(ws, p)
   }
 
-  // Expose the new opt-in extra-tool helpers for direct unit testing.
+  // Expose the opt-in extra-tool helpers (agenticWorkspaceTools) for direct unit testing.
   resolveExtraToolsPublic(runnerConfig: Record<string, any>) {
-    return this.resolveExtraTools(runnerConfig)
+    return workspaceTools.resolveExtraTools(runnerConfig)
   }
   isWebSearchConfiguredPublic() {
-    return this.isWebSearchConfigured()
+    return workspaceTools.isWebSearchConfigured()
   }
   preamble(tools: string[]) {
-    return this.buildToolUsagePreamble(tools)
+    return workspaceTools.buildToolUsagePreamble(tools)
   }
   projectContextPreamble(req: ExecuteRequest) {
-    return this.buildProjectContextPreamble(req)
+    return workspaceTools.buildProjectContextPreamble(req)
   }
   runCmd(ws: string, command: string, args: string[]) {
-    return this.runShellCommand(ws, command, args)
+    return workspaceTools.runShellCommand(ws, command, args)
   }
   gitStatusPublic(ws: string) {
-    return this.gitStatus(ws)
+    return workspaceTools.gitStatus(ws)
   }
   gitDiffPublic(ws: string, p?: string, staged?: boolean) {
-    return this.gitDiff(ws, p, staged)
+    return workspaceTools.gitDiff(ws, p, staged)
   }
   gitLogPublic(ws: string, limit?: number) {
-    return this.gitLog(ws, limit)
+    return workspaceTools.gitLog(ws, limit)
   }
   searchFilesPublic(ws: string, pattern: string, p?: string) {
-    return this.searchFiles(ws, pattern, p)
+    return workspaceTools.searchFiles(ws, pattern, p)
   }
   webSearchPublic(query: string) {
-    return this.webSearch(query)
+    return workspaceTools.webSearch(query)
   }
   fetchUrlPublic(url: string) {
-    return this.fetchUrl(url)
+    return workspaceTools.fetchUrl(url)
   }
 }
 
@@ -1062,7 +1063,7 @@ const mcpToolBridge = new ToolBridgeMcpDelivery(new RunnerCredentialResolver())
 class PreambleProvider extends FakeAgenticProvider {
   /** Bản 2 tham số — `preamble()` sẵn có chỉ phơi bản 1 tham số. */
   preambleWithMcp(tools: string[], mcpTools: McpBridgeTool[]) {
-    return this.buildToolUsagePreamble(tools, mcpTools)
+    return workspaceTools.buildToolUsagePreamble(tools, mcpTools)
   }
 }
 

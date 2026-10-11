@@ -2,13 +2,15 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { buildClaudeInvocation } from '../../../../src/features/runner/business/providers/claude-code-cli.js'
+import { buildClaudeInvocation } from '../../../../src/features/runner/business/providers/ClaudeCliProvider.js'
 import {
   buildCursorJsonArgs,
   buildCursorJsonInvocation,
+  parseCursorJsonOutput,
+} from '../../../../src/features/runner/business/providers/CursorCliProvider.js'
+import {
   getUsageCursor,
   mintSessionId,
-  parseCursorJsonOutput,
   prepareSessionInvocation,
   saveTaskSessionLedger,
   setUsageCursor,
