@@ -97,6 +97,28 @@ export function providerFamilyFromId(providerId: string): ProviderFamily {
   return 'console-command'
 }
 
+/** Giá trị bù cho các trường bắt buộc của `RegisteredProvider` mà provider bỏ trống. */
+function requiredFieldDefaults(input: RunnerProvider, base: RegisteredProvider | undefined): Partial<RegisteredProvider> {
+  const defaults: Partial<RegisteredProvider> = {}
+  if (input.family === undefined) defaults.family = base?.family ?? providerFamilyFromId(input.providerId)
+  if (input.acceptsAgent === undefined) defaults.acceptsAgent = base?.acceptsAgent ?? true
+  if (input.mcpDelivery === undefined) defaults.mcpDelivery = new NoMcpDelivery()
+  return defaults
+}
+
+/** Trường tuỳ chọn mượn từ bản dựng sẵn cùng id (provider khác object với bản dựng sẵn). */
+function builtinFieldDefaults(input: RunnerProvider, base: RegisteredProvider): Partial<RegisteredProvider> {
+  const defaults: Partial<RegisteredProvider> = {}
+  if (input.transcriptFormat === undefined && base.transcriptFormat) defaults.transcriptFormat = base.transcriptFormat
+  if (input.catalog === undefined && base.catalog) defaults.catalog = base.catalog
+  if (!input.captureUsage && base.captureUsage) defaults.captureUsage = base.captureUsage.bind(base)
+  // Chỉ danh sách tĩnh: provider API thay thế phải tự gọi được endpoint của nó.
+  if (!input.listModels && base.listModels && base.catalog?.modelListing === 'static') {
+    defaults.listModels = base.listModels.bind(base)
+  }
+  return defaults
+}
+
 /**
  * Bù trường provider không khai. Ưu tiên bản dựng sẵn cùng id (stub test thay
  * `claude-code-cli` vẫn được ghi usage transcript, liệt kê model tĩnh như
@@ -109,19 +131,8 @@ export function providerFamilyFromId(providerId: string): ProviderFamily {
  */
 function withDefaults(input: RunnerProvider): RegisteredProvider {
   const base = builtins.get(input.providerId)
-  const defaults: Partial<RegisteredProvider> = {}
-  if (input.family === undefined) defaults.family = base?.family ?? providerFamilyFromId(input.providerId)
-  if (input.acceptsAgent === undefined) defaults.acceptsAgent = base?.acceptsAgent ?? true
-  if (input.mcpDelivery === undefined) defaults.mcpDelivery = new NoMcpDelivery()
-  if (base && base !== input) {
-    if (input.transcriptFormat === undefined && base.transcriptFormat) defaults.transcriptFormat = base.transcriptFormat
-    if (input.catalog === undefined && base.catalog) defaults.catalog = base.catalog
-    if (!input.captureUsage && base.captureUsage) defaults.captureUsage = base.captureUsage.bind(base)
-    // Chỉ danh sách tĩnh: provider API thay thế phải tự gọi được endpoint của nó.
-    if (!input.listModels && base.listModels && base.catalog?.modelListing === 'static') {
-      defaults.listModels = base.listModels.bind(base)
-    }
-  }
+  const defaults = requiredFieldDefaults(input, base)
+  if (base && base !== input) Object.assign(defaults, builtinFieldDefaults(input, base))
   if (!Object.keys(defaults).length) return input as RegisteredProvider
   return new Proxy(input, {
     get(target, prop) {

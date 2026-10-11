@@ -291,6 +291,29 @@ export function gitLog(workspace: string, limit = 20): ProcessResult | SandboxEr
   return runGit(workspace, ['log', `--max-count=${clamped}`, '--oneline'])
 }
 
+interface SearchMatch {
+  file: string
+  line: number
+  text: string
+}
+
+/** Đẩy các dòng chứa `pattern` của một file vào `matches`, dừng khi chạm `SEARCH_MAX_MATCHES`. File không đọc được / nhị phân ⇒ bỏ qua. */
+function collectFileMatches(workspace: string, file: string, pattern: string, matches: SearchMatch[]): void {
+  let content: string
+  try {
+    content = readTextFileSync(file)
+  } catch {
+    return
+  }
+  if (isLikelyBinary(content)) return
+  const lines = content.split('\n')
+  for (let i = 0; i < lines.length; i++) {
+    if (!lines[i].includes(pattern)) continue
+    matches.push({ file: relativePath(workspace, file), line: i + 1, text: truncate(lines[i], 200) })
+    if (matches.length >= SEARCH_MAX_MATCHES) return
+  }
+}
+
 /** `search_files` — substring literal (not regex, avoids ReDoS from model-controlled input), capped result count. */
 export function searchFiles(
   workspace: string,
@@ -302,22 +325,9 @@ export function searchFiles(
   if (!pattern) return { ok: false, error: 'pattern is required' }
   const files: string[] = []
   collectTextFiles(root, files)
-  const matches: Array<{ file: string; line: number; text: string }> = []
+  const matches: SearchMatch[] = []
   for (const file of files) {
-    let content: string
-    try {
-      content = readTextFileSync(file)
-    } catch {
-      continue
-    }
-    if (isLikelyBinary(content)) continue
-    const lines = content.split('\n')
-    for (let i = 0; i < lines.length; i++) {
-      if (lines[i].includes(pattern)) {
-        matches.push({ file: relativePath(workspace, file), line: i + 1, text: truncate(lines[i], 200) })
-        if (matches.length >= SEARCH_MAX_MATCHES) break
-      }
-    }
+    collectFileMatches(workspace, file, pattern, matches)
     if (matches.length >= SEARCH_MAX_MATCHES) break
   }
   return { ok: true, matches, truncated: matches.length >= SEARCH_MAX_MATCHES }

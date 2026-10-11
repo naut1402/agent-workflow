@@ -49,9 +49,14 @@ Cấp **Code** của [`../README.md`](../README.md) §4 cho feature `src/feature
 | `AbstractAgentCliProvider.ts` | Template method cho Agent CLI — hiện thực chỉ khai `buildInvocation` |
 | `ClaudeCliProvider.ts` · `CursorCliProvider.ts` · `CodexCliProvider.ts` | Hiện thực Agent CLI |
 | `ConsoleCommandProvider.ts` | Lệnh shell, `acceptsAgent: false`, mang `NoMcpDelivery` |
+| `cliProcess.ts` | Spawn tiến trình con + dựng thông điệp lỗi — Agent CLI và console dùng chung |
+| `providerJobReport.ts` | Ghi log job: header từ metadata, nhãn agent, footer kết quả, dò artifact — cả ba họ provider |
 | `AgenticApiProvider.ts` (+ `agenticWorkspaceTools.ts`) | Vòng tool-use chung cho họ `ai-api` |
+| `AbstractCompatibleApiProvider.ts` | Lớp cha của hai hiện thực API: constructor + catalog, `listModels`, timeout, toolset + system prompt |
 | `AnthropicCompatibleProvider.ts` · `OpenAiCompatibleProvider.ts` | Hiện thực API theo giao thức |
 | `agentTranscriptStore.ts` | Transcript runner tự ghi cho họ `ai-api`; đọc lại bằng `agentTranscriptFile()` |
+
+Ngoài `providers/`: `jobRecords.ts` giữ đọc/ghi `JobRecord` (`loadJob` · `saveJob` · `mergeJobUsage` · `stepIdOf`) — `jobQueue.ts` và `usageCapture.ts` cùng dùng, nên hai file không import vòng nhau.
 
 - **Thêm provider** = một file hiện thực + một dòng `builtin(...)` trong `providerRegistry.ts`; FE đọc nhãn, kind, lệnh CLI từ `ProviderDescriptor` trong catalog.
 - **Hook tuỳ chọn** — `listModels` (danh sách model), `captureUsage` (usage từ nguồn riêng, vd transcript CLI), `complete` (một lượt hỏi-đáp ngoài job, chỉ provider API), `transcriptFormat`.

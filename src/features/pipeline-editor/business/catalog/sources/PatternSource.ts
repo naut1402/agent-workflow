@@ -147,18 +147,28 @@ export async function resolveSkillPathByPatterns(
 ): Promise<string | null> {
   const { includeContractSkills = true } = opts
   for (const match of await expandScanPatterns(projectRoot, patterns)) {
-    if (match.isDirectory) {
-      for (const entry of await safeReadDir(match.path)) {
-        if (!entry.isDirectory()) continue
-        const skillMd = joinPath(match.path, entry.name, 'SKILL.md')
-        const item = await readSkillFile(skillMd, includeContractSkills)
-        if (item?.name === name) return skillMd
-      }
-      continue
-    }
-    if (!PATTERN_MD_EXT.test(match.path)) continue
-    const item = await readSkillFile(match.path, includeContractSkills)
-    if (item?.name === name) return match.path
+    const found = match.isDirectory
+      ? await findSkillInFolder(match.path, name, includeContractSkills)
+      : await matchSkillFile(match.path, name, includeContractSkills)
+    if (found) return found
   }
   return null
+}
+
+/** Directory match: folder of skill subfolders, each `SKILL.md` named by its frontmatter. */
+async function findSkillInFolder(dir: string, name: string, includeContractSkills: boolean): Promise<string | null> {
+  for (const entry of await safeReadDir(dir)) {
+    if (!entry.isDirectory()) continue
+    const skillMd = joinPath(dir, entry.name, 'SKILL.md')
+    const item = await readSkillFile(skillMd, includeContractSkills)
+    if (item?.name === name) return skillMd
+  }
+  return null
+}
+
+/** File match: one markdown matched directly — `file` when it is the skill `name`. */
+async function matchSkillFile(file: string, name: string, includeContractSkills: boolean): Promise<string | null> {
+  if (!PATTERN_MD_EXT.test(file)) return null
+  const item = await readSkillFile(file, includeContractSkills)
+  return item?.name === name ? file : null
 }

@@ -227,9 +227,6 @@ export interface RunnerProvider {
 export type RegisteredProvider = RunnerProvider &
   Required<Pick<RunnerProvider, 'family' | 'acceptsAgent' | 'mcpDelivery'>>
 
-/** Re-export để type usage đi cùng hợp đồng hook `captureUsage`. */
-export type { UsageSnapshot }
-
 /**
  * A chat round resumes the SAME agent's session (`sendTaskFeedback` copies
  * `agentRef` from the parent job), so the agent's instructions are already in

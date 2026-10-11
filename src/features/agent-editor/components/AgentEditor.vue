@@ -177,7 +177,7 @@ async function onSaved(savedName: string) {
   >
     <template #left>
       <!-- class `.agent-editor` giữ nguyên: đây là neo ổn định của 2 spec e2e. -->
-      <div class="agent-editor">
+      <div class="agent-editor flex-col-fill">
         <template v-if="!subSidebarCollapsed">
           <AgentSideMenu
             :agents="agents"
@@ -191,18 +191,18 @@ async function onSaved(savedName: string) {
             @edit="openEditor"
             @delete="removeAgent"
           />
-          <p v-if="error" class="err agent-editor-msg">{{ error }}</p>
-          <p v-if="message" class="ok-msg agent-editor-msg">{{ message }}</p>
+          <p v-if="error" class="err agent-editor-msg panel-msg">{{ error }}</p>
+          <p v-if="message" class="ok-msg agent-editor-msg panel-msg">{{ message }}</p>
         </template>
       </div>
     </template>
 
     <template #main>
-      <div class="agent-main">
+      <div class="agent-main flex-col-fill">
         <!-- Sub-menu thu lại thì cột trái rộng 0 (override bên dưới), nên thông báo phải chuyển sang render ở main. -->
         <template v-if="subSidebarCollapsed">
-          <p v-if="error" class="err agent-editor-msg">{{ error }}</p>
-          <p v-if="message" class="ok-msg agent-editor-msg">{{ message }}</p>
+          <p v-if="error" class="err agent-editor-msg panel-msg">{{ error }}</p>
+          <p v-if="message" class="ok-msg agent-editor-msg panel-msg">{{ message }}</p>
         </template>
         <!-- `with-frontmatter`: agent đọc nguyên file `.md`, nên khối `---` đầu file được tách thành block metadata riêng. -->
         <CMarkdownView
@@ -231,28 +231,13 @@ async function onSaved(savedName: string) {
 </template>
 
 <style scoped lang="scss">
+// Cột flex lấp đầy lấy từ class chung `.flex-col-fill`; ở đây chỉ chặn tràn.
 .agent-editor {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-height: 0;
   overflow: hidden;
 }
 // Thu về 0 chứ không 48px mặc định: dải đó không chứa nút nào, giữ lại là cột xám rỗng vô ích.
 .agent-editor-layout :deep(.c-screen-layout__body--left-collapsed) {
   grid-template-columns: 0 1fr;
-}
-.agent-editor-msg {
-  margin: 0;
-  padding: 8px 10px;
-  font-size: 12px;
-  flex-shrink: 0;
-}
-.agent-main {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-height: 0;
 }
 // Root của component con nhận luôn scope id của cha, nên không cần `:deep`.
 .agent-main > .c-md-view {

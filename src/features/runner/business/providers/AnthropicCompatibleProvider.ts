@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { AbstractCompatibleApiProvider } from './AbstractCompatibleApiProvider.js'
 import {
-  AgenticApiProvider,
   AgenticRunError,
   EMPTY_REPLY_ERROR_MESSAGE,
   EMPTY_REPLY_NUDGE_TEXT,
@@ -11,7 +11,6 @@ import {
 } from './AgenticApiProvider.js'
 import * as workspaceTools from './agenticWorkspaceTools.js'
 import type { TokenUsage } from './RunnerProvider.js'
-import type { McpJobDelivery } from '../mcpDelivery/McpJobDelivery.js'
 import type { McpToolBridge } from '../mcpDelivery/ToolBridgeMcpDelivery.js'
 
 /** Chặn vòng lặp vô hạn khi model liên tục gọi tool. */
@@ -120,6 +119,31 @@ function summarize(input: unknown): string {
   }
 }
 
+/** Một request messages của vòng tool-use — lỗi gói thành `AgenticRunError` mang lịch sử `messages` hiện có. */
+async function createTurnMessage(
+  client: Anthropic,
+  params: Anthropic.Messages.MessageCreateParamsNonStreaming,
+  opts: { signal?: AbortSignal; timeoutMs: number },
+): Promise<Anthropic.Messages.Message> {
+  try {
+    return await client.messages.create(params, { signal: opts.signal })
+  } catch (err: any) {
+    throw new AgenticRunError(
+      `gọi LLM thất bại (có thể do timeout sau ${opts.timeoutMs}ms hoặc response upstream không hợp lệ): ${String(err?.message ?? err)}`,
+      params.messages,
+    )
+  }
+}
+
+/** Usage của lượt cuối cho `AgenticRunResult`. */
+function runUsageOf(response: Anthropic.Messages.Message): AgenticRunResult['usage'] {
+  return {
+    inputTokens: response.usage?.input_tokens,
+    outputTokens: response.usage?.output_tokens,
+    totalTokens: (response.usage?.input_tokens ?? 0) + (response.usage?.output_tokens ?? 0),
+  }
+}
+
 function textOf(content: Anthropic.Messages.ContentBlock[]): string {
   return content
     .filter((b): b is Anthropic.Messages.TextBlock => b.type === 'text')
@@ -135,41 +159,11 @@ function textOf(content: Anthropic.Messages.ContentBlock[]): string {
  * `text_editor`/`list_directory` tool_use block onto the 4 sandboxed file-ops
  * shared with `OpenAiCompatibleProvider` via the `AgenticApiProvider` base.
  */
-export class AnthropicCompatibleProvider extends AgenticApiProvider {
-  readonly providerId: string
-  private readonly defaultBaseURL: string
-
-  /**
-   * @param ui nhãn + gợi ý UI của endpoint này — có thì provider vào catalog
-   *   (`providerRegistry.ts` truyền; test dựng tay có thể bỏ).
-   */
-  constructor(
-    providerId: string,
-    defaultBaseURL: string,
-    mcpDelivery?: McpJobDelivery<McpToolBridge>,
-    ui?: { label: string; modelHint?: string; secretEnvHint?: string },
-  ) {
-    super(mcpDelivery)
-    this.providerId = providerId
-    this.defaultBaseURL = defaultBaseURL
-    if (ui) {
-      this.catalog = {
-        kind: 'ai-provider',
-        label: ui.label,
-        modelListing: 'api',
-        defaultBaseURL,
-        ...(ui.modelHint ? { modelHint: ui.modelHint } : {}),
-        ...(ui.secretEnvHint ? { secretEnvHint: ui.secretEnvHint } : {}),
-      }
-    }
-  }
+export class AnthropicCompatibleProvider extends AbstractCompatibleApiProvider {
 
   async listModels(apiKey: string, baseURL: string): Promise<string[]> {
     const client = new Anthropic({ apiKey, baseURL: baseURL || this.defaultBaseURL })
-    const page = await client.models.list()
-    const ids: string[] = []
-    for await (const m of page) ids.push(m.id)
-    return ids.sort()
+    return this.sortedModelIds(await client.models.list())
   }
 
   /** Hook một lượt (`complete()`): một request messages, không tool. */
@@ -197,7 +191,7 @@ export class AnthropicCompatibleProvider extends AgenticApiProvider {
   }
 
   protected async runConversation(ctx: AgenticRunContext): Promise<AgenticRunResult> {
-    const timeoutMs = Number(ctx.req.timeoutMs) || Number(ctx.runnerConfig.timeoutMs) || 600_000
+    const timeoutMs = this.requestTimeoutMs(ctx)
     const client = new Anthropic({ apiKey: ctx.apiKey, baseURL: ctx.runnerConfig.baseURL || this.defaultBaseURL, timeout: timeoutMs })
     const model = String(ctx.runnerConfig.model || '')
 
@@ -206,11 +200,7 @@ export class AnthropicCompatibleProvider extends AgenticApiProvider {
       ? [...priorMessages]
       : [{ role: 'user', content: ctx.req.userPrompt }]
 
-    const extraTools = workspaceTools.resolveExtraTools(ctx.runnerConfig)
-    const baseTools = buildTools(extraTools, workspaceTools.isWebSearchConfigured())
-    // `mcpBridge === null` ⇒ `bridgeTools` rỗng ⇒ `tools` và preamble
-    // byte-identical với bản trước khi có bridge.
-    const bridgeTools = ctx.mcpBridge?.tools ?? []
+    const { baseTools, bridgeTools, system } = this.prepareToolset(ctx, buildTools, (t) => t.name)
     const tools: Anthropic.Messages.ToolUnion[] = [
       ...baseTools,
       ...bridgeTools.map((t) => ({
@@ -219,37 +209,22 @@ export class AnthropicCompatibleProvider extends AgenticApiProvider {
         input_schema: t.inputSchema as Anthropic.Messages.Tool.InputSchema,
       })),
     ]
-    const system = [
-      workspaceTools.buildToolUsagePreamble(baseTools.map((t) => t.name), bridgeTools),
-      workspaceTools.buildProjectContextPreamble(ctx.req),
-      ctx.req.resolvedAgent.systemPrompt || '',
-    ]
-      .filter(Boolean)
-      .join('\n\n')
-    ctx.handlers.onSystemPrompt(system)
 
     const toolCalls: AgenticRunResult['toolCalls'] = []
     let hasNudgedEmptyReply = false
 
     for (let turn = 1; turn <= MAX_AGENT_LOOP_TURNS; turn++) {
-      let response: Anthropic.Messages.Message
-      try {
-        response = await client.messages.create(
-          {
-            model,
-            system,
-            max_tokens: 4096,
-            tools,
-            messages,
-          },
-          { signal: ctx.signal },
-        )
-      } catch (err: any) {
-        throw new AgenticRunError(
-          `gọi LLM thất bại (có thể do timeout sau ${timeoutMs}ms hoặc response upstream không hợp lệ): ${String(err?.message ?? err)}`,
+      const response = await createTurnMessage(
+        client,
+        {
+          model,
+          system,
+          max_tokens: 4096,
+          tools,
           messages,
-        )
-      }
+        },
+        { signal: ctx.signal, timeoutMs },
+      )
 
       const toolUseBlocks = response.content.filter(
         (b): b is Anthropic.Messages.ToolUseBlock => b.type === 'tool_use',
@@ -266,11 +241,7 @@ export class AnthropicCompatibleProvider extends AgenticApiProvider {
         if (turnText.trim()) {
           return {
             finalText: turnText,
-            usage: {
-              inputTokens: response.usage?.input_tokens,
-              outputTokens: response.usage?.output_tokens,
-              totalTokens: (response.usage?.input_tokens ?? 0) + (response.usage?.output_tokens ?? 0),
-            },
+            usage: runUsageOf(response),
             toolCalls,
             rawMessages: messages,
           }
@@ -294,28 +265,38 @@ export class AnthropicCompatibleProvider extends AgenticApiProvider {
       }
 
       messages.push({ role: 'assistant', content: response.content })
-      const resultBlocks: Anthropic.Messages.ToolResultBlockParam[] = []
-      for (const block of toolUseBlocks) {
-        const outcome = await this.executeAnthropicTool(block, ctx.workspace, ctx.mcpBridge)
-        const entry = {
-          name: block.name,
-          argsSummary: summarize(block.input),
-          ok: outcome.ok !== false,
-          resultSummary: summarizeResult(outcome),
-        }
-        toolCalls.push(entry)
-        ctx.handlers.onToolCall(entry)
-        resultBlocks.push({
-          type: 'tool_result',
-          tool_use_id: block.id,
-          content: JSON.stringify(outcome),
-          is_error: outcome.ok === false,
-        })
-      }
+      const resultBlocks = await this.runToolUseBlocks(toolUseBlocks, ctx, toolCalls)
       messages.push({ role: 'user', content: resultBlocks })
     }
 
     throw new AgenticRunError(`exceeded ${MAX_AGENT_LOOP_TURNS} agent loop turns`, messages)
+  }
+
+  /** Thi hành lần lượt các `tool_use` của một lượt — ghi `toolCalls`, báo handler, trả block `tool_result`. */
+  private async runToolUseBlocks(
+    toolUseBlocks: Anthropic.Messages.ToolUseBlock[],
+    ctx: AgenticRunContext,
+    toolCalls: AgenticRunResult['toolCalls'],
+  ): Promise<Anthropic.Messages.ToolResultBlockParam[]> {
+    const resultBlocks: Anthropic.Messages.ToolResultBlockParam[] = []
+    for (const block of toolUseBlocks) {
+      const outcome = await this.executeAnthropicTool(block, ctx.workspace, ctx.mcpBridge)
+      const entry = {
+        name: block.name,
+        argsSummary: summarize(block.input),
+        ok: outcome.ok !== false,
+        resultSummary: summarizeResult(outcome),
+      }
+      toolCalls.push(entry)
+      ctx.handlers.onToolCall(entry)
+      resultBlocks.push({
+        type: 'tool_result',
+        tool_use_id: block.id,
+        content: JSON.stringify(outcome),
+        is_error: outcome.ok === false,
+      })
+    }
+    return resultBlocks
   }
 
   /** Map one `tool_use` block to a base-class sandbox op (text_editor command, list_directory, or an opt-in extra tool). */

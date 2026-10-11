@@ -2,6 +2,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { loadYaml, dumpYaml } from '../../backend/lib/yamlLib.js'
 import { AbstractController } from '../../backend/http/AbstractController.js'
+import type { BusinessError } from '../../backend/business/AbstractBusiness.js'
 import { statSafe, writeTextFileAtomicSync } from '../../backend/lib/fileHelper.js'
 import * as pipelineEditorBusiness from './business/index.js'
 import { PipelineEditorBusiness } from './business/PipelineEditorBusiness.js'
@@ -197,39 +198,38 @@ export class PipelineEditorController extends AbstractController {
     return this.ok({ written: true, scope, target })
   }
 
-  private biz() {
-    return new PipelineEditorBusiness(this.root)
+  /** Facade catalog — field có kiểu tĩnh để lời gọi method tham chiếu thẳng tới `PipelineEditorBusiness`. */
+  private readonly business = new PipelineEditorBusiness(this.root)
+
+  /** Map kết quả Facade: `{ status, error }` → JSON lỗi đúng status, còn lại → 200. */
+  private respond(r: object | BusinessError): Response {
+    if ('error' in r) return this.json(r.status, { error: r.error })
+    return this.ok(r)
+  }
+
+  /** Route catalog nhận `?id=`: chặn root thiếu, id thiếu, rồi giao Facade. */
+  private async respondById(load: (id: string) => Promise<object | BusinessError>): Promise<Response> {
+    const gate = this.requireRoot()
+    if ('error' in gate) return gate.error
+
+    const id = this.c.req.query('id')
+    if (!id) return this.badRequest('missing id')
+    return this.respond(await load(id))
   }
 
   async getCatalog() {
     const gate = this.requireRoot()
     if ('error' in gate) return gate.error
 
-    const r = await this.biz().getCatalog()
-    if ('error' in r) return this.json(r.status, { error: r.error })
-    return this.ok(r)
+    return this.respond(await this.business.getCatalog())
   }
 
   async getCatalogAgent() {
-    const gate = this.requireRoot()
-    if ('error' in gate) return gate.error
-
-    const id = this.c.req.query('id')
-    if (!id) return this.badRequest('missing id')
-    const r = await this.biz().getCatalogAgent(id)
-    if ('error' in r) return this.json(r.status, { error: r.error })
-    return this.ok(r)
+    return this.respondById((id) => this.business.getCatalogAgent(id))
   }
 
   async getSkillContent() {
-    const gate = this.requireRoot()
-    if ('error' in gate) return gate.error
-
-    const id = this.c.req.query('id')
-    if (!id) return this.badRequest('missing id')
-    const r = await this.biz().getSkillContent(id)
-    if ('error' in r) return this.json(r.status, { error: r.error })
-    return this.ok(r)
+    return this.respondById((id) => this.business.getSkillContent(id))
   }
 
   async getRules() {

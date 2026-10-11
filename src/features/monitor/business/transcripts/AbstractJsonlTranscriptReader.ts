@@ -39,6 +39,7 @@ export abstract class AbstractJsonlTranscriptReader implements TranscriptReader 
   }
 
   /** Parse an already-located transcript file. Unreadable file → empty result. */
+  // fallow-ignore-next-line unused-class-member -- seam cho test (dòng test/ đọc file transcript dựng sẵn), source chỉ gọi `read`
   readFile(file: string, opts: ReadTranscriptOptions = {}): TranscriptResult {
     return this.parse(file, opts) ?? { turns: [], total: 0 }
   }

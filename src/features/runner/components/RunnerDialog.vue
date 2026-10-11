@@ -265,7 +265,7 @@ function closeConnectionDialog() {
     width="min(520px, 94vw)"
     @close="emit('close')"
   >
-    <div v-if="error" class="err-banner">{{ error }}</div>
+    <div v-if="error" class="err-banner banner-danger">{{ error }}</div>
     <div v-if="message" class="ok-banner">{{ message }}</div>
 
     <div class="field">
@@ -435,14 +435,6 @@ function closeConnectionDialog() {
   padding-top: 1rem;
 }
 .spacer { flex: 1; }
-.err-banner {
-  background: rgba(248, 81, 73, 0.12);
-  border: 1px solid var(--danger);
-  color: var(--danger);
-  padding: 0.5rem;
-  border-radius: 6px;
-  margin-bottom: 0.75rem;
-}
 .ok-banner {
   background: rgba(63, 185, 80, 0.12);
   border: 1px solid var(--done);

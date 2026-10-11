@@ -125,10 +125,10 @@ export async function buildCatalog(
 
 /** Pure parser for the `<source>:<name>` id shape, shared by agents and skills. */
 export function parseCatalogItemId(id: unknown): { source: string; name: string } | null {
-  if (typeof id !== 'string' || !id.includes(':')) return null
-  const i = id.lastIndexOf(':')
-  if (i <= 0) return null
-  return { source: id.slice(0, i), name: id.slice(i + 1) }
+  if (typeof id !== 'string') return null
+  // `:` cuối cùng tách name; không có `:` (-1) hoặc `:` đứng đầu (0) đều không có source.
+  const sep = id.lastIndexOf(':')
+  return sep > 0 ? { source: id.slice(0, sep), name: id.slice(sep + 1) } : null
 }
 
 /** Chuỗi resolve: hỏi lần lượt các nguồn sở hữu `source`, nguồn đầu tiên trả path thắng. */

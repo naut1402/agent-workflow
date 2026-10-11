@@ -335,6 +335,8 @@ export async function applyHitlAction(
       // import above goes through `../peers.js`).
       const feedback = patch.feedback.trim()
       const stepId = currentStep.id
+      // Import lười có chủ đích (xem comment trên) — Fallow vẫn tính là cạnh vòng monitor ⇄ runner.
+      // fallow-ignore-next-line circular-dependency
       void import('../index.js')
         .then(({ sendTaskFeedback }) =>
           // `source: 'gate'` để nếu phản hồi này phải xếp hàng (step còn job đang

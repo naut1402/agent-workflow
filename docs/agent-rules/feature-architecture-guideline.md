@@ -147,7 +147,7 @@ Thứ tự quyết định:
 | Thao tác kiểu dữ liệu thuần | `*Utils` | `stringUtils`, `arrayUtils`, `dateUtils` |
 | Biên thư viện bên thứ ba | `*Lib` | `yamlLib`, `markdownLib`, `diffLib` |
 | Filesystem / path / URL file (Node) | `fileHelper` | `joinPath`, `readTextFile`, `pathToFileURL` |
-| Quét thư mục + dynamic `import` | `dirModuleLoader` | `loadModulesUnder`, `loadEntriesUnder` |
+| Quét thư mục + dynamic `import` | `dirModuleLoader` | `loadEntriesUnder` |
 
 - **`parseFrontmatter` / `readYamlSafe` nằm ở `yamlLib`.**
 - **Module dùng chung FE+BE không top-level import `node:*`** (Vite bundle) — I/O Node để `fileHelper` hoặc dynamic import có chủ đích.
@@ -190,7 +190,7 @@ Tiêu chí **duy nhất** chọn nơi đặt style là **bao nhiêu component re
 - **Kích thước file không phải lý do tách** — 300 dòng `<style scoped>` cạnh template vẫn dễ định vị hơn 300 dòng ở file rời.
 - **Đếm theo compound CUỐI của selector, không phải tổ tiên** — `scoped` gắn `[data-v-…]` vào compound cuối. Rule *bắc cầu* (tổ tiên ở SFC này, đích ở SFC khác) tính là **≥2 component**.
 - **Giữ đúng thứ tự nạp cũ khi gộp nhiều file** vào một `<style scoped>` — rule cùng specificity dựa vào source order để thắng.
-- **Giữ global, không scope hoá**: `src/frontend/styles/_tokens.scss` (`:root` vars), `_shell.scss`, `_scrollbar.scss`.
+- **Giữ global, không scope hoá**: `src/frontend/styles/_tokens.scss` (`:root` vars), `_shell.scss`, `_scrollbar.scss`, `_patterns.scss` (khối khai báo dùng chung xuyên feature: `.banner-danger`, `.label-with-hint`, `.flex-col-fill`, `.panel-msg`, nạp sau `_shell.scss`).
 
 Không làm:
 
