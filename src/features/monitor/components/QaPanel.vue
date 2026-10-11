@@ -122,7 +122,6 @@ async function onSubmit() {
 const {
   editingSection,
   sectionDraft,
-  saving,
   editTextarea,
   startEdit,
   cancelEdit,
