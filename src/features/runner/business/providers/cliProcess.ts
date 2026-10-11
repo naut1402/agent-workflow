@@ -1,10 +1,5 @@
 import { spawn } from '../../../../backend/lib/processHelper.js'
 
-/**
- * Tiến trình con cục bộ của provider chạy lệnh (Agent CLI, console command):
- * spawn, gom stdout/stderr, timeout và dựng thông điệp lỗi.
- */
-
 export interface ProcResult {
   exitCode: number | null
   stdout: string
@@ -20,14 +15,8 @@ export interface RunCliProcessOptions {
   stdin: 'pipe' | 'ignore'
   onLog?: (chunk: string) => void
   onStart?: (info: { pid: number | null }) => void
-  /** When set, written to the child's stdin (then stdin is closed) instead of
-   * being passed as an argv element. Required for the claude headless prompt:
-   * on Windows we must spawn with `shell: true` (to run the `claude.cmd` shim,
-   * see CVE-2024-27980), but Node does NOT quote argv elements under
-   * `shell: true` on Windows — it space-joins them for cmd.exe, so a
-   * multi-line/whitespace prompt in argv gets split and `claude -p` only
-   * receives the first token. Piping the prompt via stdin sidesteps quoting
-   * entirely (`cat prompt | claude -p`). */
+  // xem docs/architecture/code/runner.md §14
+  /** Written to the child's stdin (then stdin is closed) instead of being passed in argv. */
   stdinInput?: string
 }
 
@@ -36,8 +25,7 @@ export function runCliProcess(cliPath: string, args: string[], options: RunCliPr
     const child = spawn(cliPath, args, {
       cwd: options.cwd,
       env: options.env,
-      // win32: shell:true runs the .cmd shim; child.pid is cmd.exe — cancel must
-      // use taskkill /T to kill the whole tree (see jobQueue cancelJob).
+      // xem docs/architecture/code/runner.md §15
       shell: process.platform === 'win32',
       stdio: [options.stdin, 'pipe', 'pipe'],
     })
@@ -45,9 +33,6 @@ export function runCliProcess(cliPath: string, args: string[], options: RunCliPr
     options.onStart?.({ pid: child.pid ?? null })
 
     if (options.stdinInput != null && child.stdin) {
-      // Guard against EPIPE / write-after-end (e.g. the CLI exits before
-      // draining stdin) so a broken pipe never leaves the Promise hanging or
-      // crashes the process with an unhandled 'error'.
       child.stdin.on('error', () => {
         /* ignore broken pipe — close/error handlers below settle the Promise */
       })

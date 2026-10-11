@@ -1,8 +1,3 @@
-// Dữ liệu / store của runner (U0005). Hợp đồng provider (`RunnerProvider`,
-// `ExecuteRequest/Result`, `TokenUsage`, `ProviderFamily`, `McpDelivery`) nằm ở
-// `providers/RunnerProvider.ts`; re-export dưới đây giữ cho nơi import cũ trong
-// giai đoạn chuyển.
-
 import type { UsageSnapshot } from '../../../shared/log/schema.js'
 import type { McpDelivery, ProviderDescriptor } from './providers/RunnerProvider.js'
 
@@ -39,26 +34,12 @@ export interface Connection {
   credentialId?: string | null
   /**
    * Free-form settings merged into `runnerConfig` at execute time
-   * (`models`/`model`/`baseURL`, …). For `ai-provider` (`ai-api`),
-   * `extraTools?: string[]` opts this Connection into shell/git/search/web
-   * tools beyond the base 4 file-ops (see `AgenticApiProvider.resolveExtraTools`)
-   * — optional and absent on connections created before this key existed,
-   * which then get only the base tools (unchanged behavior). For
-   * `local-console` with `providerId: 'claude-code-cli'`, `model` is read
-   * as the `--model` argv value (see `ClaudeCliProvider.ts`).
-   *
-   * `mcpServers?: string[]` lists the MCP server ids this Connection opts into
-   * (`features/mcp` store). Absent/empty — the default for every connection
-   * created before the key existed — means no MCP config file is written and
-   * the CLI argv is unchanged.
+   * (`models`/`model`/`baseURL`, `extraTools`, `mcpServers`, …).
    */
   config?: Record<string, unknown>
 }
 
-/**
- * Một dòng catalog provider trả cho UI — `ProviderDescriptor` + cách giao MCP
- * lấy từ delivery đã lắp ráp (`listProviderCatalog`, providerRegistry.ts).
- */
+/** Dòng catalog provider trả cho UI: `ProviderDescriptor` + cách giao MCP của delivery đã lắp ráp. */
 export type ProviderCatalogEntry = ProviderDescriptor & {
   mcpDelivery?: McpDelivery
 }
@@ -102,11 +83,6 @@ export interface ResolvedAgent {
   agentFilePath?: string
 }
 
-// `awaiting_approval`: an approval-flow job (see jobQueue.ts) finished
-// successfully against a scratch workspace copy — nothing has been written to
-// the real files yet. Resolved by approveJob (apply + succeeded),
-// discardJob (cancelled), or sendJobFeedback (spawns a new `awaiting_approval`
-// job continuing the same CLI session).
 export type JobStatus =
   | 'queued'
   | 'running'
@@ -136,17 +112,9 @@ export interface JobRecord {
   logPath?: string
   error?: string
   artifactsFound?: string[]
-  /**
-   * The CLI's raw stdout (or parsed agent `result`), persisted for NL chat and
-   * Agent CLI pipeline jobs so task chat can show the reply when the on-disk
-   * session transcript is missing. Capped; never treat the full job log as this.
-   */
+  /** Agent reply persisted for chat surfaces (capped) — never the full job log. */
   stdout?: string
   metadata?: Record<string, unknown>
-  // `sessionId`/`parentJobId` are shared by two independent feedback flows:
-  // approval (`sendJobFeedback`, keyed by `jobId`) and task-chat-resume
-  // (`sendTaskFeedback`, keyed by `taskId`, see jobQueue.ts). Only
-  // `applyTarget`/`approvalArtifact` below are approval-flow only.
   sessionId?: string
   /** Real (non-scratch) directory this job's proposed changes would apply to (approval flow only). */
   applyTarget?: string
@@ -154,12 +122,9 @@ export interface JobRecord {
   approvalArtifact?: string
   /** The job this one continued via `--resume` (approval feedback round, or a task-chat-feedback round). */
   parentJobId?: string
-  // Selection-splice approval only (see jobQueue.ts runJob): when set, the
-  // agent's output (stdout) is spliced back into a copy of the real artifact at
-  // this 1-indexed inclusive line range, so every line outside the range stays
-  // byte-identical and the review diff is localized to the selection.
+  /** Selection-splice approval only: 1-indexed inclusive line range the proposal is spliced into. */
   spliceRange?: { start: number; end: number }
-  /** Aggregated LLM token usage for this job (Claude transcript capture, P0). */
+  /** Aggregated LLM token usage for this job. */
   usage?: UsageSnapshot
   /** Retry counter for process_crash recovery (defaults to 0 when absent). */
   attemptCount?: number
@@ -184,7 +149,7 @@ export type DefaultRunnerReason =
   | 'not-ai'
 
 /**
- * Kết quả giải runner mặc định. `runnerId` giữ id **đã ghi nhận** kể cả khi runner
+ * Kết quả giải runner mặc định. `runnerId` giữ id đã ghi nhận kể cả khi runner
  * đó không dùng được, để log và UI nêu đúng runner nào đang hỏng.
  */
 export interface DefaultRunnerResolution {
@@ -203,8 +168,6 @@ export interface ConnectionsStore {
   connections: Connection[]
 }
 
-// A reusable provider "template": interface + optional baseURL. Credential
-// selection lives on the Connection itself, not here.
 export interface ProviderConfig {
   id: string
   label: string
@@ -222,8 +185,6 @@ export interface CommandsStore {
   commands: CustomCommand[]
 }
 
-// Mutation result shape shared by registry/credentials/job CRUD. `ok:false`
-// carries an error (and optional HTTP-ish status); `ok:true` carries the payload.
 export type MutationOk<T> = { ok: true } & T
 export type MutationErr = { ok: false; status?: number; error: string }
 export type MutationResult<T = {}> = MutationOk<T> | MutationErr

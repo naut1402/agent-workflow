@@ -1,11 +1,3 @@
-// Công cụ sandbox mà mọi provider API agentic nối vào vòng tool-use của nó:
-// file-ops trong workspace, shell allowlist, git chỉ đọc, tìm kiếm, web (Brave),
-// fetch URL an toàn — cùng mô tả tool và preamble gửi model.
-//
-// Module §2.3 (một hiện thực, không phải abstraction): `AgenticApiProvider` giữ
-// trình tự, các hiện thực SDK (`OpenAiCompatibleProvider`,
-// `AnthropicCompatibleProvider`) ánh xạ schema tool của SDK vào các hàm dưới đây.
-
 import {
   dirname,
   joinPath,
@@ -22,15 +14,12 @@ import { fetchUrlSafe } from '../../../agent-editor/business/index.js'
 import type { McpBridgeTool } from '../mcpDelivery/ToolBridgeMcpDelivery.js'
 import type { ExecuteRequest } from './RunnerProvider.js'
 
-/** Opt-in extra sandbox capabilities beyond the base 4 file-ops — gated per-Connection via `Connection.config.extraTools`. */
+/** Opt-in extra sandbox capabilities, enabled per Connection via `config.extraTools`. */
 export type ExtraTool = 'shell' | 'git' | 'search' | 'web'
 const VALID_EXTRA_TOOLS: ExtraTool[] = ['shell', 'git', 'search', 'web']
 
-/**
- * Allowlisted binaries for `run_command` — no raw shell, argv-array only (no injection via `;`/`&&`/`$()`).
- * Chỉ những binary image bảo đảm có (`docker/Dockerfile`) — list này vào thẳng tool description,
- * tên không tồn tại là mời model gọi rồi nhận ENOENT. Bin project-local: gọi qua `npx <bin>`.
- */
+// xem docs/architecture/code/runner.md §19
+/** Allowlisted binaries for `run_command` — argv-array only, no shell. */
 export const SHELL_ALLOWLIST = ['bun', 'npm', 'npx', 'node']
 const SHELL_TIMEOUT_MS = 60_000
 const SHELL_OUTPUT_LIMIT = 8_000
@@ -38,7 +27,6 @@ const SEARCH_MAX_MATCHES = 200
 const SEARCH_EXCLUDED_DIRS = new Set(['node_modules', '.git', 'dist', 'build'])
 const BRAVE_SEARCH_URL = 'https://api.search.brave.com/res/v1/web/search'
 
-/** One-line description per tool name, shown to low-level models in the "tool usage preamble" (see `buildToolUsagePreamble`). */
 const TOOL_DESCRIPTIONS: Record<string, string> = {
   read_file: 'read_file(path) — đọc nội dung 1 file text trong workspace',
   write_file: 'write_file(path, content) — tạo mới/ghi đè 1 file text trong workspace',
@@ -57,8 +45,6 @@ const TOOL_DESCRIPTIONS: Record<string, string> = {
   fetch_url: 'fetch_url(url) — tải nội dung 1 URL https công khai (chặn host nội bộ/private)',
 }
 
-/** Chars kept per embedded file in `buildProjectContextPreamble()` — enough for AGENTS.md/CLAUDE.md,
- * bounded so a runaway file doesn't blow the context budget of small models. */
 const PROJECT_CONTEXT_FILE_LIMIT = 12_000
 
 export function truncate(text: string | undefined | null, limit: number): string {
@@ -74,7 +60,7 @@ export interface SandboxErr {
   error: string
 }
 
-/** Shared shape for `run_command`/git tools — `ok` mirrors the process exit code, distinct from `SandboxErr` (used only when the process itself couldn't run). */
+/** Result of `run_command` / git tools — `ok` mirrors the process exit code. */
 export interface ProcessResult {
   ok: boolean
   exitCode: number | null
@@ -93,7 +79,6 @@ function runGit(workspace: string, args: string[]): ProcessResult | SandboxErr {
   }
 }
 
-/** Depth-first collect of file paths under `root`, skipping `SEARCH_EXCLUDED_DIRS` — stops early once well past the match cap. */
 function collectTextFiles(root: string, out: string[]): void {
   let entries: Dirent[]
   try {
@@ -128,8 +113,6 @@ function countOccurrences(haystack: string, needle: string): number {
   }
   return count
 }
-
-// ---- Sandbox file-ops ----
 
 export function readWorkspaceFile(workspace: string, path: string): (SandboxOk & { content: string }) | SandboxErr {
   const p = resolvePathUnder(workspace, path)
@@ -184,34 +167,24 @@ export function listWorkspaceDirectory(workspace: string, path?: string): (Sandb
   }
 }
 
-// ---- Opt-in extra tools (Connection.config.extraTools) ----
-
-/** Reads `runnerConfig.extraTools`, dropping anything not in `ExtraTool` — an unset/legacy connection resolves to `[]` (no behavior change). */
+/** Reads `runnerConfig.extraTools`, dropping unknown values; unset ⇒ `[]`. */
 export function resolveExtraTools(runnerConfig: Record<string, any>): ExtraTool[] {
   const raw = runnerConfig?.extraTools
   if (!Array.isArray(raw)) return []
   return raw.filter((v): v is ExtraTool => VALID_EXTRA_TOOLS.includes(v))
 }
 
-/** `web_search` only registers when this is true — an unconfigured key means the tool is absent, not present-and-always-failing. */
+/** `web_search` is registered only when this is true. */
 export function isWebSearchConfigured(): boolean {
   return Boolean(process.env.BRAVE_SEARCH_API_KEY)
 }
 
-/**
- * Generated per-request from the tool names actually registered for this
- * turn — tells low-level models (via OpenRouter, unfamiliar with the tool
- * names baked into agent markdown written for the Claude Code CLI, e.g.
- * `find_symbol`/`Skill`/`Write`) exactly which tools exist here and to
- * ignore any others mentioned in the system prompt below it.
- */
+/** Tool-usage preamble listing exactly the tools registered for this turn. */
 export function buildToolUsagePreamble(enabledTools: string[], mcpTools: McpBridgeTool[] = []): string {
   return [
     '## Tool khả dụng (DUY NHẤT — bỏ qua mọi tên tool khác được nhắc ở phần hướng dẫn bên dưới)',
     ...enabledTools.map((name) => `- ${TOOL_DESCRIPTIONS[name] ?? name}`),
-    // 📌 BẮT BUỘC khi bridge mở: dòng tiêu đề ngay trên nói với model rằng danh
-    // sách này là DUY NHẤT. Thêm tool vào SDK mà không thêm vào đây thì model
-    // được bảo là chúng không tồn tại, và nó sẽ không gọi.
+    // xem docs/architecture/code/runner.md §19
     ...mcpTools.map((t) => `- ${t.name}: ${t.description}`),
     '',
     'Hướng dẫn bên dưới có thể nhắc tới các công cụ không tồn tại ở đây (vd find_symbol, ' +
@@ -226,15 +199,8 @@ export function buildToolUsagePreamble(enabledTools: string[], mcpTools: McpBrid
   ].join('\n')
 }
 
-/**
- * Agent markdown (designer.md, reviewer.md, ...) universally instructs the model to read the
- * project's agent hub — `AGENTS.md` / `CLAUDE.md` at the project root — paths that sit *above*
- * `workspace` (the task folder). The sandbox tools here intentionally can't reach outside
- * `workspace` (see `resolvePathUnder` — a security invariant, not an oversight), and unlike the
- * CLI providers (real filesystem access, can walk up a directory when a literal path 404s) a
- * weak model just hits "path outside workspace" or silently skips the rule. Embedding those
- * files' content directly in the system prompt sidesteps the read entirely.
- */
+// xem docs/architecture/code/runner.md §19
+/** Embeds `AGENTS.md` / `CLAUDE.md` of the project root (outside the sandbox) into the system prompt. */
 export function buildProjectContextPreamble(req: ExecuteRequest): string {
   const meta = req.metadata || {}
   const projectRoot = typeof meta.projectRoot === 'string' ? meta.projectRoot : undefined
@@ -276,7 +242,7 @@ export function runShellCommand(workspace: string, command: string, args: string
   }
 }
 
-/** Read-only git tools — no commit/push/branch (write ops are out of scope, see design.md §6). */
+/** Read-only git tools — no commit/push/branch. */
 export function gitStatus(workspace: string): ProcessResult | SandboxErr {
   return runGit(workspace, ['status', '--porcelain'])
 }
@@ -297,7 +263,6 @@ interface SearchMatch {
   text: string
 }
 
-/** Đẩy các dòng chứa `pattern` của một file vào `matches`, dừng khi chạm `SEARCH_MAX_MATCHES`. File không đọc được / nhị phân ⇒ bỏ qua. */
 function collectFileMatches(workspace: string, file: string, pattern: string, matches: SearchMatch[]): void {
   let content: string
   try {
@@ -355,7 +320,7 @@ export async function webSearch(
   }
 }
 
-/** `fetch_url` — https-only/private-host/size-limit guards come from `fetchUrlSafe` (SSRF invariant, see AGENTS.md §4). */
+/** `fetch_url` — guards (https only, no private host, size limit) come from `fetchUrlSafe`. */
 export async function fetchUrl(url: string): Promise<(SandboxOk & { content: string }) | SandboxErr> {
   try {
     const text = await fetchUrlSafe(url)

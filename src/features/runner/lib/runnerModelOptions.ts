@@ -1,14 +1,3 @@
-/**
- * Dựng danh sách option "Model" cho UI từ response của `GET /api/runners`.
- *
- * Người dùng chọn theo **model**, hệ thống lưu theo **runner id**: model không phải
- * thực thể độc lập mà là `connection.config.model`, và runner mới là thứ trỏ tới
- * connection — nên `value` của option luôn là runner id.
- *
- * Lib FE thuần (`lib/`, không gọi API, không chạm `business/`) để test được không
- * cần render — `docs/agent-rules/coding-guideline.md` §5.
- */
-
 import type { ConnectionOption, ProviderEntry, ProviderFamily, RunnerDraft } from '../types'
 import { providerEntryOf } from './providerCatalog'
 
@@ -22,11 +11,6 @@ export type RunnerCatalogLike = {
   providers?: ProviderEntry[] | null
 } | null | undefined
 
-/**
- * Luật dự phòng khi response thiếu catalog (`providers` rỗng / thiếu entry) —
- * giữ để hành vi không đổi với nơi gọi truyền response không kèm catalog. BE
- * luôn trả `providers[].family` nên đường chính là tra catalog.
- */
 const LEGACY_AGENT_CLI_PROVIDER_IDS = ['claude-code-cli', 'cursor-cli', 'codex-cli']
 
 /** Bản FE của `providerFamilyOf` (`business/providers/providerRegistry.ts`): catalog trước, quy tắc theo id sau. */
@@ -44,14 +28,8 @@ export function familyOfProviderId(
 }
 
 /**
- * Một option mỗi runner chạy AI được.
- *
- * Nhãn ưu tiên model của connection; runner chưa chọn model (vd `claude-code-cli`
- * dùng alias mặc định) rơi về tên runner để option không rỗng chữ. Hai runner
- * cùng model thì nối thêm tên runner — không làm vậy thì hai dòng giống hệt nhau
- * và người dùng không biết mình chọn cái nào.
- *
- * Thứ tự giữ nguyên thứ tự `runners[]` để khớp màn Runner.
+ * Một option mỗi runner chạy AI được, theo thứ tự `runners[]`. `value` là runner id; nhãn là
+ * model của connection (thiếu thì tên runner, trùng model thì nối thêm tên runner).
  */
 export function buildRunnerModelOptions(input: RunnerCatalogLike): RunnerModelOption[] {
   const runners = Array.isArray(input?.runners) ? input.runners : []
@@ -66,8 +44,6 @@ export function buildRunnerModelOptions(input: RunnerCatalogLike): RunnerModelOp
 
     const conn = connections.find((c) => c?.id === runner.connectionId)
     const family = familyOfProviderId(conn?.providerId, providers)
-    // Cùng điều kiện `isEligibleDefaultAiRunner` của backend — để lọt runner
-    // console-command thì người dùng chọn xong job hỏng.
     if (family !== 'agent-cli' && family !== 'ai-api') continue
 
     const model = conn?.config?.model || conn?.config?.models?.[0]

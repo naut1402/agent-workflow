@@ -3,11 +3,7 @@ import { registryHome } from '../../../backend/registry.js'
 import type { UsageSnapshot } from '../../../shared/log/schema.js'
 import type { JobRecord } from './types.js'
 
-/**
- * `JobRecord` trên đĩa (`<registry home>/jobs/<id>.json`) và cách đọc metadata
- * của nó. Tách khỏi `jobQueue.ts` để `usageCapture.ts` ghi usage lên job mà
- * không phải import ngược `jobQueue` (vòng import).
- */
+// xem docs/architecture/code/runner.md §4
 
 export function jobsDir(): string {
   return joinPath(registryHome(), 'jobs')
@@ -42,10 +38,7 @@ export function mergeJobUsage(id: string, usage: UsageSnapshot): JobRecord | nul
   return saveJob({ ...cur, usage })
 }
 
-/**
- * The pipeline step a job belongs to. Pipeline run-step jobs tag
- * `pipelineStepId`; ad-hoc/quick-action jobs use `stepId`.
- */
+/** The pipeline step a job belongs to: `stepId`, else `pipelineStepId`. */
 export function stepIdOf(job: JobRecord): string | undefined {
   const meta = job.metadata || {}
   if (typeof meta.stepId === 'string' && meta.stepId) return meta.stepId

@@ -7,8 +7,6 @@ export {
   assertStartAllowedSync,
   resolveOrchestration,
 } from '../../monitor/business/tasks/startAuthority.js'
-// Type `Orchestration`/`StartOrigin` cố ý không re-export: `decisionLoop.ts` lấy
-// thẳng từ `startAuthority.js`, nên qua barrel này là dead weight.
 /** Peer: layered pipeline config (owned by pipeline-editor). */
 export { loadPipelineConfig } from '../../pipeline-editor/business/pipeline/index.js'
 
@@ -89,9 +87,9 @@ export {
   AGENT_CLI_PROVIDER_IDS,
   isAgentCliProviderId,
 } from './providers/providerRegistry.js'
-/** Path transcript phiên provider API — runner là bên ghi, monitor đọc qua đây (#441). */
+/** Path transcript phiên provider API — runner ghi, monitor đọc qua đây. */
 export { agentTranscriptFile } from './providers/agentTranscriptStore.js'
-/** Giải API key của credential cho provider API — dùng chung execute / complete (#448). */
+/** Giải API key của credential cho provider API. */
 export { resolveProviderApiKey } from './oauthCredentials.js'
 export { listAvailableModels } from './modelCatalog.js'
 export {

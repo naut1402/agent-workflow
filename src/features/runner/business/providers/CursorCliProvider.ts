@@ -8,10 +8,6 @@ import {
 } from './AbstractAgentCliProvider.js'
 import type { ProviderCatalogInfo, TranscriptFormat } from './RunnerProvider.js'
 
-// ── Cursor headless JSON (`--output-format json`) ──────────────────────────
-// Rút từ `sessionLedger.ts`: parse/argv này chỉ Cursor dùng. Barrel runner giữ
-// nguyên tên export (`parseCursorJsonOutput`… — monitor đọc stdout job qua đây).
-
 function numToken(v: unknown): number {
   return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : 0
 }
@@ -71,7 +67,6 @@ export function parseCursorJsonOutput(stdout: string): CursorJsonOutput {
   try {
     return cursorFieldsFrom(JSON.parse(trimmed) as Record<string, unknown>)
   } catch {
-    // Defensive: tolerate a leading stderr line (or similar) before the JSON object.
     const start = trimmed.indexOf('{')
     const end = trimmed.lastIndexOf('}')
     if (start < 0 || end <= start) return {}
@@ -87,10 +82,7 @@ export interface CursorJsonInvocationInput {
   flags: string[]
   prompt: string
   resumeSessionId?: string
-  /**
-   * Job này có MCP server nào không. Mặc định `false` ⇒ argv 🚫 không đổi một
-   * byte so với trước, kể cả thứ tự cờ — xem `buildCursorJsonInvocation`.
-   */
+  /** Job có MCP server nào không — `false` (mặc định) thì argv giữ nguyên. */
   mcpEnabled?: boolean
 }
 
@@ -99,19 +91,8 @@ export interface CursorJsonInvocation {
   stdinInput: string
 }
 
-/**
- * Build cursor headless invocation with JSON output for session capture.
- *
- * The prompt is delivered on STDIN, never as an argv element — same Windows
- * `shell: true` argv-splitting bug that forced Claude onto stdin. Cursor CLI
- * accepts a piped prompt with `-p` / `--print` (print mode is inferred when
- * stdin is not a TTY).
- *
- * Headless defaults also disable Cursor's nested sandbox and force-approve
- * tools: inside Docker / CI the sandbox backend often cannot start, so Shell
- * fails ("Sandbox mode is enabled but not available on this system").
- * Isolation is the container (or host policy), not Cursor's Landlock helper.
- */
+// xem docs/architecture/code/runner.md §18
+/** Build cursor headless invocation — JSON output, prompt on stdin. */
 export function buildCursorJsonInvocation(input: CursorJsonInvocationInput): CursorJsonInvocation {
   const base = Array.isArray(input.flags) ? [...input.flags] : []
   if (!base.includes('-p')) base.push('-p')
@@ -126,18 +107,13 @@ export function buildCursorJsonInvocation(input: CursorJsonInvocationInput): Cur
     base.includes('--yolo') || base.includes('-f') || base.includes('--force')
   if (!hasForce) base.push('--force')
   if (!base.includes('--trust')) base.push('--trust')
-  // Headless: cursor mặc định CHỜ người dùng phê duyệt từng MCP server, tức job
-  // treo cho tới khi timeout. Theo đúng mẫu "có rồi thì không thêm" của
-  // `--force`/`--trust`/`--sandbox` ở trên.
-  //
-  // 🚫 Không thêm vô điều kiện: job không bật MCP server nào thì argv phải giữ
-  // nguyên từng byte (bất biến argv).
+  // xem docs/architecture/code/runner.md §18
   if (input.mcpEnabled && !base.includes('--approve-mcps')) base.push('--approve-mcps')
   if (input.resumeSessionId) base.push('--resume', input.resumeSessionId)
   return { args: base, stdinInput: input.prompt }
 }
 
-/** Flag-only argv for cursor JSON mode (prompt is on stdin — see buildCursorJsonInvocation). */
+/** Flag-only argv for cursor JSON mode (prompt goes on stdin). */
 export function buildCursorJsonArgs(
   flags: string[],
   prompt: string,
@@ -165,9 +141,6 @@ export class CursorCliProvider extends AbstractAgentCliProvider {
   }
 
   protected buildInvocation(ctx: AgentCliInvocationContext): AgentCliInvocation {
-    // Same Windows argv-splitting class as Claude: prompt must not be an
-    // argv element under shell:true. Also pass --resume so multi-turn NL
-    // chat (and approval feedback) keeps the captured session_id.
     return buildCursorJsonInvocation({
       flags: ctx.flags,
       prompt: ctx.prompt,

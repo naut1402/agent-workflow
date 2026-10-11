@@ -9,26 +9,16 @@ export interface McpJobInput {
   jobId: string
   /** `ExecuteRequest.metadata` — cách giao nào cần (entry tự gắn) thì đọc. */
   metadata?: Record<string, unknown>
-  /**
-   * Nhận cảnh báo ngay khi phát sinh, kể cả khi `prepare` trả `null`. Id bị
-   * tắt/xoá sau khi Connection đã chọn thì không còn handle nào để mang
-   * `warnings` ra, mà job chạy thiếu tool trong im lặng là thứ không ai truy
-   * ngược được.
-   */
+  /** Nhận cảnh báo ngay khi phát sinh, kể cả khi `prepare` trả `null`. */
   onWarning?(message: string): void
   /** Dòng log nguyên văn (đã có `\n`) ghi vào log job — không phải cảnh báo. */
   onLog?(line: string): void
 }
 
+// xem docs/mcp/client.md §7
 /**
- * Cách một provider nhận cấu hình MCP cho job (Template Method).
- *
- * `prepare` giữ trình tự cố định: entry tự gắn → chọn server → giao. Hiện thực
- * chỉ quyết phần "giao" (`attach`) và, nếu cần, entry tự gắn (`extraServers`).
- *
- * 📌 Bất biến `null`: không `ids` VÀ không entry tự gắn — hoặc mọi id đều rụng —
- * thì `prepare` trả `null` TRƯỚC `attach`. Đó là đường mặc định của mọi job
- * thường: không file nào chạm đĩa, argv CLI không đổi, không phiên MCP nào mở.
+ * Cách một provider nhận cấu hình MCP cho job (Template Method): entry tự gắn → chọn server
+ * → `attach`. Không còn server nào thì `prepare` trả `null` trước `attach`.
  */
 export abstract class McpJobDelivery<THandle> {
   /** Giá trị catalog trả cho FE (`ProviderCatalogEntry.mcpDelivery`). */
@@ -52,16 +42,13 @@ export abstract class McpJobDelivery<THandle> {
     return this.attach(set, input)
   }
 
-  /** Server do dashboard TỰ gắn, ghi SAU server của người dùng nên trùng khoá thì thắng. */
+  /** Server do dashboard tự gắn, ghi sau server của người dùng nên trùng khoá thì thắng. */
   protected extraServers(_input: McpJobInput): McpServer[] {
     return []
   }
 
   protected abstract attach(set: McpServerSet, input: McpJobInput): Promise<THandle | null> | THandle | null
 
-  /**
-   * Dọn dấu vết của lượt giao mồ côi (tiến trình bị kill giữa job) lúc bootstrap.
-   * Mặc định không có gì để dọn. 🚫 Không được ném — chạy lúc nạp module.
-   */
+  /** Dọn dấu vết của lượt giao mồ côi lúc bootstrap — không được ném. */
   cleanupOrphans(): void {}
 }

@@ -1,12 +1,6 @@
 import { McpJobDelivery } from './McpJobDelivery.js'
 
-/**
- * Provider không nhận MCP (codex, console) — Null Object.
- *
- * `prepare` trả `null` NGAY, không chọn server nào và 🚫 không cảnh báo gì: đúng
- * hành vi trước khi có delivery, khi provider này không bao giờ đọc
- * `Connection.config.mcpServers`.
- */
+/** Provider không nhận MCP (Null Object) — `prepare` trả `null` ngay, không cảnh báo. */
 export class NoMcpDelivery extends McpJobDelivery<null> {
   readonly kind = 'unsupported' as const
 

@@ -3,12 +3,6 @@ import { formatJobLogFooter, type JobLogHeaderInput } from '../jobLogFormat.js'
 import type { ResolvedAgent } from '../types.js'
 import type { ExecuteResult } from './RunnerProvider.js'
 
-/**
- * Báo cáo job dùng chung cho mọi provider (Agent CLI, console, agentic API):
- * cùng cách ghi file log, cùng các trường header lấy từ `metadata`, cùng footer
- * kết quả và cách dò artifact đầu ra — để Logs panel đọc một định dạng duy nhất.
- */
-
 function metaStringOrUndefined(meta: Record<string, unknown>, key: string): string | undefined {
   const value = meta[key]
   return typeof value === 'string' ? value : undefined

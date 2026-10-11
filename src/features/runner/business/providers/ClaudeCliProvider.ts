@@ -7,7 +7,6 @@ import {
 } from './AbstractAgentCliProvider.js'
 import type { ProviderCatalogInfo, TranscriptFormat, UsageCaptureInput } from './RunnerProvider.js'
 
-/** Static aliases — Claude CLI has no listModels API; user can still type a free-form id (creatable combo). */
 const CLAUDE_CLI_MODELS = ['opus', 'sonnet', 'haiku']
 
 export interface ClaudeInvocationInput {
@@ -27,15 +26,8 @@ export interface ClaudeInvocation {
   stdinInput: string
 }
 
-/** Pure builder for the Claude headless (`claude -p`) invocation.
- *
- * The prompt is delivered on STDIN, never as an argv element: `-p` is a boolean
- * print-mode flag and `claude -p` reads the prompt from stdin. Keeping the
- * (multi-line, whitespace-containing) prompt out of argv is what fixes the
- * Windows bug where `spawn(..., { shell: true })` space-joins argv without
- * quoting and cmd.exe splits the prompt — leaving `claude -p` with only its
- * first token. Every remaining argv element is a flag or a flag value with no
- * embedded whitespace, so it survives shell:true argv-joining intact. */
+// xem docs/architecture/code/runner.md §14
+/** Pure builder for the Claude headless (`claude -p`) invocation — prompt goes on stdin. */
 export function buildClaudeInvocation(input: ClaudeInvocationInput): ClaudeInvocation {
   const args = [...input.flags, '-p']
   if (input.allowedTools) {
@@ -44,16 +36,13 @@ export function buildClaudeInvocation(input: ClaudeInvocationInput): ClaudeInvoc
   if (input.dangerouslySkipPermissions) {
     args.push('--dangerously-skip-permissions')
   }
-  // `--strict-mcp-config` đi kèm bắt buộc: không có nó, job còn ăn thêm MCP
-  // server cấu hình sẵn trên máy chạy dashboard.
+  // xem docs/architecture/code/runner.md §15
   if (input.mcpConfigPath) {
     args.push('--mcp-config', input.mcpConfigPath, '--strict-mcp-config')
   }
   if (input.model) {
     args.push('--model', input.model)
   }
-  // Approval-flow session continuity — exactly one is ever set (see
-  // ExecuteRequest.sessionId/resumeSessionId doc comment).
   if (input.sessionId) args.push('--session-id', input.sessionId)
   if (input.resumeSessionId) args.push('--resume', input.resumeSessionId)
   return { args, stdinInput: input.prompt }
@@ -81,9 +70,7 @@ export class ClaudeCliProvider extends AbstractAgentCliProvider {
 
   protected buildInvocation(ctx: AgentCliInvocationContext): AgentCliInvocation {
     const { runnerConfig } = ctx
-    // Headless `-p` with no TTY will hang forever if Claude waits for an
-    // interactive tool-permission prompt. Default skip-permissions on unless
-    // the runner config explicitly sets dangerouslySkipPermissions: false.
+    // xem docs/architecture/code/runner.md §15
     const skipPermissions =
       runnerConfig.dangerouslySkipPermissions !== false &&
       runnerConfig.dangerouslySkipPermissions !== 'false'
@@ -95,8 +82,6 @@ export class ClaudeCliProvider extends AbstractAgentCliProvider {
       sessionId: ctx.sessionPlan.sessionId,
       resumeSessionId: ctx.sessionPlan.resumeSessionId,
       model: runnerConfig.model,
-      // 📌 Chỉ cách giao bằng cờ mới đẩy đường dẫn vào argv. Cách giao qua file
-      // workspace dùng cùng kiểu handle nhưng CLI tự đọc theo cwd — đẩy vào là argv sai.
       mcpConfigPath: ctx.mcpHandle?.kind === 'config-file-flag' ? ctx.mcpHandle.path : undefined,
     })
   }

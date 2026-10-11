@@ -1,10 +1,3 @@
-// Hợp đồng một provider cắm backend thực thi (Agent CLI, lệnh console, API AI)
-// vào runner. Caller (jobQueue, modelCatalog, controller, feature khác) chỉ biết
-// file này; hiện thực cụ thể chỉ `providerRegistry.ts` biết.
-//
-// 🚫 Không đặt tên binary, env var, path hay tên nhà cung cấp ở đây — mỗi hiện
-// thực tự khai báo qua các trường / hook bên dưới.
-
 import type { UsageSnapshot } from '../../../../shared/log/schema.js'
 import type { McpJobDelivery } from '../mcpDelivery/McpJobDelivery.js'
 import type { ConnectionKind, CredentialProfile, JobRecord, ResolvedAgent } from '../types.js'
@@ -23,21 +16,12 @@ export type McpDelivery =
   | 'unsupported'
 
 /**
- * Định dạng transcript provider để lại trên đĩa — bộ đọc chat (monitor) chọn
- * reader theo giá trị này thay vì so `providerId`.
- * - `claude-projects` — JSONL do CLI tự ghi dưới thư mục projects của nó.
- * - `cursor-projects` — transcript do CLI Cursor tự ghi.
- * - `agent-sdk` — runner tự ghi (`agentTranscriptFile()`).
- * - `none` — provider không để lại transcript đọc được.
+ * Định dạng transcript provider để lại trên đĩa; monitor chọn reader theo giá trị này.
+ * `agent-sdk` là transcript runner tự ghi (`agentTranscriptFile()`).
  */
 export type TranscriptFormat = 'claude-projects' | 'cursor-projects' | 'agent-sdk' | 'none'
 
-/**
- * Cách UI lấy danh sách model cho provider.
- * - `static` — danh sách cố định, không cần credential.
- * - `api` — gọi endpoint của provider, cần API key.
- * - `none` — không liệt kê được (người dùng gõ tay hoặc không có model).
- */
+/** Cách UI lấy danh sách model: `static` cố định, `api` gọi endpoint (cần API key), `none` không liệt kê được. */
 export type ModelListing = 'static' | 'api' | 'none'
 
 /** Token usage optionally returned by `execute()`. */
@@ -52,11 +36,7 @@ export interface TokenUsage {
   estimated?: boolean
 }
 
-/**
- * Value object mô tả provider cho UI và cho caller — thứ trước đây FE và
- * `connections.ts` giữ bản sao theo `providerId`. Catalog (`GET /api/runners`,
- * `GET /api/connections`) trả nguyên các trường này.
- */
+/** Mô tả provider cho UI và caller — catalog `GET /api/runners` · `GET /api/connections` trả nguyên các trường này. */
 export interface ProviderDescriptor {
   id: string
   kind: ConnectionKind
@@ -69,9 +49,8 @@ export interface ProviderDescriptor {
   supportsAllowedTools?: boolean
   transcriptFormat?: TranscriptFormat
   /**
-   * Lệnh CLI cục bộ — scan PATH và suy provider từ đường dẫn người dùng chọn.
-   * `match.base` là regex (không phân biệt hoa thường) áp lên tên file đã bỏ
-   * đuôi `.exe/.cmd/.bat/.ps1`; `match.path` áp lên cả đường dẫn.
+   * Lệnh CLI cục bộ để scan PATH. `match.base`: regex (không phân biệt hoa thường) trên tên file
+   * đã bỏ đuôi `.exe/.cmd/.bat/.ps1`; `match.path`: regex trên cả đường dẫn.
    */
   localCommand?: { id: string; command: string; match: { base: string; path?: string } }
   /** Base URL mặc định của endpoint API (UI dùng làm placeholder). */
@@ -93,20 +72,11 @@ export interface ExecuteRequest {
   produces?: string[]
   timeoutMs?: number
   metadata?: Record<string, unknown>
-  // Approval-flow session continuity (see jobQueue.ts submitApprovalJob /
-  // sendJobFeedback): exactly one of these is set for an approval job.
-  // `sessionId` picks a fresh conversation id for the CLI to persist
-  // (`--session-id`); `resumeSessionId` continues that exact conversation on a
-  // follow-up feedback round (`--resume`) so the agent remembers what it
-  // already proposed instead of starting over.
+  /** Fresh conversation id the CLI persists (`--session-id`). */
   sessionId?: string
+  /** Conversation to continue (`--resume`). */
   resumeSessionId?: string
-  /**
-   * Aborted when `cancelJob` is called for this job. Providers with no OS
-   * subprocess to SIGTERM (AgenticApiProvider subclasses) should thread this
-   * into their fetch/SDK calls; subprocess-spawning providers can ignore it
-   * (they are killed via `job.pid` instead).
-   */
+  /** Aborted by `cancelJob` — in-process providers (no subprocess to kill) pass it to their fetch/SDK calls. */
   signal?: AbortSignal
 }
 
@@ -117,44 +87,23 @@ export interface ExecuteResult {
   logPath?: string
   artifactsFound?: string[]
   error?: string
-  /**
-   * The runner's raw stdout. Quick-action approval jobs use this as the
-   * proposed content (the agent is told to "respond with the improved text"),
-   * so a prompt that prints its result instead of writing a file still produces
-   * a reviewable change. See jobQueue.ts runJob.
-   */
+  /** The runner's raw stdout — functional paths (approval proposal, orchestrator decision) read this. */
   stdout?: string
-  /**
-   * Bản `stdout` đã mask secret MCP — DÀNH RIÊNG cho biên persist/API
-   * (`JobRecord.stdout`, `metadata.stepSummary`, `GET /api/jobs`).
-   *
-   * 🚫 Không dùng cho đường chức năng: `foldProposalIntoScratch` và
-   * `parseOrchestratorDecision` đọc `stdout` THÔ — mask là split/join mù, nó cắt
-   * giữa artifact và giữa dòng `ORCHESTRATOR_DECISION`.
-   *
-   * Không set khi job không bật MCP server nào ⇒ caller rơi về `stdout`, hành vi
-   * cũ không đổi một byte.
-   */
+  // xem docs/architecture/code/runner.md §5
+  /** Bản `stdout` đã mask secret MCP, chỉ dùng ở biên persist/API; không set khi job không bật MCP. */
   maskedStdout?: string
   /** Captured CLI session id (preset-uuid or parse-json providers). */
   sessionId?: string | null
-  /** True when runProcess() killed the child after timeoutMs elapsed (SIGTERM).
-   * Lets classifyJobFailure() recognize a timeout deterministically instead of
-   * matching the CLI's own stdout/stderr text (e.g. Claude Code's interrupt
-   * markers "Execution error" / "[Request interrupted by user]"). */
+  /** True when `runCliProcess()` killed the child after `timeoutMs` — `classifyJobFailure()` reads this instead of CLI output. */
   timedOut?: boolean
   /** Optional token usage — persisted with `source: 'stdout'` (usageCapture.ts). */
   tokenUsage?: TokenUsage
 }
 
-/** Nguồn bản ghi usage — hợp đồng dữ liệu với statistics (#445). */
+/** Nguồn bản ghi usage — hợp đồng dữ liệu với statistics. */
 export type UsageSource = 'aggregate' | 'stdout'
 
-/**
- * Đầu vào hook `captureUsage` — provider đọc usage từ nơi riêng của nó (vd
- * transcript CLI) rồi ghi qua `usageCapture.recordJobUsage` với
- * `provider = providerId`, `source = 'aggregate'`.
- */
+/** Đầu vào hook `captureUsage`: provider đọc usage từ nguồn riêng rồi ghi với `source = 'aggregate'`. */
 export interface UsageCaptureInput {
   job: JobRecord
   sessionId: string
@@ -173,23 +122,14 @@ export type CompletionResult =
   | { ok: true; text: string; usage?: TokenUsage }
   | { ok: false; error: string }
 
-// A provider plugs a concrete execution backend (e.g. the Claude Code CLI) into
-// the runner plane behind a uniform contract.
-//
-// `family` / `acceptsAgent` / `mcpDelivery`: mọi hiện thực dựng sẵn đều khai;
-// provider đăng ký lúc chạy (stub test) có thể bỏ — `registerProvider` bù theo
-// bản dựng sẵn cùng id rồi luật theo id. Caller luôn nhận `RegisteredProvider`
-// (đủ ba trường) qua `getProvider()`.
+// xem docs/architecture/code/runner.md §4
+/** Hợp đồng một provider cắm backend thực thi (Agent CLI, lệnh console, API AI) vào runner. */
 export interface RunnerProvider {
   providerId: string
   family?: ProviderFamily
   /** `false` ⇒ jobQueue chạy job không gắn agent (console-command). */
   acceptsAgent?: boolean
-  /**
-   * How this provider receives the job's MCP servers. Provider không nhận MCP
-   * mang `NoMcpDelivery` (Null Object, catalog trả `'unsupported'`). Lắp ráp ở
-   * `providerRegistry.ts`.
-   */
+  /** How this provider receives the job's MCP servers — `NoMcpDelivery` when it takes none. */
   mcpDelivery?: McpJobDelivery<unknown>
   /** Transcript provider để lại trên đĩa — đọc qua `transcriptFormatOf()`. */
   transcriptFormat?: TranscriptFormat
@@ -227,17 +167,8 @@ export interface RunnerProvider {
 export type RegisteredProvider = RunnerProvider &
   Required<Pick<RunnerProvider, 'family' | 'acceptsAgent' | 'mcpDelivery'>>
 
-/**
- * A chat round resumes the SAME agent's session (`sendTaskFeedback` copies
- * `agentRef` from the parent job), so the agent's instructions are already in
- * the conversation — re-sending the whole system prompt with every message is
- * pure noise and tokens.
- *
- * Keyed on `isChatFeedback` only, deliberately: that flag is stripped when
- * `advancePipelineStepChain` carries metadata into the next step, whereas
- * `parentJobId` leaks forward — and a pipeline step resuming the previous
- * step's session runs a DIFFERENT agent, whose instructions must be sent.
- */
+// xem docs/architecture/code/runner.md §14
+/** Gửi system prompt của agent, trừ lượt chat resume cùng agent (`isChatFeedback`). */
 export function shouldSendAgentInstructions(req: ExecuteRequest): boolean {
   return !(req.resumeSessionId && req.metadata?.isChatFeedback === true)
 }

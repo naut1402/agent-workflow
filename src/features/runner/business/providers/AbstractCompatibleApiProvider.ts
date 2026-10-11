@@ -18,21 +18,12 @@ export interface CompatibleApiToolset<T> {
   system: string
 }
 
-/**
- * Lớp chung cho provider gọi một endpoint "tương thích" qua SDK riêng
- * (`AnthropicCompatibleProvider`, `OpenAiCompatibleProvider`): một id provider,
- * một base URL mặc định, catalog dựng từ gợi ý UI, cách dựng bộ tool + system
- * prompt cho vòng tool-use. Hiện thực chỉ còn phần riêng của SDK: client,
- * định dạng tool, vòng hội thoại.
- */
+/** Lớp chung cho provider gọi một endpoint "tương thích" qua SDK riêng — hiện thực chỉ còn client, định dạng tool, vòng hội thoại. */
 export abstract class AbstractCompatibleApiProvider extends AgenticApiProvider {
   readonly providerId: string
   protected readonly defaultBaseURL: string
 
-  /**
-   * @param ui nhãn + gợi ý UI của endpoint này — có thì provider vào catalog
-   *   (`providerRegistry.ts` truyền; test dựng tay có thể bỏ).
-   */
+  /** @param ui nhãn + gợi ý UI của endpoint — có thì provider vào catalog. */
   constructor(
     providerId: string,
     defaultBaseURL: string,
@@ -66,13 +57,7 @@ export abstract class AbstractCompatibleApiProvider extends AgenticApiProvider {
     return Number(ctx.req.timeoutMs) || Number(ctx.runnerConfig.timeoutMs) || 600_000
   }
 
-  /**
-   * Dựng tool workspace (định dạng SDK qua `buildTools`), lấy tool MCP của job
-   * và system prompt, rồi báo system prompt qua `ctx.handlers.onSystemPrompt`.
-   *
-   * `mcpBridge === null` ⇒ `bridgeTools` rỗng ⇒ `tools` và preamble
-   * byte-identical với bản trước khi có bridge.
-   */
+  /** Dựng tool workspace + tool MCP của job và system prompt, báo system prompt qua `ctx.handlers.onSystemPrompt`. */
   protected prepareToolset<T>(
     ctx: AgenticRunContext,
     buildTools: (extraTools: workspaceTools.ExtraTool[], webSearchConfigured: boolean) => T[],
