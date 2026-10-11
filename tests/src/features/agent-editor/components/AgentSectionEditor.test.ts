@@ -4,7 +4,9 @@ import { flushPromises } from '@vue/test-utils'
 import { defineComponent, h, reactive } from 'vue'
 import { emptyDraft } from '@/features/agent-editor/business/agentMarkdown.js'
 import AgentSectionEditor from '@/features/agent-editor/components/AgentSectionEditor.vue'
-import agentEditorVi from '@/features/agent-editor/locales/vi'
+import { localeMessages } from '../../../helpers/localeYaml'
+
+const agentEditorVi = localeMessages('vi', 'agentEditor')
 
 vi.mock('@/features/agent-editor/scripts/AgentSectionEditorApi', () => ({
   saveAgentTemplate: vi.fn(async (draft: any) => ({ name: draft.name })),

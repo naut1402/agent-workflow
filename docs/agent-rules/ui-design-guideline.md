@@ -85,6 +85,30 @@ Nút **có nhãn chữ** (label bắt buộc) cho quick action — cùng triết
 </button>
 ```
 
+### 1.6 Nút nổi trong vùng cuộn: `CScrollToTop`
+
+Nút "lên đầu trang" cho một vùng cuộn dài dùng component chung
+`src/frontend/ui/CScrollToTop.vue` — **không** dựng lại bằng tay.
+
+```html
+<!-- phần tử CUỐI bên trong chính vùng cuộn -->
+<CScrollToTop :scroller="viewRoot" :content-key="content" />
+```
+
+- **Neo bằng sticky cao 0px**, không bọc scroller trong container `position: relative`:
+  bọc thêm một tầng flex là đúng cạm bẫy ở §2.2. Vì vậy cắm được vào mọi vùng cuộn
+  mà không phải sửa cấu trúc layout.
+- **Ngoại lệ có chủ ý của `.icon-btn` borderless (§1.4):** nút này được phép có
+  `background` + `border` + `box-shadow`, vì nó nổi đè lên nội dung và cần tách
+  khỏi nền. Đây là ngoại lệ **duy nhất** đang được ghi nhận; nút borderless ở
+  toolbar / danh sách vẫn theo §1.4.
+- `z-index: 5` — dưới `.selection-toolbar` (50) và `.art-busy-overlay` (20).
+- Ẩn bằng `v-if` chứ không `opacity: 0`: nút ẩn phải không nhận chuột và không
+  nằm trong tab order.
+- `contentKey` là bắt buộc khi nội dung đổi mà **element** scroller thì không
+  (đổi tài liệu trong cùng một viewer) — thiếu nó thì nút kẹt lại ở trạng thái
+  hiện dù tài liệu mới không còn gì để cuộn.
+
 ---
 
 ## 2. Chiến lược tràn nội dung
@@ -95,6 +119,12 @@ Nút **có nhãn chữ** (label bắt buộc) cho quick action — cùng triết
 2. **Không giả định "dữ liệu chắc là ngắn".** Catalog 7 agent hôm nay là 70 agent sau khi thêm plugin; danh sách rule của project dài ra theo thời gian. Layout đúng phải chịu được cả dữ liệu dài lẫn dữ liệu rỗng.
 3. **Cắt cụt tệ hơn cuộn.** Nội dung bị cắt không để lại dấu hiệu nào trên UI — người dùng không biết là còn mục phía dưới. Vùng cuộn ít nhất luôn tự tố cáo bằng thanh cuộn.
 4. **Một trục, một thanh cuộn.** Hai scroller lồng nhau trên cùng một trục là lỗi, không phải "cho chắc": chuột lăn rơi nhầm tầng và mục cuối vẫn có thể không tới được.
+5. **Tiện ích cuộn thuộc về VÙNG CUỘN, không thuộc về panel hiển thị.** Nút
+   "lên đầu trang" (§1.6) phải gắn vào đúng phần tử mang `overflow-y: auto`.
+   Ví dụ trong repo: artifact lấy nút ở `MonitorLayout` (`.monitor-content` mới
+   là vùng cuộn) chứ **không** ở `ArtifactPanel` — `.art-view` cố ý
+   `overflow: visible` theo đúng mục 4 ở trên. Gắn nhầm vào panel là vừa không
+   neo đúng chỗ, vừa đẻ ra scroller thứ hai cùng trục.
 
 ### 2.2 Chuỗi sizing chuẩn
 
@@ -166,7 +196,7 @@ Feature chỉ viết phần thân: nội dung vào slot mặc định (nằm tro
 | Slot `head` | Phần phụ trên header, đứng giữa tiêu đề và nút ✕ (vd bộ đếm bước) |
 | Slot `subhead` | Vùng cố định giữa header và body, không cuộn (stepper, lỗi của cả form) |
 | Slot `footer` | Hàng nút — nằm ngoài vùng cuộn và ngoài overlay |
-| `loading` · `loadingLabel` | Cờ `pending` của `useApiAction` |
+| `loading` · `loadingLabel` | Cờ `pending` của `useApiAction` — đóng dialog thì request đang chạy bị huỷ (§3.4) |
 | `closeOnEscape` | `false` khi một lớp phủ không phải `CDialog` (picker, popover) đang mở và tự nghe `Escape` |
 | `closeDisabled` | Chặn cả ba đường đóng trong lúc action chưa xong |
 | `width` · `height` · `minHeight` · `maxHeight` | Giá trị CSS, ghi đè kích thước mặc định của `.modal` |
@@ -180,3 +210,32 @@ Feature chỉ viết phần thân: nội dung vào slot mặc định (nằm tro
 - **Layout phần thân thì bọc một lớp.** `.modal-body` cũng thuộc `CDialog`, nên `.modal-body { gap: … }` trong style của feature không khớp. Cần `gap` riêng thì đặt một `div` (vd `.knowledge-tag-body`) làm con của slot mặc định, và **không** khai `overflow` cho nó — vùng cuộn vẫn chỉ là `.modal-body` (§2.1 mục 4).
 - **Dialog lồng nhau không cần cờ chặn `Escape`.** `CDialog` giữ một stack theo thứ tự mount (`useDialogStack`), chỉ dialog trên cùng nhận `Escape`. Phím `Escape` đã bị control con `preventDefault` (vd `CSelect` đóng menu) thì dialog bỏ qua.
 - **Thứ tự chồng theo DOM.** Mọi `CDialog` teleport ra cuối `body` lúc mount nên dialog mở sau tự nằm trên; không thêm `z-index` riêng (`.nested-backdrop`).
+
+### 3.4 Huỷ request khi đóng dialog
+
+`useApiAction` / `useKeyedApiAction` (`src/frontend/composables/useApiAction.ts`) tạo một `AbortController` cho mỗi lượt `run` và đưa `signal` cho callback. Dialog đóng là component unmount → scope dispose → request đang chạy bị huỷ thật, không chỉ nhả cờ `pending`.
+
+```ts
+const { pending: saving, run: runSave } = useApiAction()
+
+await runSave(async (signal) => {
+  try {
+    await saveThing(payload, { signal })   // *Api.ts chuyển tiếp xuống ApiRequestOptions.signal
+  } catch (e) {
+    if (isAbortError(e)) return            // người dùng tự huỷ — không hiện lỗi
+    error.value = String(e.message || e)
+  }
+})
+```
+
+| Thành phần | Hành vi |
+|---|---|
+| `ApiRequestOptions.signal` (`src/frontend/http/client.ts`) | Chuyển xuống `fetch`. Signal đã huỷ thì `apiRequest` reject `AbortError` — kể cả khi huỷ lúc đang đọc body — và không ghi log `[api] … failed`. `apiGetText` nhận `signal` ở tham số thứ ba |
+| `isAbortError(err)` (`src/frontend/http/client.ts`) | `true` khi `err.name === 'AbortError'` — tách lỗi huỷ khỏi lỗi thật ở call site |
+| Callback của `run` | Tham số `signal` là tuỳ chọn: callback cũ `async () => …` vẫn chạy, chỉ là request của nó không bị huỷ |
+| `abort()` | Huỷ lượt đang chạy và nhả `pending` ngay; lượt `run` kế tiếp chạy được luôn. Unmount gọi đúng hàm này |
+| Lượt bị huỷ | `run` trả `undefined` như lượt bị bỏ qua, nếu callback để `AbortError` nổi lên. Lỗi khác vẫn nổi nguyên vẹn |
+
+- **Truyền `signal` tới tận `*Api.ts`** — hàm trong `scripts/*Api.ts` nhận `signal` trong options rồi đặt vào `ApiRequestOptions`; call site chưa truyền thì hành vi như trước.
+- **Huỷ chỉ dừng phía trình duyệt.** Request đã tới server có thể vẫn được xử lý và persist; sau khi huỷ, đừng giả định server không đổi gì.
+- **Không hiện lỗi cho lượt người dùng tự huỷ** — chặn bằng `isAbortError` trong `catch`, không so chuỗi thông điệp.

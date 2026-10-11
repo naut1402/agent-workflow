@@ -2,7 +2,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import { mountWithI18n as mount } from '../../../helpers/i18n'
 import KnowledgeCollectionDialog from '@/features/knowledge/components/KnowledgeCollectionDialog.vue'
-import knowledgeVi from '@/features/knowledge/locales/vi'
+import { localeMessages } from '../../../helpers/localeYaml'
+
+const knowledgeVi = localeMessages('vi', 'knowledge')
 
 /**
  * TC-26 — đây là chỗ DUY NHẤT trong repo từng có guard chống bấm lặp viết tay

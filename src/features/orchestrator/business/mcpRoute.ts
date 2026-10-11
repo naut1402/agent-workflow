@@ -30,11 +30,11 @@ export interface DecisionRouteResult {
 export function resolveDecisionRoute(): DecisionRouteResult {
   const sentinel = (reason: string): DecisionRouteResult => ({ route: 'sentinel', reason })
   try {
-    // Thiếu biến này thì `SelfMcpServer.childEnv` KHÔNG bơm token xuống tiến
+    // Thiếu base URL thì `SelfMcpServer.childEnv` KHÔNG bơm token xuống tiến
     // trình con ⇒ tool chắc chắn 401. Đừng dạy agent gọi một tool chắc chắn hỏng.
-    // Đọc thẳng env ở đây là cố ý: đây là cấu hình của CHÍNH tiến trình dashboard
-    // (`standalone.ts` đặt), 🚫 không thuộc hợp đồng xuyên process của `SelfMcpServer`.
-    const baseUrl = process.env.DEV_TEAM_SELF_BASE_URL?.trim()
+    // Đọc qua `SelfMcpServer.selfBaseUrl()` — cùng nguồn với guard của `childEnv`.
+    // Trim ở đây (khoảng trắng ⇒ sentinel) là hành vi có sẵn, `childEnv` thì không.
+    const baseUrl = SelfMcpServer.selfBaseUrl()?.trim()
     if (!baseUrl) return sentinel('DEV_TEAM_SELF_BASE_URL chưa set')
 
     // Job điều phối KHÔNG pin runner (`askAgent` không truyền `runnerId`) nên nó

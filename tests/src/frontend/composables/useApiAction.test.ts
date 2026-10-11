@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
-import { defineComponent, h } from 'vue'
+import { defineComponent, effectScope, h } from 'vue'
 import { useApiAction, useKeyedApiAction } from '@/frontend/composables/useApiAction'
 
 /**
@@ -9,8 +9,8 @@ import { useApiAction, useKeyedApiAction } from '@/frontend/composables/useApiAc
  * đúng ba thứ đó, nên đó là bề mặt được khoá ở đây — không phải các bước bên
  * trong `run`.
  *
- * `useApiAction` tự nó không đăng ký lifecycle hook nào, nhưng TC-06 kiểm hành
- * vi lúc unmount nên vẫn dựng host component thật (mẫu của `useCopyText.test.ts`).
+ * `useApiAction` huỷ lượt đang chạy khi scope dispose (`onScopeDispose`), nên
+ * các ca unmount dựng host component thật (mẫu của `useCopyText.test.ts`).
  */
 
 /** Cổng mở bằng tay — giữ promise treo mà không lẫn với fake timer. */
@@ -228,5 +228,179 @@ describe('useKeyedApiAction', () => {
     await expect(p).resolves.toBe('held')
     expect(api.pendingKey.value).toBe(null)
     expect(api.pending.value).toBe(false)
+  })
+})
+
+/** Callee treo tới khi signal bị huỷ, rồi reject đúng như `fetch` của trình duyệt. */
+function abortable(signal: AbortSignal) {
+  return new Promise<never>((_, reject) => {
+    signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))
+  })
+}
+
+describe('useApiAction — huỷ request', () => {
+  it('TC-11 · callback nhận AbortSignal riêng cho từng lượt run', async () => {
+    const { api } = mountAction()
+    const seen: AbortSignal[] = []
+
+    await api.run(async (signal) => {
+      seen.push(signal)
+    })
+    await api.run(async (signal) => {
+      seen.push(signal)
+    })
+
+    expect(seen).toHaveLength(2)
+    expect(seen[0]).toBeInstanceOf(AbortSignal)
+    expect(seen[0]).not.toBe(seen[1])
+    expect(seen[0]!.aborted).toBe(false)
+  })
+
+  it('TC-12 · unmount khi đang chạy → signal bị huỷ, `pending` nhả, run trả undefined', async () => {
+    const { wrapper, api } = mountAction()
+    let captured!: AbortSignal
+
+    const p = api.run((signal) => {
+      captured = signal
+      return abortable(signal)
+    })
+    expect(api.pending.value).toBe(true)
+
+    wrapper.unmount()
+
+    expect(captured.aborted).toBe(true)
+    expect(api.pending.value).toBe(false)
+    await expect(p).resolves.toBeUndefined()
+  })
+
+  it('TC-13 · lỗi huỷ không bị coi là lỗi thật — call site lọc bằng isAbortError', async () => {
+    const { isAbortError } = await import('@/frontend/http/client')
+    const { api } = mountAction()
+    const shown: string[] = []
+
+    const p = api.run(async (signal) => {
+      try {
+        await abortable(signal)
+      } catch (e: any) {
+        if (isAbortError(e)) return 'cancelled'
+        shown.push(String(e.message))
+      }
+    })
+    api.abort()
+
+    await expect(p).resolves.toBe('cancelled')
+    expect(shown).toEqual([])
+  })
+
+  it('TC-14 · abort() nhả `pending` ngay cả khi callback bỏ qua signal; lượt cũ xong muộn không phá lượt mới', async () => {
+    const { api } = mountAction()
+    const g1 = gate()
+    const g2 = gate()
+
+    const p1 = api.run(async () => {
+      await g1.wait()
+      return 'old'
+    })
+    api.abort()
+    expect(api.pending.value).toBe(false)
+
+    const p2 = api.run(async () => {
+      await g2.wait()
+      return 'new'
+    })
+    expect(api.pending.value).toBe(true)
+
+    g1.release()
+    await expect(p1).resolves.toBe('old')
+    // `finally` của lượt cũ không được nhả cờ của lượt đang chạy.
+    expect(api.pending.value).toBe(true)
+
+    g2.release()
+    await expect(p2).resolves.toBe('new')
+    expect(api.pending.value).toBe(false)
+  })
+
+  it('TC-15 · AbortError KHÔNG do run huỷ (signal chưa abort) vẫn nổi ra nguyên vẹn', async () => {
+    const { api } = mountAction()
+    const foreign = new DOMException('timeout from elsewhere', 'AbortError')
+
+    await expect(
+      api.run(async () => {
+        throw foreign
+      }),
+    ).rejects.toBe(foreign)
+    expect(api.pending.value).toBe(false)
+  })
+
+  it('TC-16 · lỗi thật xảy ra SAU khi abort vẫn nổi ra', async () => {
+    const { api } = mountAction()
+    const g = gate()
+    const boom = new Error('boom')
+
+    const p = api.run(async () => {
+      await g.wait()
+      throw boom
+    })
+    api.abort()
+    g.release()
+
+    await expect(p).rejects.toBe(boom)
+  })
+
+  it('TC-17 · abort() khi rảnh là no-op', () => {
+    const { api } = mountAction()
+    expect(() => api.abort()).not.toThrow()
+    expect(api.pending.value).toBe(false)
+  })
+
+  it('TC-18 · dùng ngoài component: không cảnh báo, scope dispose thì huỷ', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    const bare = useApiAction()
+    await expect(bare.run(async () => 'ok')).resolves.toBe('ok')
+
+    const scope = effectScope()
+    const scoped = scope.run(() => useApiAction())!
+    let captured!: AbortSignal
+    const p = scoped.run((signal) => {
+      captured = signal
+      return abortable(signal)
+    })
+    scope.stop()
+
+    expect(captured.aborted).toBe(true)
+    expect(scoped.pending.value).toBe(false)
+    await expect(p).resolves.toBeUndefined()
+    expect(warn).not.toHaveBeenCalled()
+  })
+})
+
+describe('useKeyedApiAction — huỷ request', () => {
+  it('TC-19 · unmount huỷ signal và nhả `pendingKey` về null', async () => {
+    const { wrapper, api } = mountKeyed()
+    let captured!: AbortSignal
+
+    const p = api.run('tpl-a', (signal) => {
+      captured = signal
+      return abortable(signal)
+    })
+    expect(api.pendingKey.value).toBe('tpl-a')
+
+    wrapper.unmount()
+
+    expect(captured.aborted).toBe(true)
+    expect(api.pendingKey.value).toBe(null)
+    expect(api.pending.value).toBe(false)
+    await expect(p).resolves.toBeUndefined()
+  })
+
+  it('TC-20 · abort() rồi chạy key khác được ngay', async () => {
+    const { api } = mountKeyed()
+
+    const pa = api.run('a', (signal) => abortable(signal))
+    api.abort()
+    await expect(pa).resolves.toBeUndefined()
+
+    await expect(api.run('b', async () => 'b')).resolves.toBe('b')
   })
 })

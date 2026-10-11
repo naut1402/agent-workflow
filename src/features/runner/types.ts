@@ -4,6 +4,13 @@ export type ProviderFamily = 'agent-cli' | 'console-command' | 'ai-api'
 
 export type McpDelivery = 'config-file-flag' | 'workspace-config-file' | 'bridge-tools' | 'unsupported'
 
+export type ModelListing = 'static' | 'api' | 'none'
+
+/**
+ * Một dòng catalog provider (`GET /api/runners` · `GET /api/connections`) —
+ * bản FE của `ProviderDescriptor` (`business/providers/RunnerProvider.ts`).
+ * UI rẽ nhánh theo các trường này, 🚫 so `id` với chuỗi provider cụ thể.
+ */
 export interface ProviderEntry {
   id: string
   kind: ConnectionKind
@@ -11,6 +18,17 @@ export interface ProviderEntry {
   family?: ProviderFamily
   /** `unsupported` — the dialog still saves the pick, but warns it has no effect yet. */
   mcpDelivery?: McpDelivery
+  /** `false` ⇒ runner không gắn agent (prompt là argv của lệnh). */
+  acceptsAgent?: boolean
+  /** `static` ⇒ danh sách model cố định, tải không cần credential. */
+  modelListing?: ModelListing
+  /** Provider hiểu `allowedTools`. */
+  supportsAllowedTools?: boolean
+  /** Lệnh CLI cục bộ + regex suy provider từ đường dẫn (`match.base` áp tên file, `match.path` áp cả đường dẫn). */
+  localCommand?: { id: string; command: string; match: { base: string; path?: string } }
+  defaultBaseURL?: string
+  modelHint?: string
+  secretEnvHint?: string
 }
 
 /**

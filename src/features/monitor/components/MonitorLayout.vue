@@ -23,10 +23,12 @@ import { taskDisplayName } from '../lib/taskDisplay'
 import { useAppSettings } from '../../../frontend/composables/useAppSettings'
 import { useApiAction } from '../../../frontend/composables/useApiAction'
 import CLoadingOverlay from '../../../frontend/ui/CLoadingOverlay.vue'
+import CScrollToTop from '../../../frontend/ui/CScrollToTop.vue'
 import {
   resolveCollapseMonitorSubSidebarOnOutside,
   resolveCollapseTaskExpandOnOutside,
 } from '../../../frontend/configs/appSettings'
+import { OUTSIDE_CLICK_IGNORE } from '../../../frontend/configs/outsideClickIgnore'
 
 const { t } = useI18nHelpers()
 
@@ -65,7 +67,7 @@ const needsRepair = computed(() => taskNeedsStateRepair(props.selected))
 const worktree = ref<any>(null)
 const worktreeAmbiguous = ref(false)
 const worktreeError = ref('')
-const cleaning = ref(false)
+const { pending: cleaning, run: runClean } = useApiAction()
 
 // Cleanup is offered only for tasks that already ended — a running step may
 // still be writing into that worktree. The server enforces the same rule.
@@ -112,6 +114,14 @@ watch(
 // vùng .monitor-sub-sidebar (kể cả click vào artifact panel bên phải).
 const subSidebarRef = ref<HTMLElement | null>(null)
 const taskListRef = ref<InstanceType<typeof TaskList> | null>(null)
+/** Vùng cuộn của trang task — nút "lên đầu trang" neo vào chính nó. */
+const contentRef = ref<HTMLElement | null>(null)
+// Đổi task hoặc đổi artifact đang mở đều làm chiều cao `.monitor-content` đổi
+// hẳn; element scroller thì không đổi nên `CScrollToTop` cần khoá này để biết
+// lúc nào phải đo lại ngưỡng hiện nút.
+const scrollContentKey = computed(
+  () => `${props.selected?.task_id ?? ''}/${props.openArtifact?.name ?? ''}`,
+)
 const { settings } = useAppSettings()
 
 // Mode icon (trong `.sidebar`) giờ chính là nút toggle sub-sidebar, mà listener
@@ -131,10 +141,7 @@ onClickOutside(
       emit('update:subSidebarCollapsed', true)
     }
   },
-  // Ignore teleported modals (FolderPicker, Settings, …): clicks there are outside
-  // the sub-sidebar DOM but must not collapse it — otherwise v-if unmounts ProjectBar
-  // and closes the picker mid-navigation.
-  { ignore: ['.modal-backdrop'] },
+  { ignore: [...OUTSIDE_CLICK_IGNORE] },
 )
 
 async function toggleArchiveSelected() {
@@ -213,19 +220,20 @@ async function cleanWorktreeSelected() {
   const taskId = props.selected?.task_id
   if (!taskId) return
   const projectId = props.selectedProjectId ?? null
-  worktreeError.value = ''
-  cleaning.value = true
-  try {
-    if (!confirm(await worktreeConfirmMessage(taskId, projectId, wt))) return
-    if (props.selected?.task_id !== taskId) return
-    if ((props.selectedProjectId ?? null) !== projectId) return
-    await cleanupTaskWorktree(taskId, projectId ?? undefined)
-    await loadWorktree(taskId, projectId)
-  } catch (e: any) {
-    worktreeError.value = describeWorktreeError(e)
-  } finally {
-    cleaning.value = false
-  }
+  // `run` giữ guard suốt cả lượt dò job + `confirm()`: bấm lặp trong lúc đó bị
+  // bỏ qua, không bật hộp confirm thứ hai.
+  await runClean(async () => {
+    worktreeError.value = ''
+    try {
+      if (!confirm(await worktreeConfirmMessage(taskId, projectId, wt))) return
+      if (props.selected?.task_id !== taskId) return
+      if ((props.selectedProjectId ?? null) !== projectId) return
+      await cleanupTaskWorktree(taskId, projectId ?? undefined)
+      await loadWorktree(taskId, projectId)
+    } catch (e: any) {
+      worktreeError.value = describeWorktreeError(e)
+    }
+  })
 }
 </script>
 
@@ -258,10 +266,13 @@ async function cleanWorktreeSelected() {
     </template>
 
     <template #main>
-    <section class="monitor-content">
+    <!-- `.monitor-content` là vùng cuộn của cả trang task (tiêu đề + pipeline +
+         artifact); `.art-view` cố ý không cuộn, nên nút lên-đầu thuộc về đây
+         chứ không nằm trong `ArtifactPanel`. -->
+    <section ref="contentRef" class="monitor-content">
       <template v-if="selected">
         <div class="task-head">
-          <CLoadingOverlay :active="deleting" />
+          <CLoadingOverlay :active="deleting || cleaning" />
           <h2 :title="selected.task_id">
             {{ taskDisplayName(selected) }}
             <span v-if="selected.parent_task_id" class="subtask">{{ t('monitor.layout.subtaskOf', { id: selected.parent_task_id }) }}</span>
@@ -338,6 +349,8 @@ async function cleanWorktreeSelected() {
         <p v-else-if="!connected">{{ t('monitor.layout.connecting') }}</p>
         <p v-else>{{ t('monitor.layout.selectTask') }}</p>
       </div>
+      <!-- Ngoài nhánh `v-if="selected"` để nút có cả khi chưa chọn task. -->
+      <CScrollToTop :scroller="contentRef" :content-key="scrollContentKey" />
     </section>
     </template>
   </CScreenLayout>

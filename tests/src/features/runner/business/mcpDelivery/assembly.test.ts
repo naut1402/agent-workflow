@@ -4,6 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { mcpRegistry } from '../../../../../../src/features/mcp/business/index.js'
 import { McpJobDelivery } from '../../../../../../src/features/runner/business/mcpDelivery/McpJobDelivery.js'
+import { NoMcpDelivery } from '../../../../../../src/features/runner/business/mcpDelivery/NoMcpDelivery.js'
 import { WorkspaceFileMcpDelivery } from '../../../../../../src/features/runner/business/mcpDelivery/WorkspaceFileMcpDelivery.js'
 import {
   cleanupOrphanedMcpDeliveries,
@@ -15,7 +16,7 @@ import { RunnerCredentialResolver } from '../../../../../../src/features/runner/
 import type { McpDelivery, RunnerProvider } from '../../../../../../src/features/runner/business/types.js'
 
 /**
- * Chỗ lắp ráp `runner/business/registry.ts` — provider nào nhận MCP bằng cách
+ * Chỗ lắp ráp `runner/business/providers/providerRegistry.ts` — provider nào nhận MCP bằng cách
  * nào, catalog trả gì cho FE (D2), và đường dọn mồ côi lúc bootstrap.
  */
 
@@ -31,16 +32,13 @@ const EXPECTED_KIND: Record<string, McpDelivery> = {
 }
 
 describe('registry — lắp ráp delivery theo provider', () => {
-  test('mỗi provider dựng sẵn mang đúng `kind`; console-command 🚫 khai delivery', () => {
+  test('mỗi provider dựng sẵn mang đúng `kind`; console-command mang Null Object (không nhận MCP)', () => {
     for (const [id, kind] of Object.entries(EXPECTED_KIND)) {
       const provider = getProvider(id)
       expect(provider, id).not.toBeNull()
-      if (id === 'console-command') {
-        expect(provider!.mcpDelivery).toBeUndefined()
-        continue
-      }
       expect(provider!.mcpDelivery?.kind, id).toBe(kind)
     }
+    expect(getProvider('console-command')!.mcpDelivery).toBeInstanceOf(NoMcpDelivery)
   })
 
   test('chỉ claude nhận entry tự gắn (`acceptsSelfServer`) — tuyến `mcp` của node điều phối', () => {

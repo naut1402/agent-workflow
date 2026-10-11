@@ -125,6 +125,23 @@ describe('QuickActionPanel', () => {
     expect(saved.agent_ref).toBe('dashboard:my-agent')
   })
 
+  it('#440: provider catalog khai acceptsAgent:false (id bất kỳ) ⇒ ẩn agent như console-command', async () => {
+    const { fetchRunners } = await import('@/features/runner/scripts/runnerApi')
+    vi.mocked(fetchRunners).mockResolvedValueOnce({
+      runners: [{ id: 'sh2', name: 'Shell 2', connectionId: 'conn-sh2' }],
+      connections: [{ id: 'conn-sh2', providerId: 'p1-new-shell' }],
+      providers: [{ id: 'p1-new-shell', kind: 'local-console', label: 'Shell 2', family: 'console-command', acceptsAgent: false }],
+      defaultRunnerId: 'sh2',
+    } as any)
+
+    const w = mountWithI18n(QuickActionPanel, { props: { projectId: null }, global: TELEPORT_STUB })
+    await flushPromises()
+
+    await w.get('button.btn-primary.btn-sm').trigger('click')
+    // runner + menu only (no agent select)
+    expect(w.findAll('.qa-form select.cfg-input').length).toBe(2)
+  })
+
   it('hides agent_ref and clears it when runner is console-command', async () => {
     const { fetchRunners } = await import('@/features/runner/scripts/runnerApi')
     vi.mocked(fetchRunners).mockResolvedValueOnce({

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { flushPromises } from '@vue/test-utils'
+import { DOMWrapper, flushPromises } from '@vue/test-utils'
 import { mountWithI18n as mount, createTestI18n } from '../helpers/i18n'
 import { makeSseStream } from '../helpers/sseStream'
 import App from '../../../src/frontend/App.vue'
@@ -16,6 +16,8 @@ import { createContainer } from '@/frontend/container/index'
 import { containerKey } from '@/frontend/shell/containerKey'
 import { createStaticModeAccess, modeAccessToken } from '@/frontend/shell/modeAccess'
 import { createModeRegistry, modeRegistryToken, type ModeRegistry } from '@/frontend/shell/modeRegistry'
+import { STORAGE_KEY, useAppSettings } from '@/frontend/composables/useAppSettings'
+import { fetchProjects } from '@/features/monitor/scripts/monitorApi'
 
 // Cùng cơ chế auto-discovery với `main.ts` (glob thay vì import + gọi từng
 // registerXMode) — App.test.ts phải exercise đúng wiring thật, không phải mock
@@ -25,6 +27,10 @@ const modeModules = import.meta.glob('../../../src/features/*/registerMode.ts', 
 vi.mock('@/features/monitor/scripts/monitorApi', () => ({
   fetchProjects: vi.fn(async () => ({ projects: [], defaultId: null })),
   fetchTasks: vi.fn(async () => ({ root: '/tmp/root', tasks: [] })),
+  // ProjectBar chỉ render khi `projects` không rỗng; hai hàm này nằm trên
+  // đường import của nó nên phải có mặt trong mock.
+  addProject: vi.fn(async () => ({ project: { id: 'new-1', name: 'New' } })),
+  removeProject: vi.fn(async () => ({ removed: true })),
 }))
 vi.mock('@/features/runner/scripts/runnerApi', () => ({
   fetchJobs: vi.fn(async () => ({ jobs: [] })),
@@ -102,6 +108,21 @@ function unmountLeftoverWrappers() {
     if (!wrapper.vm.$.isUnmounted) wrapper.unmount()
   }
 }
+
+// `onClickOutside` (@vueuse/core) chặn cú click thứ hai trong cùng một macrotask
+// bằng cờ `isProcessingClick` (setTimeout 0) — click mở menu và click chọn item
+// phải nằm ở hai macrotask khác nhau.
+function flushMacrotask() {
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, 0)
+  })
+}
+
+const RAIL_PROJECTS = [
+  { id: 'p-current', name: 'Current project', default: true },
+  { id: 'p-other', name: 'Other project', default: false },
+  { id: 'p-third', name: 'Third project', default: false },
+]
 
 describe('App', () => {
   let errorSpy: ReturnType<typeof vi.spyOn>
@@ -472,5 +493,51 @@ describe('App', () => {
       await flushPromises()
     }
     expect(errorSpy).not.toHaveBeenCalled()
+  })
+
+  // TC-R5 (T86917a08) — `.project-select-menu` nằm trong danh sách ignore của
+  // onClickOutside ở App.vue, nên click chọn project trong menu đã Teleport ra
+  // body không được thu gọn rail sidebar.
+  //
+  // Vì sao bật setting GIỮA luồng: trigger của select nằm ngoài rail, nên với
+  // setting bật sẵn thì chính cú click mở menu đã thu gọn rail (hành vi đúng,
+  // có từ trước) ⇒ assert sau đó không phân biệt được gì. Bật setting khi menu
+  // đã mở thì cú click duy nhất được chấm là cú click vào menu — đúng thứ F3
+  // sửa. Handler đọc setting ngay lúc click nên đây là luồng thật, không phải
+  // mẹo test: người dùng đổi setting trong Settings dialog bất cứ lúc nào.
+  it('TC-R5: click chọn project trong menu teleport không thu gọn rail sidebar', async () => {
+    const { load, update } = useAppSettings()
+    vi.mocked(fetchProjects).mockResolvedValue({ projects: RAIL_PROJECTS, defaultId: 'p-current' } as any)
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ collapseAppSidebarOnOutside: false }))
+      load()
+
+      const wrapper = mountApp()
+      await flushPromises()
+
+      const rail = () => wrapper.find('.sidebar')
+      expect(rail().classes()).not.toContain('sidebar-collapsed')
+      expect(wrapper.find('.project-select-trigger').exists()).toBe(true)
+
+      await wrapper.find('.project-select-trigger').trigger('click')
+      await flushMacrotask()
+      expect(rail().classes()).not.toContain('sidebar-collapsed')
+
+      update({ collapseAppSidebarOnOutside: true })
+      const picks = Array.from(
+        document.body.querySelectorAll('.project-select-menu .project-pick'),
+      ) as HTMLElement[]
+      expect(picks).toHaveLength(RAIL_PROJECTS.length)
+
+      await new DOMWrapper(picks[1]).trigger('click')
+      await flushPromises()
+
+      expect(rail().classes()).not.toContain('sidebar-collapsed')
+      wrapper.unmount()
+    } finally {
+      vi.mocked(fetchProjects).mockResolvedValue({ projects: [], defaultId: null } as any)
+      localStorage.clear()
+      load()
+    }
   })
 })

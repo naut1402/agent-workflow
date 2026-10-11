@@ -122,6 +122,88 @@ describe('useInlineMarkdownEdit', () => {
     expect(showSavedIndicator('full')).toBe(false)
   })
 
+  it('repeated blur while saving does not call onSave twice', async () => {
+    let resolveSave!: () => void
+    const content = ref('hello')
+    const onSave = vi.fn(() => new Promise<void>((resolve) => { resolveSave = resolve }))
+    const { startEdit, sectionDraft, onBlur, saving, editingSection } = useInlineMarkdownEdit({
+      getContent: () => content.value,
+      setContent: (v) => { content.value = v },
+      onSave,
+    })
+
+    startEdit('full')
+    sectionDraft.value = 'updated'
+    const first = onBlur()
+    expect(saving.value).toBe(true)
+    await onBlur()
+    expect(onSave).toHaveBeenCalledTimes(1)
+    expect(saving.value).toBe(true)
+    expect(editingSection.value).toBe('full')
+
+    resolveSave()
+    await first
+    expect(onSave).toHaveBeenCalledTimes(1)
+    expect(saving.value).toBe(false)
+    expect(editingSection.value).toBeNull()
+  })
+
+  it('startEdit is ignored while a save is in flight', async () => {
+    let resolveSave!: () => void
+    const content = ref('## One\n\nA\n\n## Two\n\nB')
+    const onSave = vi.fn(() => new Promise<void>((resolve) => { resolveSave = resolve }))
+    const { startEdit, sectionDraft, onBlur, editingSection } = useInlineMarkdownEdit({
+      getContent: () => content.value,
+      setContent: (v) => { content.value = v },
+      onSave,
+    })
+
+    startEdit(0)
+    sectionDraft.value = '## One\n\nChanged\n\n'
+    const pending = onBlur()
+    startEdit(1)
+    expect(editingSection.value).toBe(0)
+
+    resolveSave()
+    await pending
+    expect(editingSection.value).toBeNull()
+  })
+
+  it('save failure releases the saving flag, rethrows and keeps the editor open', async () => {
+    const content = ref('hello')
+    const boom = new Error('conflict')
+    const onSave = vi.fn(async (_next: string): Promise<void> => { throw boom })
+    const {
+      startEdit,
+      sectionDraft,
+      onBlur,
+      saving,
+      editingSection,
+      showSavingIndicator,
+      showSavedIndicator,
+    } = useInlineMarkdownEdit({
+      getContent: () => content.value,
+      setContent: (v) => { content.value = v },
+      onSave,
+    })
+
+    startEdit('full')
+    sectionDraft.value = 'updated'
+    await expect(onBlur()).rejects.toBe(boom)
+    expect(saving.value).toBe(false)
+    expect(editingSection.value).toBe('full')
+    expect(sectionDraft.value).toBe('updated')
+    expect(showSavingIndicator('full')).toBe(false)
+    expect(showSavedIndicator('full')).toBe(false)
+
+    // Cờ đã nhả: blur thử lại đi tới onSave lần nữa và đóng editor khi thành công.
+    onSave.mockImplementationOnce(async () => {})
+    await onBlur()
+    expect(onSave).toHaveBeenCalledTimes(2)
+    expect(editingSection.value).toBeNull()
+    expect(showSavedIndicator('full')).toBe(true)
+  })
+
   it('Escape cancels edit and clears saved indicator', () => {
     const { startEdit, onKeydown, cancelEdit, editingSection, savedSection } = setup()
     startEdit('full')

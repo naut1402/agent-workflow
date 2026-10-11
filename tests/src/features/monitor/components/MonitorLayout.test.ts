@@ -1,10 +1,22 @@
 import { mountWithI18n as mount } from '../../../helpers/i18n'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { flushPromises } from '@vue/test-utils'
+import { DOMWrapper, flushPromises } from '@vue/test-utils'
+import { nextTick } from 'vue'
 import MonitorLayout from '@/features/monitor/components/MonitorLayout.vue'
 import { STORAGE_KEY, useAppSettings } from '@/frontend/composables/useAppSettings'
-import viMonitor from '@/features/monitor/locales/vi'
-import enMonitor from '@/features/monitor/locales/en'
+import { localeMessages } from '../../../helpers/localeYaml'
+import { removeProject } from '../../../../../src/features/monitor/scripts/monitorApi'
+
+// Partial mock: chỉ `removeProject` bị thay. Các ca xoá task / dọn worktree ở
+// dưới đi qua `deleteTask` / `fetchTaskWorktree` thật trên nền `fetch` stub —
+// mock nguyên module sẽ làm chúng mất đối tượng để assert.
+vi.mock('@/features/monitor/scripts/monitorApi', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/features/monitor/scripts/monitorApi')>()
+  return { ...actual, removeProject: vi.fn(async () => ({ removed: true })) }
+})
+
+const viMonitor = localeMessages('vi', 'monitor')
+const enMonitor = localeMessages('en', 'monitor')
 
 const tasks = [
   {
@@ -658,6 +670,32 @@ describe('MonitorLayout — nút dọn worktree (T161678b4)', () => {
     expect(w.find('.badges .badge.worktree').exists()).toBe(false)
     expect(w.find('.badges .btn-clean-worktree').exists()).toBe(false)
   })
+
+  // Cờ `cleaning` đi qua `useApiAction` và chung overlay với nút xoá task.
+  it('đang dọn: overlay phủ khu tiêu đề và nút tắt; DELETE xong thì gỡ (Tef1d7fb7)', async () => {
+    let release: (v: unknown) => void = () => {}
+    const pendingDelete = new Promise((r) => { release = r })
+    const fetchMock = stubFetch({
+      worktreeResponse: worktreeOk(cleanWorktree),
+      deleteResponse: pendingDelete,
+    })
+    vi.stubGlobal('confirm', vi.fn(() => true))
+
+    const w = mountDone()
+    await flushPromises()
+    await w.find('.badges .btn-clean-worktree').trigger('click')
+    await flushPromises()
+
+    expect(deleteCalls(fetchMock).length).toBe(1)
+    expect(w.find('.task-head > .c-loading-overlay').exists()).toBe(true)
+    expect(w.find('.badges .btn-clean-worktree').attributes('disabled')).toBeDefined()
+
+    release(jsonRes({ ok: true }))
+    await flushPromises()
+
+    // Overlay đã kịp vẽ thì giữ tối thiểu `minVisibleMs` — chờ, đừng assert tức thì.
+    await vi.waitFor(() => expect(w.find('.task-head > .c-loading-overlay').exists()).toBe(false))
+  })
 })
 
 // Hai mã lỗi mới của bước dọn worktree phải ra chữ tiếng Việt của khoá tương
@@ -907,4 +945,217 @@ describe('MonitorLayout — chuỗi worktree mới có ở cả hai locale', () 
       expect((enMonitor.layout as any)[key]).toContain('already on that branch')
     },
   )
+})
+
+/**
+ * [Tfe960c47] Nút "lên đầu trang" của trang task — nhóm §9 (G) của `test-spec.md`.
+ *
+ * Vùng cuộn của Monitor là `.monitor-content` (tiêu đề + pipeline + artifact nằm
+ * CHUNG một scroller), khác hẳn `.c-md-body` của `CMarkdownView`. Neo phải nằm
+ * trong đúng vùng đó, nếu không nút sẽ đưa nhầm bề mặt về đầu.
+ */
+describe('MonitorLayout — nút lên đầu trang (TC-G02, TC-G12, TC-G13)', () => {
+  /** jsdom không có layout ⇒ ngưỡng rơi về sàn 200px của composable. */
+  async function scrollContent(w: ReturnType<typeof mount>, top: number) {
+    const el = w.find('.monitor-content').element as HTMLElement
+    el.scrollTop = top
+    el.dispatchEvent(new Event('scroll'))
+    await nextTick()
+    return el
+  }
+
+  it('TC-G12: có ĐÚNG MỘT `CScrollToTop`, neo nằm trong `.monitor-content`', () => {
+    seedAppSettings()
+    const w = mount(MonitorLayout, { props: { tasks } })
+
+    const anchors = w.findAll('.c-scroll-top')
+    expect(anchors).toHaveLength(1)
+    expect(w.find('.monitor-content').element.contains(anchors[0].element)).toBe(true)
+  })
+
+  it('TC-G02: cuộn `.monitor-content` quá ngưỡng ⇒ nút hiện; click đưa CHÍNH NÓ về đầu', async () => {
+    seedAppSettings()
+    const w = mount(MonitorLayout, { props: { tasks } })
+    expect(w.find('.c-scroll-top__btn').exists()).toBe(false)
+
+    const el = await scrollContent(w, 900)
+    expect(w.find('.c-scroll-top__btn').exists()).toBe(true)
+
+    await w.find('.c-scroll-top__btn').trigger('click')
+    expect(el.scrollTop).toBe(0)
+  })
+
+  it('TC-G03: nút 🚫 không đụng `window` — chỉ scroller được truyền vào', async () => {
+    seedAppSettings()
+    const scrollSpy = vi.fn()
+    vi.stubGlobal('scrollTo', scrollSpy)
+    const w = mount(MonitorLayout, { props: { tasks } })
+
+    await scrollContent(w, 900)
+    await w.find('.c-scroll-top__btn').trigger('click')
+
+    expect(scrollSpy).not.toHaveBeenCalled()
+  })
+
+  it('TC-G13: chưa chọn task ⇒ vẫn có neo, 🚫 không có nút mồ côi, không ném lỗi', () => {
+    seedAppSettings()
+    const w = mount(MonitorLayout, { props: { tasks: [], selected: null } })
+
+    expect(w.find('.monitor-content').exists()).toBe(true)
+    expect(w.find('.c-scroll-top').exists()).toBe(true)
+    expect(w.find('.c-scroll-top__btn').exists()).toBe(false)
+  })
+
+  /**
+   * E16: `.monitor-content` là CÙNG một element khi đổi task / đổi artifact, nên
+   * watcher trên `scroller` không bắn. `contentKey` ghép từ `task_id` + tên
+   * artifact là đường dây duy nhất bắt nó đo lại ngưỡng.
+   */
+  it('E16: đổi task ⇒ đo lại ngưỡng, trang ngắn thì nút tự ẩn', async () => {
+    seedAppSettings()
+    const w = mountLayout({ tasks, selected: tasks[0] })
+
+    const el = await scrollContent(w, 900)
+    expect(w.find('.c-scroll-top__btn').exists()).toBe(true)
+
+    el.scrollTop = 0 // trang mới ngắn hơn: trình duyệt kẹp về 0, không bắn `scroll`
+    await w.setProps({ selected: { ...tasks[0], task_id: 'KHAC' } })
+    await flushPromises()
+
+    expect(w.find('.c-scroll-top__btn').exists()).toBe(false)
+  })
+
+  it('E16b: đổi artifact đang mở cũng làm đo lại ngưỡng', async () => {
+    seedAppSettings()
+    const w = mountLayout({
+      tasks,
+      selected: tasks[0],
+      openArtifact: { taskId: tasks[0].task_id, name: 'investigate.md' },
+    })
+
+    const el = await scrollContent(w, 900)
+    expect(w.find('.c-scroll-top__btn').exists()).toBe(true)
+
+    el.scrollTop = 0
+    await w.setProps({ openArtifact: { taskId: tasks[0].task_id, name: 'design.md' } })
+    await flushPromises()
+
+    expect(w.find('.c-scroll-top__btn').exists()).toBe(false)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// T86917a08 — click chọn project trong menu đã Teleport ra body không được
+// kích hoạt auto-collapse của sub-sidebar. Phải ở tầng MonitorLayout: mount cô
+// lập ProjectBar thì `onClickOutside` của sub-sidebar không tồn tại trong bài
+// test, nên TC05 của ProjectBar.test.ts xanh mà bug vẫn lọt.
+// ---------------------------------------------------------------------------
+
+const projectsTriple = [
+  { id: 'p-current', name: 'Current project', default: true },
+  { id: 'p-other', name: 'Other project', default: false },
+  { id: 'p-third', name: 'Third project', default: false },
+]
+
+/** ProjectBar chỉ render hàng select khi `projects` không rỗng. */
+function mountWithProjects(extra: Record<string, any> = {}) {
+  return mount(MonitorLayout, {
+    attachTo: document.body,
+    props: {
+      tasks,
+      projects: projectsTriple,
+      defaultProjectId: 'p-current',
+      selectedProjectId: 'p-current',
+      ...extra,
+    },
+  })
+}
+
+/** `<ul>` của menu bị Teleport ra body — ngoài cây DOM của wrapper. */
+function projectMenu(): HTMLElement | null {
+  return document.body.querySelector('.project-select-menu')
+}
+
+function menuButtons(selector: string) {
+  const menu = projectMenu()
+  expect(menu).not.toBeNull()
+  return Array.from(menu!.querySelectorAll(selector)) as HTMLElement[]
+}
+
+async function openProjectMenu(w: ReturnType<typeof mount>) {
+  await w.find('.project-select-trigger').trigger('click')
+  // Cú click mở menu và cú click chọn item phải nằm ở hai macrotask khác nhau:
+  // `onClickOutside` chặn click thứ hai trong cùng macrotask bằng cờ
+  // `isProcessingClick` (setTimeout 0) ⇒ thiếu dòng này là test xanh giả.
+  await flushMacrotask()
+}
+
+describe('MonitorLayout — chọn project bằng click không làm sập sub-sidebar (T86917a08)', () => {
+  it('TC-R1 — setting BẬT: click item trong menu teleport đổi project, sub-sidebar giữ nguyên', async () => {
+    seedAppSettings({ collapseMonitorSubSidebarOnOutside: true })
+    const w = mountWithProjects()
+    await flushMacrotask()
+
+    await openProjectMenu(w)
+    const picks = menuButtons('.project-pick')
+    expect(picks).toHaveLength(projectsTriple.length)
+    await new DOMWrapper(picks[1]).trigger('click')
+    await w.vm.$nextTick()
+
+    expect(w.emitted('select-project')).toEqual([['p-other']])
+    expect(w.emitted('update:subSidebarCollapsed')).toBeUndefined()
+    expect(w.find('.project-bar').exists()).toBe(true)
+    w.unmount()
+  })
+
+  it('TC-R2 — setting BẬT: xoá project trong menu teleport refresh danh sách, sub-sidebar giữ nguyên', async () => {
+    seedAppSettings({ collapseMonitorSubSidebarOnOutside: true })
+    vi.mocked(removeProject).mockClear()
+    vi.mocked(removeProject).mockResolvedValue({ removed: true } as any)
+    vi.stubGlobal('confirm', vi.fn(() => true))
+
+    const w = mountWithProjects()
+    await flushMacrotask()
+
+    await openProjectMenu(w)
+    const removes = menuButtons('.project-remove')
+    await new DOMWrapper(removes[1]).trigger('click')
+    await flushPromises()
+
+    expect(removeProject).toHaveBeenCalledTimes(1)
+    expect(removeProject).toHaveBeenCalledWith('p-other')
+    expect(w.emitted('projects-changed')).toBeTruthy()
+    expect(w.emitted('update:subSidebarCollapsed')).toBeUndefined()
+    w.unmount()
+  })
+
+  it('TC-R3 (đối chứng) — click `div` trần ngoài sub-sidebar vẫn thu gọn như cũ', async () => {
+    seedAppSettings({ collapseMonitorSubSidebarOnOutside: true })
+    const outside = document.createElement('div')
+    document.body.appendChild(outside)
+
+    const w = mountWithProjects()
+    await flushMacrotask()
+
+    dispatchOutsideClick(outside)
+    await w.vm.$nextTick()
+
+    // Fix thu hẹp điều kiện auto-collapse, không tắt nó.
+    expect(w.emitted('update:subSidebarCollapsed')).toEqual([[true]])
+    w.unmount()
+  })
+
+  it('TC-R4 — setting TẮT: click item trong menu teleport vẫn đổi project, không phát collapse', async () => {
+    seedAppSettings()
+    const w = mountWithProjects()
+    await flushMacrotask()
+
+    await openProjectMenu(w)
+    await new DOMWrapper(menuButtons('.project-pick')[1]).trigger('click')
+    await w.vm.$nextTick()
+
+    expect(w.emitted('select-project')).toEqual([['p-other']])
+    expect(w.emitted('update:subSidebarCollapsed')).toBeUndefined()
+    w.unmount()
+  })
 })

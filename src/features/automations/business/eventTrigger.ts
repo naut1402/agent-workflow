@@ -11,11 +11,36 @@
 
 import { on, type DashboardEvent } from '../../../backend/events/index.js'
 import { loadRegistry } from '../../../backend/registry.js'
+import { getBoundAutomationRunner } from './AutomationRunner.js'
 import { getRuleState } from './runLedger.js'
 import { listAutomations } from './rules.js'
-import { getBoundAutomationRunner } from './scheduler.js'
 
 export const MIN_EVENT_REFIRE_MS = 10_000
+
+/** Sự kiện có thể chọn làm trigger trong UI (từ event-catalog, trừ `automation.*` tự phát). */
+export const KNOWN_AUTOMATION_EVENT_TYPES: string[] = [
+  'job.queued',
+  'job.started',
+  'job.finished',
+  'job.failed',
+  'job.cancelled',
+  'job.awaiting_recovery',
+  'job.retry_scheduled',
+  'job.recovered',
+  'task.created',
+  'task.advanced',
+  'hitl.pending',
+  'hitl.resolved',
+  'entity.created',
+  'entity.updated',
+  'entity.deleted',
+  'webhook.received',
+  'webhook.triggered',
+  'usage.recorded',
+  'orchestrator.dispatched',
+  'orchestrator.halted',
+  'orchestrator.start_requested',
+]
 
 let triggersStarted = false
 

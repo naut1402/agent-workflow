@@ -14,7 +14,10 @@ import McpServerDialog from '@/features/mcp/components/McpServerDialog.vue'
 import AgentFormDialog from '@/features/agent-editor/components/AgentFormDialog.vue'
 import AutomationFormDialog from '@/features/automations/components/AutomationFormDialog.vue'
 import QuickActionPanel from '@/features/quick-action/components/QuickActionPanel.vue'
-import quickActionVi from '@/features/quick-action/locales/vi'
+import KnowledgePickerDialog from '@/frontend/ui/KnowledgePickerDialog.vue'
+import { localeMessages } from '../../helpers/localeYaml'
+
+const quickActionVi = localeMessages('vi', 'quickAction')
 
 vi.mock('@/features/runner/scripts/ConnectionDialogApi', () => ({
   fetchCredentials: vi.fn(async () => ({ profiles: [] })),
@@ -63,6 +66,11 @@ vi.mock('@/features/knowledge/scripts/KnowledgePanelApi', () => ({
   saveKnowledgeCollection: vi.fn(async () => ({ collection: { id: 'c1' } })),
   saveKnowledgeTag: vi.fn(async () => ({ tag: 't1' })),
   renameKnowledgeTag: vi.fn(async () => ({ count: 0, metaError: '' })),
+  uploadKnowledgeFile: vi.fn(async () => ({ entry: { id: 'e1' } })),
+}))
+vi.mock('@/features/knowledge/scripts/knowledgeApi', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/features/knowledge/scripts/knowledgeApi')>()),
+  fetchKnowledgeList: vi.fn(async () => ({ entries: [] })),
   uploadKnowledgeFile: vi.fn(async () => ({ entry: { id: 'e1' } })),
 }))
 vi.mock('@/features/settings/scripts/SettingsDialogApi', () => ({
@@ -225,6 +233,10 @@ describe('TC-29 · overlay phải neo NGOÀI vùng cuộn', () => {
       },
       'AutomationFormDialog',
     )
+  })
+
+  it('KnowledgePickerDialog', async () => {
+    await mountAndAssert(KnowledgePickerDialog, { modelValue: [], projectId: 'p1' }, 'KnowledgePickerDialog')
   })
 
   // Điểm duy nhất không phải dialog: hộp cuộn ở đây là `.qa-form-body`, và nó

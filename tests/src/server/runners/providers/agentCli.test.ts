@@ -3,18 +3,26 @@ import {
   AGENT_CLI_PROVIDER_IDS,
   isAgentCliProviderId,
   providerFamilyFromId,
-  type AgentCliProvider,
-} from '../../../../../src/features/runner/business/providers/agentCli.js'
+} from '../../../../../src/features/runner/business/providers/providerRegistry.js'
 import {
-  createClaudeCodeCliProvider,
-  createLocalConsoleProvider,
-} from '../../../../../src/features/runner/business/providers/claude-code-cli.js'
+  isAgentCliProvider,
+  type AgentCliProvider,
+} from '../../../../../src/features/runner/business/providers/AbstractAgentCliProvider.js'
+import { ClaudeCliProvider } from '../../../../../src/features/runner/business/providers/ClaudeCliProvider.js'
+import { CodexCliProvider } from '../../../../../src/features/runner/business/providers/CodexCliProvider.js'
+import { CursorCliProvider } from '../../../../../src/features/runner/business/providers/CursorCliProvider.js'
+import { ConsoleCommandProvider } from '../../../../../src/features/runner/business/providers/ConsoleCommandProvider.js'
 import { getProvider, listProviderCatalog } from '../../../../../src/features/runner/business/registry.js'
 import { ConfigFlagMcpDelivery } from '../../../../../src/features/runner/business/mcpDelivery/ConfigFlagMcpDelivery.js'
 import { NoMcpDelivery } from '../../../../../src/features/runner/business/mcpDelivery/NoMcpDelivery.js'
 import { RunnerCredentialResolver } from '../../../../../src/features/runner/business/RunnerCredentialResolver.js'
-import { createConsoleCommandProvider } from '../../../../../src/features/runner/business/providers/console-command.js'
-import { isAgentCliProvider } from '../../../../../src/features/runner/business/providers/agentCli.js'
+
+/** Dựng tay từng hiện thực Agent CLI (không qua providerRegistry). */
+const CLI_CLASSES = {
+  'claude-code-cli': ClaudeCliProvider,
+  'cursor-cli': CursorCliProvider,
+  'codex-cli': CodexCliProvider,
+} as const
 
 describe('agentCli family', () => {
   test('built-in agent CLI ids', () => {
@@ -27,8 +35,8 @@ describe('agentCli family', () => {
   })
 
   test('AgentCliProvider vs console-command', () => {
-    const agent = createClaudeCodeCliProvider()
-    const console = createConsoleCommandProvider()
+    const agent = new ClaudeCliProvider()
+    const console = new ConsoleCommandProvider()
     expect(isAgentCliProvider(agent)).toBe(true)
     expect(agent.family).toBe('agent-cli')
     expect(typeof agent.agentCapabilities).toBe('function')
@@ -39,7 +47,7 @@ describe('agentCli family', () => {
   test('does not advertise token usage until execute() maps real usage', () => {
     // Footer only shows tokens when ExecuteResult.tokenUsage is set; until then
     // supportsTokenUsage must stay false (PR #189 review).
-    expect(createClaudeCodeCliProvider().agentCapabilities().supportsTokenUsage).toBe(false)
+    expect(new ClaudeCliProvider().agentCapabilities().supportsTokenUsage).toBe(false)
   })
 })
 
@@ -73,15 +81,14 @@ describe('agentCli — MCP delivery', () => {
     }
 
     // Dựng tay 🚫 truyền delivery ⇒ Null Object, 🚫 suy theo `providerId` nữa (G12).
-    for (const providerId of ['claude-code-cli', 'cursor-cli', 'codex-cli']) {
-      const provider = createLocalConsoleProvider({ providerId, defaultCliPath: 'x' })
+    for (const Provider of Object.values(CLI_CLASSES)) {
+      const provider = new Provider({ defaultCliPath: 'x' })
       expect(provider.agentCapabilities().mcpDelivery).toBe('unsupported')
       expect(provider.mcpDelivery).toBeInstanceOf(NoMcpDelivery)
     }
-    expect(createClaudeCodeCliProvider().agentCapabilities().mcpDelivery).toBe('unsupported')
+    expect(new ClaudeCliProvider().agentCapabilities().mcpDelivery).toBe('unsupported')
 
-    const forced = createLocalConsoleProvider({
-      providerId: 'codex-cli',
+    const forced = new CodexCliProvider({
       defaultCliPath: 'x',
       mcpDelivery: new ConfigFlagMcpDelivery(() => 'khong-dung', new RunnerCredentialResolver()),
     })

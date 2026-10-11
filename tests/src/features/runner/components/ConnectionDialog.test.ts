@@ -4,11 +4,14 @@ import { mountWithI18n as mount } from '../../../helpers/i18n'
 import ConnectionDialog from '@/features/runner/components/ConnectionDialog.vue'
 import ProviderDialog from '@/features/runner/components/ProviderDialog.vue'
 import type { ProviderConfigOption, ProviderEntry } from '@/features/runner/types'
+import { localeMessages } from '../../../helpers/localeYaml'
+
 // `mountWithI18n` defaults to the 'vi' locale; read expected strings straight
 // from the same message catalog the component renders from (`t()` isn't
 // reachable off `wrapper.vm` here — Vue doesn't expose `<script setup>`
 // bindings on the public instance without `defineExpose`).
-import runnerVi from '@/features/runner/locales/vi'
+const runnerVi = localeMessages('vi', 'runner')
+const runnerEn = localeMessages('en', 'runner')
 
 // Both dialogs render through <Teleport to="body"> — @vue/test-utils'
 // wrapper.find()/findAll() only see the mount anchor, not the teleported
@@ -40,6 +43,36 @@ vi.mock('@/features/runner/scripts/ProviderDialogApi', () => ({
 // đổi hành vi của các ca có sẵn; ca MCP tự nạp danh sách riêng.
 vi.mock('@/features/mcp/scripts/mcpApi', () => ({
   fetchMcpServers: vi.fn(async () => ({ servers: [] })),
+}))
+
+/**
+ * Cắt đường tới sqlite — nếu không, CẢ suite này không nạp được.
+ *
+ * Nhóm `mcpDelivery` ở cuối file cố ý đọc catalog THẬT qua
+ * `@/features/runner/business/registry` (xem ghi chú ở đó: hằng gõ tay là thứ
+ * vẫn xanh sau khi giá trị thật đã đổi). Nhưng đồ thị import tĩnh của nó đi
+ * tiếp tới tận tầng lưu trữ:
+ *
+ *   business/registry → providers/providerRegistry → ClaudeCliProvider
+ *     → claudeUsageTranscript → usageCapture
+ *       → backend/log/store → log/driverInit → log/sqliteDriver
+ *         → backend/db/client  →  await import('bun:sqlite')
+ *
+ * `bun:sqlite` là builtin của Bun, Vite 🚫 không bundle được cho môi trường
+ * client ⇒ `Cannot bundle Node.js built-in "bun:sqlite"` và suite fail ở bước
+ * NẠP, trước khi chạy ca nào.
+ *
+ * Mock đặt ở **lá** (`backend/db/client`) chứ không ở `log/store`: đây là cắt
+ * nhỏ nhất đủ để `bun:sqlite` không bao giờ được resolve, trong khi
+ * `listProviderCatalog()` vẫn là hàm THẬT ⇒ giữ nguyên giá trị của nhóm
+ * `mcpDelivery`. Suite này là test component dưới jsdom, 🚫 không ca nào cần DB
+ * thật (`testing.md` §1: tầng business/sqlite thuộc **bun test**).
+ */
+vi.mock('@/backend/db/client', () => ({
+  getDb: vi.fn(async () => {
+    throw new Error('getDb() 🚫 không khả dụng trong suite component (jsdom) — xem vi.mock ở đầu file')
+  }),
+  resetDbForTest: vi.fn(() => {}),
 }))
 
 import {
@@ -1237,7 +1270,6 @@ describe('ConnectionDialog — overlay chặn thao tác lúc lưu', () => {
 
 /* ═══ #378 · #379 · Tdf943817 — cảnh báo theo cách giao MCP của provider ══════ */
 
-import runnerEn from '@/features/runner/locales/en'
 import { listProviderCatalog } from '@/features/runner/business/registry'
 
 /**

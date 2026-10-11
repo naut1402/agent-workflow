@@ -3,7 +3,8 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { invalidateLoggingPrefsCache } from '../../../../src/backend/log/loggingPrefsIo.js'
-import { captureJobUsage, captureTokenUsageFromExecute } from '../../../../src/features/runner/business/usageCapture.js'
+import { captureTokenUsageFromExecute } from '../../../../src/features/runner/business/usageCapture.js'
+import { getProvider } from '../../../../src/features/runner/business/providers/providerRegistry.js'
 import {
   encodeCwdForClaudeProjects,
   sessionTranscriptPath,
@@ -13,9 +14,18 @@ import {
   setUsageCursor,
   saveTaskSessionLedger,
 } from '../../../../src/features/runner/business/sessionLedger.js'
-import { loadJob, mergeJobUsage } from '../../../../src/features/runner/business/jobQueue.js'
+import { loadJob } from '../../../../src/features/runner/business/jobQueue.js'
+import { mergeJobUsage } from '../../../../src/features/runner/business/jobRecords.js'
 import type { JobRecord } from '../../../../src/features/runner/business/types.js'
 import { registryHome } from '../../../../src/backend/registry.js'
+
+/**
+ * Đường jobQueue gọi sau khi job xong: hook `captureUsage` của provider (chỉ
+ * provider có nguồn usage riêng mới khai — Claude đọc transcript CLI).
+ */
+async function captureJobUsage(job: JobRecord, sessionId: string, providerId: string): Promise<void> {
+  await getProvider(providerId)?.captureUsage?.({ job, sessionId })
+}
 
 let home: string
 let prevHome: string | undefined
@@ -92,8 +102,8 @@ function writeTranscript(lines: object[]) {
   return file
 }
 
-describe('captureJobUsage', () => {
-  test('no-op for non-claude provider', async () => {
+describe('RunnerProvider.captureUsage (Claude transcript)', () => {
+  test('no-op for provider without captureUsage hook (cursor-cli)', async () => {
     writeSettings(true)
     const job = seedJob('job-other')
     await captureJobUsage(job, SESSION, 'cursor-cli')

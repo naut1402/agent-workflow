@@ -5,7 +5,13 @@ import { HTTPException } from 'hono/http-exception'
 import type { HonoEnv, RegistryContext } from './http/types.js'
 import { j, json } from './http/responseHelper.js'
 import { dirnameFromImportMeta, resolvePath } from './lib/fileHelper.js'
-import { loadModulesUnder } from './lib/dirModuleLoader.js'
+import { loadEntriesUnder } from './lib/dirModuleLoader.js'
+import {
+  controllerOrder,
+  isControllerClass,
+  registerController,
+  registerMethodNotAllowed,
+} from './http/registerControllers.js'
 import { appendRequestLog } from './log/store.js'
 import { installEventLogSubscriber } from './log/eventLogSubscriber.js'
 import { initLogDriverFromPrefs } from './log/driverInit.js'
@@ -29,25 +35,60 @@ type FeatureApiModule = {
 
 const featuresRoot = resolvePath(dirnameFromImportMeta(import.meta.url), '../features')
 
-/** Đăng ký route từ mọi feature `api.ts`, sắp theo `routeOrder` (mặc định 100). */
-export async function registerFeatureRoutes(app: Hono<HonoEnv>): Promise<void> {
-  const mods = await loadModulesUnder<FeatureApiModule>(featuresRoot, { entryFile: 'api.ts' })
-  if (!mods.length) {
-    throw new Error(`registerFeatureRoutes: no features/<name>/api.ts under ${featuresRoot}`)
-  }
+type LoadedRoutes = { order: number; register: (app: Hono<HonoEnv>) => void }
 
-  const loaded = mods
-    .filter(
-      (m): m is FeatureApiModule & { registerRoutes: (app: Hono<HonoEnv>) => void } =>
-        typeof m.registerRoutes === 'function',
-    )
-    .map((m) => ({
-      order: typeof m.routeOrder === 'number' ? m.routeOrder : 100,
-      register: m.registerRoutes,
-    }))
+/** Kiểu cũ: `api.ts` export `registerRoutes` (+ `routeOrder`, mặc định 100); thiếu hàm thì bỏ qua. */
+function apiModuleRoutes(api: FeatureApiModule): LoadedRoutes[] {
+  if (typeof api.registerRoutes !== 'function') return []
+  return [{ order: typeof api.routeOrder === 'number' ? api.routeOrder : 100, register: api.registerRoutes }]
+}
+
+/**
+ * Kiểu mới: mọi class `@Controller` export từ module, mỗi class một lần (`seen`).
+ * Path đã khai được gom vào `declaredPaths` lúc đăng ký để gắn 405 sau cùng.
+ */
+function controllerRoutes(mod: Record<string, unknown>, seen: Set<unknown>, declaredPaths: string[]): LoadedRoutes[] {
+  const routes: LoadedRoutes[] = []
+  for (const value of Object.values(mod)) {
+    if (!isControllerClass(value) || seen.has(value)) continue
+    seen.add(value)
+    routes.push({
+      order: controllerOrder(value),
+      register: (a) => declaredPaths.push(...registerController(a, value)),
+    })
+  }
+  return routes
+}
+
+/**
+ * Đăng ký route của mọi feature, hai kiểu chạy song song tới khi feature cuối chuyển xong:
+ * - kiểu cũ: `api.ts` export `registerRoutes` + `routeOrder` (mặc định 100);
+ * - kiểu mới: class `@Controller({ order })` export từ `controller.ts` / `controllers/*.ts`.
+ * Sắp chung theo order; cùng order giữ thứ tự nạp (thư mục feature, rồi api → controller).
+ * 405 cho path đã khai bằng decorator gắn sau cùng.
+ */
+export async function registerFeatureRoutes(app: Hono<HonoEnv>): Promise<void> {
+  const entries = await loadEntriesUnder<Record<string, unknown>>(featuresRoot, {
+    entryFiles: ['api.ts', 'controller.ts'],
+    entryDirs: ['controllers'],
+  })
+
+  const loaded: LoadedRoutes[] = []
+  const seen = new Set<unknown>()
+  const declaredPaths: string[] = []
+  for (const { file, mod } of entries) {
+    if (file === 'api.ts') loaded.push(...apiModuleRoutes(mod as FeatureApiModule))
+    else loaded.push(...controllerRoutes(mod, seen, declaredPaths))
+  }
+  if (!loaded.length) {
+    throw new Error(`registerFeatureRoutes: no features/<name>/{api.ts,controller.ts} under ${featuresRoot}`)
+  }
 
   loaded.sort((a, b) => a.order - b.order)
   for (const item of loaded) item.register(app)
+  // 405 của controller kiểu mới gắn sau route của MỌI feature — `app.all` viết tay ở `api.ts`
+  // kiểu cũ vẫn nằm ngay sau route của feature đó.
+  registerMethodNotAllowed(app, declaredPaths)
 }
 
 export async function createApp(ctx: RegistryContext): Promise<Hono<HonoEnv>> {
@@ -69,10 +110,15 @@ export async function createApp(ctx: RegistryContext): Promise<Hono<HonoEnv>> {
   // Thứ tự bắt buộc: CORS → rate-limit (áp dụng cả khi chưa auth) → JWT; cả 3 no-op mặc định.
   app.use('/api/*', createCorsMiddleware(() => loadSecurityConfig().cors))
   app.use('/api/*', createRateLimitMiddleware(() => loadSecurityConfig().rateLimit))
-  // Route orchestrator dùng token riêng theo job (không phải Authorization) nên loại khỏi JWT dashboard.
+  // Route orchestrator dùng token riêng theo job, route i18n cần trước khi đăng nhập — cả hai loại khỏi JWT dashboard.
   const jwtMiddleware = createJwtMiddleware()
   app.use('/api/*', async (c, next) => {
-    if (c.req.path.startsWith('/api/orchestrator/')) return next()
+    if (
+      c.req.path.startsWith('/api/orchestrator/') ||
+      c.req.path.startsWith('/api/i18n/')
+    ) {
+      return next()
+    }
     return jwtMiddleware(c, next)
   })
 

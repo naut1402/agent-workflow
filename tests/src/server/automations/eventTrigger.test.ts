@@ -8,7 +8,7 @@ import {
   startEventTriggers,
   _resetEventTriggersForTest,
 } from '../../../../src/features/automations/business/eventTrigger.js'
-import { bindAutomationRunner } from '../../../../src/features/automations/business/scheduler.js'
+import { bindAutomationRunner } from '../../../../src/features/automations/business/AutomationRunner.js'
 import { createAutomation } from '../../../../src/features/automations/business/rules.js'
 import { setRuleState } from '../../../../src/features/automations/business/runLedger.js'
 

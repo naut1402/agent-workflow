@@ -210,3 +210,54 @@ describe('TC-D01/D02: all 3 middleware together, no bypass', () => {
     expect(res.headers.get('access-control-allow-origin')).toBe('https://allowed.example')
   })
 })
+
+/**
+ * [T94b6ee41] Nhóm C của `test-spec.md` — `/api/i18n/*` nằm NGOÀI JWT guard (G-C2).
+ *
+ * Màn đăng nhập cần chuỗi dịch TRƯỚC khi có token: guard chặn ở đây thì app không có
+ * chữ trước cả khi người dùng đăng nhập được. Hai ca đối chứng (C03, C04) chốt rằng
+ * loại trừ là theo đúng prefix `/api/i18n/`, không phải nới guard toàn cục.
+ */
+describe('i18n — loại trừ khỏi JWT guard', () => {
+  test('TC-C01: manifest không cần token ⇒ 200', async () => {
+    process.env.DASHBOARD_JWT_SECRET = 'topsecret'
+    const app = await freshApp()
+    const res = await app.request('/api/i18n/manifest')
+    expect(res.status).toBe(200)
+  })
+
+  test('TC-C02: bundle không cần token ⇒ 200', async () => {
+    process.env.DASHBOARD_JWT_SECRET = 'topsecret'
+    const app = await freshApp()
+    const res = await app.request('/api/i18n/vi')
+    expect(res.status).toBe(200)
+    expect((await res.json()).locale).toBe('vi')
+  })
+
+  test('TC-C03: đối chứng — guard còn hiệu lực trên route khác ⇒ 401', async () => {
+    process.env.DASHBOARD_JWT_SECRET = 'topsecret'
+    const app = await freshApp()
+    expect((await app.request('/api/projects')).status).toBe(401)
+  })
+
+  test('TC-C04: prefix không nuốt route khác — `/api/i18next` ⇒ 401, không 404', async () => {
+    process.env.DASHBOARD_JWT_SECRET = 'topsecret'
+    const app = await freshApp()
+    const res = await app.request('/api/i18next')
+    // 401 chứ không 404: middleware chặn TRƯỚC khi router kết luận route không tồn tại.
+    // Ra 404 nghĩa là loại trừ khớp theo tiền tố lỏng (`/api/i18n`) và đã mở nhầm.
+    expect(res.status).toBe(401)
+  })
+
+  test('TC-C05: rate-limit vẫn áp cho i18n — ngoài JWT, KHÔNG ngoài rate-limit', async () => {
+    saveSecurityConfig({
+      rateLimit: { enabled: true, windowMs: 60_000, max: 2, routes: [] },
+      cors: { enabled: false, allowedOrigins: [], allowCredentials: false },
+    })
+    const app = await freshApp()
+    const headers = { 'x-dtd-client-ip': '10.0.0.9' }
+    expect((await app.request('/api/i18n/vi', { headers })).status).not.toBe(429)
+    expect((await app.request('/api/i18n/vi', { headers })).status).not.toBe(429)
+    expect((await app.request('/api/i18n/vi', { headers })).status).toBe(429)
+  })
+})

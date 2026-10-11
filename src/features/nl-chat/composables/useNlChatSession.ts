@@ -1,14 +1,24 @@
-import { ref } from 'vue'
+import { ref, shallowRef } from 'vue'
 import { normalizePipelineDraft } from '../lib/pipelineDraft'
-import { startNlChat, sendNlChatMessage, fetchNlChatTurn, cancelNlChat } from '../scripts/ChatWindowApi'
+import { appendDraft } from '../lib/draftPrompt'
+import {
+  startNlChat,
+  sendNlChatMessage,
+  fetchNlChatTurn,
+  cancelNlChat,
+} from '../scripts/ChatWindowApi'
 import { fetchJob } from '../../runner/scripts/runnerApi'
 import { fetchCatalog } from '../../pipeline-editor/scripts/pipelineEditorApi'
-import { fetchPipelineProfiles, savePipelineProfile } from '../../pipeline-editor/scripts/ProfileManagerApi'
+import {
+  fetchPipelineProfiles,
+  savePipelineProfile,
+} from '../../pipeline-editor/scripts/ProfileManagerApi'
 import { createTask } from '../../monitor/scripts/monitorApi'
 import { saveCustomAgent } from '../../agent-editor/scripts/agentEditorApi'
 import { createAutomation } from '../../automations/scripts/automationsApi'
 import { mintTaskId } from '../../monitor/lib/createTaskForm'
 import { TASK_ID_PATTERN } from '../../monitor/schemas/taskCreate'
+import { t } from '../../../frontend/plugins/i18n'
 
 // Drives the floating NL chat surface end to end: chat with the `nl-chat-builder` agent until it hands back a draft, then persist it through the SAME create APIs the existing dialogs use (design.md F0012 §4.2).
 // Kept as a composable (no render needed) so the state machine is unit-testable by mocking the API client, same pattern as useAgentBuild.ts.
@@ -17,7 +27,12 @@ export type NlChatEntityType = 'task' | 'pipeline' | 'agent' | 'automation'
 export type NlChatStep = 'chatting' | 'previewDraft' | 'confirming' | 'done' | 'error'
 
 /** Loại draft `confirm()` biết persist — draft ngoài danh sách này quay lại chat. */
-const PERSISTABLE_ENTITY_TYPES: readonly NlChatEntityType[] = ['task', 'pipeline', 'agent', 'automation']
+const PERSISTABLE_ENTITY_TYPES: readonly NlChatEntityType[] = [
+  'task',
+  'pipeline',
+  'agent',
+  'automation',
+]
 export type NlChatAgentScope = 'project' | 'global'
 
 export interface NlChatMessage {
@@ -52,7 +67,20 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
   const step = ref<NlChatStep>('chatting')
   const entityType = ref<NlChatEntityType | null>(null)
   const messages = ref<NlChatMessage[]>([])
-  const draft = ref<Record<string, unknown> | null>(null)
+  // `shallowRef` chứ không `ref`: `ref` bọc object thành proxy reactive, nên đọc
+  // `draft.value` ra không còn là chính object đã gán. Draft ở đây luôn được THAY
+  // bằng object mới (không sửa tại chỗ) nên deep reactivity là thừa — còn mất danh
+  // tính tham chiếu thì `DraftEditor` hết phân biệt được draft mới từ agent với
+  // tiếng vọng của chính nó, và xoá mất chỗ người dùng đang gõ.
+  const draft = shallowRef<Record<string, unknown> | null>(null)
+  /** Bản draft ngay TRƯỚC lượt chat gần nhất — nguồn khôi phục của nút Hoàn tác. */
+  const draftSnapshot = shallowRef<Record<string, unknown> | null>(null)
+  /** true = lượt chat vừa rồi đã thay draft ⇒ hiện banner + Hoàn tác. */
+  const draftUpdatedByChat = ref(false)
+  /** true = người dùng đã chỉnh tay draft kể từ lúc nhận nó. */
+  const draftDirty = ref(false)
+  /** Đặt khi draft bị bỏ vì vượt ngưỡng ký tự của message; xoá ở đầu mỗi lượt gửi. */
+  const draftAttachWarning = ref(false)
   const pipelineName = ref('')
   // Explicit choice re-confirmed at "previewDraft" for an `agent` draft — `getProjectId()` alone isn't trusted for where to save it, since a null project context previously made `saveCustomAgent` silently fall back to whatever project has `default: true`.
   const agentScope = ref<NlChatAgentScope>('project')
@@ -90,9 +118,9 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
     for (;;) {
       const res = await fetchJob(id)
       const job: JobLike | undefined = res?.job
-      if (!job) throw new Error('job missing')
+      if (!job) throw new Error(t('nlChat.builder.jobMissing'))
       if (isTerminal(job.status)) return job
-      if (Date.now() >= deadline) return { ...job, status: 'failed', error: 'timeout waiting for job' }
+      if (Date.now() >= deadline) return { ...job, status: 'failed', error: t('nlChat.builder.jobTimeout') }
       await sleep(pollMs)
     }
   }
@@ -111,13 +139,16 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
         const rawAgents: unknown = catalog?.agents
         const ids: string[] = Array.isArray(rawAgents)
           ? rawAgents
-              .filter((a: unknown): a is { id: string } => !!a && typeof a === 'object' && typeof (a as { id?: unknown }).id === 'string')
+              .filter(
+                (a: unknown): a is { id: string } =>
+                  !!a && typeof a === 'object' && typeof (a as { id?: unknown }).id === 'string',
+              )
               .map((a) => a.id)
           : []
         catalogAgentIds.value = new Set(ids)
       } catch {
         // Giữ nguyên set cũ: guard ref agent đã fail-closed theo `catalogError`, nên không cần xoá dữ liệu để chặn.
-        catalogError.value = 'Không tải được danh sách agent để kiểm tra — vui lòng thử lại.'
+        catalogError.value = t('nlChat.builder.catalogLoadFailed')
       }
     })().finally(() => {
       catalogInflight = null
@@ -136,13 +167,18 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
         const raw: unknown = res?.profiles
         const names: string[] = Array.isArray(raw)
           ? raw
-              .filter((p: unknown): p is { name: string } => !!p && typeof p === 'object' && typeof (p as { name?: unknown }).name === 'string')
+              .filter(
+                (p: unknown): p is { name: string } =>
+                  !!p &&
+                  typeof p === 'object' &&
+                  typeof (p as { name?: unknown }).name === 'string',
+              )
               .map((p) => p.name)
           : []
         catalogProfileNames.value = new Set(names)
       } catch {
         // Giữ nguyên set cũ: `profileNameError` đã fail-closed theo `profileError` nên không cần xoá dữ liệu để chặn.
-        profileError.value = 'Không tải được danh sách pipeline profile để kiểm tra — vui lòng thử lại.'
+        profileError.value = t('nlChat.builder.profilesLoadFailed')
       }
     })().finally(() => {
       profilesInflight = null
@@ -180,10 +216,10 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
     if (refs.length === 0) return null
     if (profileError.value) return profileError.value
     const known = catalogProfileNames.value
-    if (!known) return 'Đang kiểm tra danh sách pipeline profile...'
+    if (!known) return t('nlChat.builder.checkingProfiles')
     const invalid = refs.filter((n) => !known.has(n))
     return invalid.length > 0
-      ? `Pipeline profile không tồn tại: ${invalid.join(', ')} — sửa lại hoặc bỏ trống để dùng pipeline mặc định.`
+      ? t('nlChat.builder.unknownProfiles', { profiles: invalid.join(', ') })
       : null
   }
 
@@ -203,27 +239,64 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
     return invalid
   }
 
+  /** Cổng DUY NHẤT để UI ghi draft. Mọi caller phải đưa object MỚI, không mutate tại chỗ. */
+  function setDraft(next: Record<string, unknown>): void {
+    draft.value = next
+    draftDirty.value = true
+    // Chỉnh tay sau khi banner hiện ⇒ Hoàn tác sẽ nuốt luôn chỉnh tay mới ⇒ gỡ banner.
+    dismissDraftUpdate()
+  }
+
+  /** Khôi phục bản trước lượt chat. No-op khi không có snapshot. */
+  function undoDraftUpdate(): void {
+    if (!draftSnapshot.value) return
+    draft.value = draftSnapshot.value
+    draftSnapshot.value = null
+    draftUpdatedByChat.value = false
+  }
+
+  /** Bỏ banner mà GIỮ nguyên draft mới (người dùng đồng ý với bản agent vừa sửa). */
+  function dismissDraftUpdate(): void {
+    draftSnapshot.value = null
+    draftUpdatedByChat.value = false
+  }
+
   async function sendMessage(text: string): Promise<void> {
     if (sending.value || !text.trim()) return
     sending.value = true
     error.value = null
+    draftAttachWarning.value = false
+
+    // Chụp ảnh draft TRƯỚC khi gửi, và đính chính bản đó vào message: bản agent
+    // "nhớ" là bản nó tự sinh, nên không gửi kèm là mọi chỉnh tay biến mất.
+    const editingDraft = step.value === 'previewDraft' ? draft.value : null
+    if (editingDraft) draftSnapshot.value = editingDraft // object bất biến ⇒ không cần deep clone
+    const { message: outgoing, attached } = appendDraft(text, editingDraft)
+    if (editingDraft && !attached) draftAttachWarning.value = true
+
+    // Bong bóng chat giữ `text`, request mang `outgoing`: push `outgoing` là để
+    // một khối JSON vài KB chiếm chỗ câu người dùng vừa gõ trong hội thoại.
     messages.value.push({ role: 'user', text })
     try {
       const projectId = opts.getProjectId()
       const res = chatSessionId.value
-        ? await sendNlChatMessage(chatSessionId.value, text, projectId)
+        ? await sendNlChatMessage(chatSessionId.value, outgoing, projectId)
         : await startNlChat(
-            { entityType: entityType.value ?? undefined, message: text, runnerId: opts.runnerId },
+            {
+              entityType: entityType.value ?? undefined,
+              message: outgoing,
+              runnerId: opts.runnerId,
+            },
             projectId,
           )
 
       if (!chatSessionId.value && res?.chatSessionId) chatSessionId.value = res.chatSessionId
       const jobId: string | undefined = res?.job?.id
-      if (!jobId) throw new Error('no job id returned')
+      if (!jobId) throw new Error(t('nlChat.builder.noJobId'))
 
       const finalJob = await pollJob(jobId)
       if (finalJob.status !== 'succeeded') {
-        throw new Error(finalJob.error || `job ${finalJob.status}`)
+        throw new Error(finalJob.error || t('nlChat.builder.jobEnded', { status: finalJob.status }))
       }
 
       const turn = await fetchNlChatTurn(chatSessionId.value as string, projectId)
@@ -232,19 +305,28 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
 
       if (turn.kind === 'draft') {
         // In free-chat mode the agent reports which entity the draft is for; a pinned entityType (selectEntity) still wins if the agent omits it.
-        const resolved = (turn.entityType ?? entityType.value) as NlChatEntityType | null | undefined
+        const resolved = (turn.entityType ?? entityType.value) as
+          NlChatEntityType | null | undefined
         if (!resolved || !PERSISTABLE_ENTITY_TYPES.includes(resolved)) {
           // Draft with no usable entity type — stay in chat and ask, instead of stranding the user on a preview we cannot persist.
           messages.value.push({
             role: 'assistant',
-            text: 'Mình chưa rõ bạn muốn tạo Task, Pipeline, Agent hay Automation — bạn nói rõ giúp mình nhé?',
+            text: t('nlChat.builder.entityUnclear'),
           })
+          // Cũng là một lượt "agent hỏi lại": draft trên màn hình không đổi, nên
+          // snapshot vừa chụp là mồ côi — giữ nó thì Hoàn tác sau này lùi quá xa.
+          draftSnapshot.value = null
           return
         }
         entityType.value = resolved
         const raw = (turn.draft ?? {}) as Record<string, unknown>
         // Normalize before preview so what the user reviews is exactly what gets saved — an id-less pipeline profile cannot be reopened in the Pipeline Editor (see lib/pipelineDraft.ts).
         draft.value = resolved === 'pipeline' ? normalizePipelineDraft(raw) : raw
+        // Điều kiện là `editingDraft !== null` (TRƯỚC lượt này đã ở preview), không
+        // phải `step.value === 'previewDraft'` — dòng dưới vừa set `step` nên nó
+        // luôn đúng, banner sẽ hiện cả ở draft ĐẦU TIÊN, lúc chưa có gì để hoàn tác.
+        draftUpdatedByChat.value = editingDraft !== null
+        draftDirty.value = false
         step.value = 'previewDraft'
         if (resolved === 'pipeline') {
           void loadCatalog()
@@ -255,10 +337,17 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
         }
       } else {
         messages.value.push({ role: 'assistant', text: turn.text || '' })
+        // Agent hỏi lại khi đang preview ⇒ draft KHÔNG đổi, snapshot vừa chụp là
+        // mồ côi. `step` giữ nguyên: ở preview thì vẫn preview (rơi về `chatting`
+        // sẽ làm draft biến mất khỏi màn hình), ở chatting thì vẫn chatting.
+        draftSnapshot.value = null
       }
     } catch (e: any) {
       error.value = String(e?.message || e)
-      step.value = 'error'
+      // Một lượt chat hỏng KHÔNG được cướp màn preview: draft vẫn còn nguyên, lỗi
+      // đã hiện inline qua `error`.
+      if (step.value !== 'previewDraft') step.value = 'error'
+      draftSnapshot.value = null
     } finally {
       sending.value = false
     }
@@ -272,13 +361,13 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
       await loadCatalog()
       // Fail-closed cả khi set cũ còn đó nhưng lần nạp gần nhất hỏng, vì `catalogAgentIds` có thể là dữ liệu cũ hơn thực tế.
       if (catalogError.value || !catalogAgentIds.value) {
-        error.value = catalogError.value || 'Chưa kiểm tra được danh sách agent hợp lệ — vui lòng thử lại.'
+        error.value = catalogError.value || t('nlChat.builder.catalogUnchecked')
         step.value = 'previewDraft'
         return
       }
       const invalid = findInvalidPipelineAgentRefs(editedDraft)
       if (invalid.length > 0) {
-        error.value = `Pipeline tham chiếu agent không tồn tại trong catalog: ${invalid.join(', ')}`
+        error.value = t('nlChat.builder.pipelineUnknownAgents', { agents: invalid.join(', ') })
         step.value = 'previewDraft'
         return
       }
@@ -295,7 +384,7 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
     }
     const projectId = opts.getProjectId()
     if (entityType.value === 'agent' && agentScope.value === 'project' && !projectId) {
-      error.value = 'Chưa chọn project — chọn project ở header hoặc đổi phạm vi agent sang "Toàn cục".'
+      error.value = t('nlChat.builder.noProjectSelected')
       step.value = 'previewDraft'
       return
     }
@@ -312,7 +401,11 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
         await createTask(payload, projectId)
       } else if (entityType.value === 'pipeline') {
         // Re-normalize: the preview textarea is editable, so a user can drop the step ids the Pipeline Editor needs back out of the draft.
-        await savePipelineProfile(pipelineName.value, normalizePipelineDraft(editedDraft), projectId)
+        await savePipelineProfile(
+          pipelineName.value,
+          normalizePipelineDraft(editedDraft),
+          projectId,
+        )
       } else if (entityType.value === 'automation') {
         await createAutomation(editedDraft as never, projectId)
       } else {
@@ -343,6 +436,10 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
     entityType.value = null
     messages.value = []
     draft.value = null
+    draftSnapshot.value = null
+    draftUpdatedByChat.value = false
+    draftDirty.value = false
+    draftAttachWarning.value = false
     pipelineName.value = ''
     agentScope.value = 'project'
     chatSessionId.value = null
@@ -368,6 +465,10 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
     entityType,
     messages,
     draft,
+    draftSnapshot,
+    draftUpdatedByChat,
+    draftDirty,
+    draftAttachWarning,
     pipelineName,
     agentScope,
     chatSessionId,
@@ -385,6 +486,10 @@ export function useNlChatSession(opts: UseNlChatSessionOptions) {
     // actions
     selectEntity,
     sendMessage,
+    setDraft,
+    undoDraftUpdate,
+    dismissDraftUpdate,
+    loadProfiles,
     confirm,
     cancel,
     reset,

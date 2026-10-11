@@ -2,8 +2,12 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { readApiAgentTranscript } from '../../../../../src/features/monitor/business/apiAgentTranscript.js'
+import { ApiAgentTranscriptReader } from '../../../../../src/features/monitor/business/transcripts/ApiAgentTranscriptReader.js'
+import type { ReadTranscriptOptions } from '../../../../../src/features/monitor/business/transcripts/TranscriptReader.js'
 import { appendTranscriptTurn } from '../../../../../src/features/runner/business/providers/agentTranscriptStore.js'
+
+const readApiAgentTranscript = (providerId: string, sessionId: string, opts?: ReadTranscriptOptions) =>
+  new ApiAgentTranscriptReader(providerId).read(sessionId, undefined, opts)
 
 let home: string
 const savedEnv = { ...process.env }
@@ -32,7 +36,7 @@ describe('readApiAgentTranscript', () => {
 
   test('missing session file → empty turns, file: null, never throws', () => {
     const result = readApiAgentTranscript('anthropic-api', 'no-such-session')
-    expect(result).toEqual({ turns: [], total: 0, file: null })
+    expect(result).toEqual({ turns: [], total: 0, file: null, provider: 'anthropic-api' })
   })
 
   test('a half-written trailing JSON line is skipped, not thrown on', () => {

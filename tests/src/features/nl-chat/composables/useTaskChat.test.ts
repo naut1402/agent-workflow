@@ -116,7 +116,7 @@ describe('useTaskChat', () => {
     await c.refresh(false)
 
     expect(c.canSend.value).toBe(false)
-    expect(c.blockedText.value).toContain('job nào hoàn tất')
+    expect(c.blockedText.value).toBe('Chưa có job nào hoàn tất cho task này để nối tiếp hội thoại.')
   })
 
   it('a running step no longer disables sending — shows a "queued" hint instead', async () => {
@@ -126,7 +126,7 @@ describe('useTaskChat', () => {
 
     expect(c.canSend.value).toBe(true)
     expect(c.queued.value).toBe(true)
-    expect(c.blockedText.value).toContain('sẽ được gửi')
+    expect(c.blockedText.value).toBe('Tin nhắn mới sẽ được gửi khi step hiện tại hoàn tất.')
     expect(c.running.value).toMatchObject({ jobId: 'j9' })
   })
 
@@ -203,7 +203,7 @@ describe('useTaskChat', () => {
     await c.refresh(false)
     await c.send('hi')
 
-    expect(c.error.value).toContain('Step đang chạy')
+    expect(c.error.value).toBe('Step đang chạy — chờ chạy xong mới gửi được tin nhắn.')
     expect(c.pending.value).toEqual([])
   })
 

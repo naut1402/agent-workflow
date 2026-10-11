@@ -13,7 +13,6 @@
     "tests/src/backend/lib/fileHelper.test.ts",
     "tests/src/shared/lib/phase.test.ts",
     "tests/src/backend/log",
-    "tests/src/backend/db",
     "tests/src/backend/events",
     "tests/mcp",
     "tests/tools",

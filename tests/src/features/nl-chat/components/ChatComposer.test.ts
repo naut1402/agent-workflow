@@ -334,6 +334,26 @@ describe('ChatComposer — attachments', () => {
     await flushPromises()
   })
 
+  // Tef1d7fb7 — `uploading` now comes from `useApiAction`: a second upload
+  // while one is in flight is dropped, not queued, and answers `null` so the
+  // caller keeps text + chips instead of sending a turn twice.
+  it('a second upload while one is in flight sends no second request', async () => {
+    const { started, release } = stubSlowUpload()
+    const { composer } = make()
+
+    composer.attachments.add([pngChip('một-lần.png')])
+    const first = composer.attachments.upload()
+    const second = composer.attachments.upload()
+    await flushPromises()
+
+    expect(started).toHaveBeenCalledTimes(1)
+    await expect(second).resolves.toBe(null)
+
+    release()
+    await expect(first).resolves.toEqual([])
+    expect(composer.attachments.uploading.value).toBe(false)
+  })
+
   it('a dropped file is staged as a chip', async () => {
     const { composer, wrapper } = make()
     // The drop listener binds on a post-flush tick, so a drop dispatched

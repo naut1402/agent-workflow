@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { bindAutomationRunner } from '../../../../src/features/automations/business/AutomationRunner.js'
 import {
-  bindAutomationRunner,
   collectDueSchedules,
   tickAutomationScheduler,
 } from '../../../../src/features/automations/business/scheduler.js'

@@ -1,4 +1,5 @@
 import { ref } from 'vue'
+import { useApiAction } from '../../../frontend/composables/useApiAction'
 import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { uploadChatAttachments } from '../scripts/nlChatApi'
 import {
@@ -35,7 +36,7 @@ export function useChatAttachments(opts: {
   const { t } = useI18nHelpers()
   const items = ref<ChatAttachmentItem[]>([])
   const error = ref<string | null>(null)
-  const uploading = ref(false)
+  const { pending: uploading, run: runUpload } = useApiAction()
 
   function add(files: File[] | null): void {
     error.value = null
@@ -66,22 +67,24 @@ export function useChatAttachments(opts: {
   }
 
   /** `[]` when there is nothing to send, `null` when the upload failed — the
-   *  caller must then keep the text AND the chips so the user can retry. */
+   *  caller must then keep the text AND the chips so the user can retry.
+   *  A call made while one is already in flight is dropped by `run` and also
+   *  answers `null`: that turn is the one already being sent, not a new one. */
   async function upload(): Promise<UploadedAttachment[] | null> {
     if (items.value.length === 0) return []
-    uploading.value = true
-    try {
-      const res = await uploadChatAttachments(
-        items.value.map((i) => i.file),
-        { projectId: opts.getProjectId(), taskId: opts.getTaskId?.() },
-      )
-      return res.files
-    } catch (e: any) {
-      error.value = t('nlChat.attachment.uploadFailed', { error: String(e?.message || e) })
-      return null
-    } finally {
-      uploading.value = false
-    }
+    const files = await runUpload(async () => {
+      try {
+        const res = await uploadChatAttachments(
+          items.value.map((i) => i.file),
+          { projectId: opts.getProjectId(), taskId: opts.getTaskId?.() },
+        )
+        return res.files
+      } catch (e: any) {
+        error.value = t('nlChat.attachment.uploadFailed', { error: String(e?.message || e) })
+        return null
+      }
+    })
+    return files ?? null
   }
 
   return { items, error, uploading, add, remove, clear, upload }

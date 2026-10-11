@@ -638,7 +638,7 @@ describe('T6427b18c — hồi quy nền dùng chung (TC-R1, TC-R3)', () => {
 
 /* ═══ #378 · Tdf943817 — argv cursor khi job có MCP (TC-P5-18…TC-P5-21) ═══════ */
 
-import { buildCursorJsonInvocation } from '../../../../src/features/runner/business/sessionLedger.js'
+import { buildCursorJsonInvocation } from '../../../../src/features/runner/business/providers/CursorCliProvider.js'
 
 /**
  * `--approve-mcps`: headless, cursor mặc định CHỜ người dùng phê duyệt từng MCP

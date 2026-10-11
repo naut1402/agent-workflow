@@ -250,6 +250,57 @@ describe('KnowledgePanel — xoá entry từ hàng danh sách', () => {
   })
 })
 
+// Cờ xoá đi qua `useKeyedApiAction`: một slot cho cả danh sách, overlay phủ
+// side menu trong lúc chờ. Bấm lặp (cùng hàng hay hàng khác) bị bỏ qua TRƯỚC
+// `confirm()` — lượt bị bỏ không được bật hộp xác nhận thứ hai.
+describe('KnowledgePanel — guard bấm lặp khi xoá (Tef1d7fb7)', () => {
+  function holdDelete(): () => void {
+    let release: (v: unknown) => void = () => {}
+    deleteKnowledgeEntry.mockImplementationOnce(() => new Promise((r) => { release = r }))
+    return () => release({ deleted: true })
+  }
+
+  it('bấm xoá hai lần khi đang chờ ⇒ một confirm, một API', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const release = holdDelete()
+    const w = await mountPanel()
+
+    const btn = rowIcons(w, 0)[3]
+    btn.trigger('click')
+    btn.trigger('click')
+    await flushPromises()
+
+    expect(confirmSpy).toHaveBeenCalledTimes(1)
+    expect(deleteKnowledgeEntry).toHaveBeenCalledTimes(1)
+    release()
+    await flushPromises()
+  })
+
+  it('đang xoá ⇒ overlay phủ side menu, hàng khác bấm xoá bị bỏ qua; xong thì gỡ overlay', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const release = holdDelete()
+    const w = await mountPanel()
+
+    await rowIcons(w, 0)[3].trigger('click')
+    await flushPromises()
+
+    const overlay = w.find('.knowledge-left .c-loading-host > .c-loading-overlay')
+    expect(overlay.exists()).toBe(true)
+    // Overlay là anh em đứng trước side menu, không nằm trong vùng cuộn của nó.
+    expect(overlay.element.closest('.knowledge-side-menu')).toBe(null)
+    expect(rowIcons(w, 0)[3].attributes('disabled')).toBeDefined()
+
+    await rowIcons(w, 1)[3].trigger('click')
+    expect(confirmSpy).toHaveBeenCalledTimes(1)
+    expect(deleteKnowledgeEntry).toHaveBeenCalledTimes(1)
+
+    release()
+    await flushPromises()
+    // Overlay đã kịp vẽ thì giữ tối thiểu `minVisibleMs` — chờ, đừng assert tức thì.
+    await vi.waitFor(() => expect(w.find('.knowledge-left .c-loading-overlay').exists()).toBe(false))
+  })
+})
+
 describe('KnowledgePanel — lỗi đọc collection/tag', () => {
   /**
    * E1 — DB hỏng: danh sách knowledge đọc từ file nên vẫn sống; phần nhóm hiện

@@ -118,13 +118,13 @@ export default tseslint.config(
   // (recommended hạ error → warn, CI không dùng `--max-warnings 0`).
   {
     // `files` phải phủ TRỌN phần frontend của feature, không chỉ 3 thư mục hiển nhiên:
-    // `lib/` · `schemas/` · `locales/` · `registerMode.ts` cũng là FE, và trước đây chúng
+    // `lib/` · `schemas/` · `registerMode.ts` cũng là FE, và trước đây chúng
     // rơi vào vùng chết của cả hai hàng rào (rule BE chỉ nhận `api.ts`/`controller.ts`/
     // `business/**`). `schemas/` đặc biệt đáng phủ: nó là schema dùng chung FE/BE,
     // nên nó là đường ngắn nhất để một component kéo `src/backend/**` vào.
     files: [
       'src/frontend/**/*.{ts,vue}',
-      'src/features/**/{components,composables,scripts,lib,schemas,locales}/**/*.{ts,vue}',
+      'src/features/**/{components,composables,scripts,lib,schemas}/**/*.{ts,vue}',
       'src/features/*/registerMode.ts',
     ],
     rules: {
@@ -193,6 +193,55 @@ export default tseslint.config(
       ],
     },
   },
+  // ── Ranh giới HTTP (#508): controller / business là phía server ────────────
+  //
+  // Controller kiểu decorator gom route + FormRequest + DTO request/response vào
+  // `controller.ts` (kéo theo Hono), nên FE và `mcp/` chỉ được lấy KIỂU từ đó —
+  // `import type` bị xoá khi build, không kéo Hono / business vào bundle. Rule bản
+  // typescript-eslint (khác tên rule `no-restricted-imports` gốc ở trên) để có
+  // `allowTypeImports` mà không đè danh sách pattern của hàng rào scope.
+  {
+    files: [
+      'src/frontend/**/*.{ts,vue}',
+      'src/features/**/{components,composables,scripts,lib,schemas}/**/*.{ts,vue}',
+      'src/features/*/registerMode.ts',
+    ],
+    rules: {
+      '@typescript-eslint/no-restricted-imports': [
+        'warn',
+        {
+          patterns: [
+            {
+              group: ['**/controller', '**/controller.*', '**/controllers/**', '**/business', '**/business/**'],
+              allowTypeImports: true,
+              message:
+                'Code frontend chỉ được `import type` từ controller / business — giá trị dùng lúc chạy đặt ở `schemas/` của feature (docs/agent-rules/feature-architecture-guideline.md §2.5).',
+            },
+          ],
+        },
+      ],
+    },
+  },
+
+  {
+    files: ['mcp/**/*.{ts,tsx,js}'],
+    rules: {
+      '@typescript-eslint/no-restricted-imports': [
+        'warn',
+        {
+          patterns: [
+            {
+              group: ['**/controller', '**/controller.*', '**/controllers/**'],
+              allowTypeImports: true,
+              message:
+                '`mcp/` gọi thẳng `business/` của feature, không đi qua controller HTTP — chỉ được `import type` (docs/agent-rules/feature-architecture-guideline.md §2.5).',
+            },
+          ],
+        },
+      ],
+    },
+  },
+
   {
     files: ['vite.config.*', 'vitest.config.*', 'playwright.config.*'],
     languageOptions: {

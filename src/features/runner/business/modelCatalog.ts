@@ -1,7 +1,6 @@
 import { getCredential, resolveSecretRef } from './credentials.js'
 import { ensureFreshOAuthToken } from './oauthCredentials.js'
-import { AgenticApiProvider } from './providers/agenticApiProvider.js'
-import { getProvider } from './registry.js'
+import { getProvider } from './providers/providerRegistry.js'
 
 export interface ListModelsInput {
   providerId: string
@@ -13,9 +12,6 @@ export interface ListModelsInput {
 }
 
 export type ListModelsResult = { ok: true; models: string[] } | { ok: false; error: string }
-
-/** Static aliases — `claude-code-cli` has no listModels API; user can still type a free-form id (creatable combo). */
-const CLAUDE_CLI_MODELS = ['opus', 'sonnet', 'haiku']
 
 async function resolveApiKey(
   input: ListModelsInput,
@@ -57,13 +53,14 @@ async function resolveApiKey(
 
 /** Server-side so the plaintext key never needs to reach the browser — see ConnectionDialog.vue's "Tải model" button. */
 export async function listAvailableModels(input: ListModelsInput): Promise<ListModelsResult> {
-  if (input.providerId === 'claude-code-cli') {
-    return { ok: true, models: CLAUDE_CLI_MODELS }
+  const provider = getProvider(input.providerId)
+  if (!provider?.listModels) {
+    return { ok: false, error: 'provider này không hỗ trợ liệt kê model' }
   }
 
-  const provider = getProvider(input.providerId)
-  if (!provider || !(provider instanceof AgenticApiProvider)) {
-    return { ok: false, error: 'provider này không hỗ trợ liệt kê model' }
+  // Danh sách tĩnh (vd alias model của CLI) — không cần credential.
+  if (provider.catalog?.modelListing === 'static') {
+    return { ok: true, models: await provider.listModels('', input.baseURL || '') }
   }
 
   const key = await resolveApiKey(input)

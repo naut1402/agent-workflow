@@ -33,6 +33,7 @@ describe('core/log driver', () => {
       append: async (entry) => {
         seen.push(entry)
       },
+      query: async () => [],
     })
     await appendLog({
       type: 'audit',

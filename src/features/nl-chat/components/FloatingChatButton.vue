@@ -3,6 +3,7 @@ import { onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import ChatWindow from './ChatWindow.vue'
 import { useChatSurface } from '../composables/useChatSurface'
 import Icon from '../../../frontend/ui/Icon.vue'
+import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 
 // Floating chat icon, bottom-right by default, draggable — the single UI
 // anchor for the NL chat surface shared by Task/Pipeline/Agent creation
@@ -15,6 +16,8 @@ defineProps<{
   shellModeLabel?: string | null
   shellTaskId?: string | null
 }>()
+
+const { t } = useI18nHelpers()
 
 const POSITION_KEY = 'dev-dashboard-nlchat-position'
 const DEFAULT_POSITION = { right: 24, bottom: 24 }
@@ -130,7 +133,7 @@ onUnmounted(() => {
     type="button"
     class="nl-chat-fab"
     :style="{ right: `${position.right}px`, bottom: `${position.bottom}px` }"
-    title="Tạo mới bằng chat"
+    :title="t('nlChat.floating.open')"
     :aria-expanded="open"
     aria-haspopup="dialog"
     @pointerdown="onPointerDown"
