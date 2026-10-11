@@ -27,6 +27,7 @@ import {
   resolveCollapseMonitorSubSidebarOnOutside,
   resolveCollapseTaskExpandOnOutside,
 } from '../../../frontend/configs/appSettings'
+import { OUTSIDE_CLICK_IGNORE } from '../../../frontend/configs/outsideClickIgnore'
 
 const { t } = useI18nHelpers()
 
@@ -131,10 +132,7 @@ onClickOutside(
       emit('update:subSidebarCollapsed', true)
     }
   },
-  // Ignore teleported modals (FolderPicker, Settings, …): clicks there are outside
-  // the sub-sidebar DOM but must not collapse it — otherwise v-if unmounts ProjectBar
-  // and closes the picker mid-navigation.
-  { ignore: ['.modal-backdrop'] },
+  { ignore: [...OUTSIDE_CLICK_IGNORE] },
 )
 
 async function toggleArchiveSelected() {
