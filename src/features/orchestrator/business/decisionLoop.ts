@@ -27,7 +27,7 @@ import type { JobRecord } from '../../runner/business/index.js'
 import { loadPipelineConfig } from '../../pipeline-editor/business/pipeline/index.js'
 import { isRespawnTarget } from '../../monitor/lib/pipelineRunGuards.js'
 import { resolveHitlPending, gateStepsFromConfig } from '../../../shared/lib/phase.js'
-import { ORCHESTRATOR_STEP_ID, type OrchestratorDecision } from '../schemas/orchestrator.js'
+import { ORCHESTRATOR_STEP_ID, type OrchestratorDecision, type TaskRef } from '../schemas/orchestrator.js'
 import { stepSummaryOf } from '../../../shared/lib/orchestrator.js'
 import { loadKnowledgeBundle } from '../../knowledge/business/index.js'
 import { composeStepBrief, renderBundle, type AgentContext, type DispatchReason } from './brief.js'
@@ -36,6 +36,7 @@ import {
   hasDecisionLine,
   parseDecision,
   type DecisionTrigger,
+  type ParsedDecision,
   type StepResult,
 } from './decision.js'
 import { resolveDecisionRoute } from './mcpRoute.js'
@@ -64,19 +65,6 @@ const MAX_FAILURE_ASKS = 2
  * `review_retry_max` mặc định, cộng dư cho lượt tóm tắt tại cổng.
  */
 const MAX_TURNS_PER_PHASE = 6
-
-/**
- * Event khiến orchestrator hành động. Nó vẫn nghe mọi event và ghi vào ring
- * buffer. `job.finished` của một job step là mốc "bước xong" duy nhất;
- * `task.advanced` ở đây chỉ để dọn khi pipeline hoàn tất, không tốn lượt LLM.
- */
-const ACTIONABLE = new Set([
-  'job.finished',
-  'job.failed',
-  'hitl.resolved',
-  'task.advanced',
-  'orchestrator.start_requested',
-])
 
 /**
  * Trigger mà bước kế là tất định — lượt agent hỏng thì chuyển tiếp theo thứ tự
@@ -137,12 +125,6 @@ function projectIdOfRoot(root: string): string {
   }
 }
 
-export interface TaskRef {
-  taskId: string
-  root: string
-  projectId: string
-}
-
 /**
  * Task mà một event nói về. Ưu tiên payload (`task.*` / `hitl.*` mang
  * `devTeamRoot`), rồi mới tới metadata của job (`job.*` chỉ mang `jobId`).
@@ -193,7 +175,7 @@ function isLiveStatus(status: string | undefined): boolean {
   return status === 'queued' || status === 'running' || status === 'awaiting_recovery'
 }
 
-/** `devTeamRoot` thiếu ở job cũ — coi như thuộc root đang xét. */
+/** Job thuộc task `(root, taskId)`. `devTeamRoot` thiếu ở job cũ — coi như thuộc root đang xét. */
 function jobBelongsToTask(job: JobRecord, root: string, taskId: string): boolean {
   const meta = job.metadata ?? {}
   return meta.taskId === taskId && (!meta.devTeamRoot || meta.devTeamRoot === root)
@@ -242,6 +224,11 @@ function refOf(root: string, projectId: string | null, taskId: string): TaskRef 
   return { root, taskId, projectId: projectId || projectIdOfRoot(root) }
 }
 
+/** Id các step của pipeline — nguồn chung cho mọi chỗ kiểm "step có trong pipeline". */
+function stepIdsOf(pipeline: { steps?: unknown[] }): string[] {
+  return (pipeline.steps || []).map((s: any) => s?.id).filter(Boolean)
+}
+
 /* Hành động */
 
 function emitDispatched(
@@ -254,6 +241,24 @@ function emitDispatched(
     devTeamRoot: ref.root,
     ...detail,
   })
+}
+
+/**
+ * Báo cho cả hệ thống rằng điều phối của task đã dừng: phát `orchestrator.halted`
+ * và thu hồi token điều phối ngay (không đợi job quyết định tự thoát).
+ *
+ * Dùng chung cho `haltTask` và nút Stop của monitor (cờ halted do caller tự
+ * ghi). Cố ý 🚫 KHÔNG `forgetTask`: đường Stop xưa nay không quên ring buffer
+ * và bộ đếm lượt của task — dọn bộ nhớ khi Stop là đổi hành vi, cần task riêng.
+ */
+export function announceHalt(ref: TaskRef, reason: string): void {
+  emit('orchestrator.halted', {
+    taskId: ref.taskId,
+    projectId: ref.projectId || undefined,
+    devTeamRoot: ref.root,
+    reason,
+  })
+  revokeOrchestratorTokensFor(ref)
 }
 
 /**
@@ -273,13 +278,7 @@ export async function haltTask(ref: TaskRef, reason: string): Promise<void> {
     return // task không còn state file — không có gì để halt
   }
   await applyOrchestratorHaltAction(ref.root, ref.taskId, { halted: true, mtime })
-  emit('orchestrator.halted', {
-    taskId: ref.taskId,
-    projectId: ref.projectId || undefined,
-    devTeamRoot: ref.root,
-    reason,
-  })
-  revokeOrchestratorTokensFor(ref)
+  announceHalt(ref, reason)
 }
 
 /**
@@ -373,8 +372,7 @@ export async function respawnStep(
   agentContext?: AgentContext,
 ): Promise<void> {
   const pipeline = await loadPipelineConfig(ref.root, ref.taskId)
-  const phaseKeys = (pipeline.steps || []).map((s: any) => s?.id).filter(Boolean)
-  if (!isRespawnTarget(phaseKeys, stepId)) {
+  if (!isRespawnTarget(stepIdsOf(pipeline), stepId)) {
     await haltTask(ref, `respawn failed: unknown step ${stepId}`)
     return
   }
@@ -387,8 +385,7 @@ export async function respawnStep(
 
   const hasFinishedJob = listJobs(200).some(
     (j) =>
-      j.metadata?.taskId === ref.taskId &&
-      (!j.metadata?.devTeamRoot || j.metadata.devTeamRoot === ref.root) &&
+      jobBelongsToTask(j, ref.root, ref.taskId) &&
       j.metadata?.pipelineStepId === stepId &&
       (j.status === 'succeeded' || j.status === 'failed'),
   )
@@ -478,8 +475,7 @@ async function askAgent(
     turnsAtPhase.set(key, turns)
   }
 
-  const pipeline = await loadPipelineConfig(ref.root, ref.taskId)
-  const stepIds = (pipeline.steps || []).map((s: any) => s?.id).filter(Boolean)
+  const stepIds = stepIdsOf(await loadPipelineConfig(ref.root, ref.taskId))
 
   // Mint NGAY TRƯỚC submitJob: metadata đi vào job lúc submit và không sửa lại
   // được sau (job file là snapshot) — mint muộn hơn nghĩa là job không bao giờ
@@ -600,6 +596,29 @@ export function applyDecision(
 }
 
 /**
+ * Kiểm một quyết định thô theo pipeline SỐNG của task rồi thi hành ngay — đường
+ * chung của `POST /api/orchestrator/decide` (`validateDecision`) và dòng
+ * sentinel cuối output (`parseDecision`).
+ *
+ * Quyết định không hợp lệ ⇒ trả `{ error }`, 🚫 không side effect nào (caller
+ * tự quyết: 400 hay lưới tất định). `beforeApply` chạy SAU khi kiểm xong và
+ * TRƯỚC khi thi hành — chỗ controller đánh dấu job hiện tại đã áp dụng quyết
+ * định (xem `postDecide`).
+ */
+export async function applyCheckedDecision(
+  ref: TaskRef,
+  check: (stepIds: string[]) => ParsedDecision,
+  beforeApply?: () => void,
+): Promise<ParsedDecision> {
+  const decision = check(stepIdsOf(await loadPipelineConfig(ref.root, ref.taskId)))
+  if ('error' in decision) return decision
+  beforeApply?.()
+  const at = await readTaskPhase(ref.root, ref.taskId)
+  await applyDecision(ref, decision, { gatePending: at.gatePending, completed: !hasPendingStep(at) })
+  return decision
+}
+
+/**
  * Lượt agent không dùng được ⇒ chuyển tiếp theo thứ tự pipeline thay vì dừng.
  * Chỉ gọi với trigger mà bước kế là tất định (xem `FALLBACK_TRIGGERS`).
  */
@@ -633,83 +652,114 @@ async function readFeedbackFile(root: string, taskId: string): Promise<string> {
   }
 }
 
+/** Một nhánh của bảng quyết định — nhận event đã lọc và task nó nói về. */
+interface EventEntry {
+  handle: (ref: TaskRef, orch: Orchestration, event: DashboardEvent, eventJob?: JobRecord | null) => Promise<void>
+  /**
+   * Chạy dưới khoá `inFlight` của task. `task.advanced` thì không: nó chỉ dọn
+   * dẹp, không dispatch — giữ khoá cho nó là chặn mất lượt `job.finished` mà
+   * cùng lần chạy job phát ra ngay sau đó.
+   */
+  locked: boolean
+}
+
+function payloadOf(event: DashboardEvent): Record<string, unknown> {
+  return (event.payload ?? {}) as Record<string, unknown>
+}
+
 /**
- * Quyết định cho một event đã lọc. `job.finished` của một job step là mốc mở
- * lượt agent; các nhánh còn lại chỉ dọn dẹp hoặc xử lý ngoại lệ.
+ * Bảng quyết định: event nào khiến orchestrator hành động, và hành động gì.
+ * Orchestrator vẫn nghe mọi event và ghi vào ring buffer; chỉ event có trong
+ * bảng mới đi tiếp. `job.finished` của một job step là mốc "bước xong" duy nhất
+ * mở lượt agent; `task.advanced` chỉ dọn khi pipeline hoàn tất, không tốn lượt
+ * LLM; các nhánh còn lại xử lý ngoại lệ.
+ *
+ * Job của CHÍNH orchestrator không đi qua bảng này — `handleEvent` xử lý nó
+ * trước (xem ở đó).
  */
-export async function decide(
-  ref: TaskRef,
-  orch: Orchestration,
-  event: DashboardEvent,
-  eventJob?: JobRecord | null,
-): Promise<void> {
-  const payload = (event.payload ?? {}) as Record<string, unknown>
+const EVENT_HANDLERS: Record<string, EventEntry> = {
+  'task.advanced': {
+    locked: false,
+    handle: async (ref, _orch, event) => {
+      // Lượt tóm tắt cuối do `job.finished` của step cuối lo; ở đây chỉ còn việc
+      // phát mốc kết thúc và quên task.
+      const currentPhase = String(payloadOf(event).currentPhase ?? '')
+      if (!currentPhase || currentPhase === 'completed') {
+        emitDispatched(ref, { action: 'idle', reason: 'pipeline completed' })
+        forgetTask(ref.root, ref.taskId)
+      }
+    },
+  },
 
-  if (event.type === 'task.advanced') {
-    // Lượt tóm tắt cuối do `job.finished` của step cuối lo; ở đây chỉ còn việc
-    // phát mốc kết thúc và quên task.
-    const currentPhase = String(payload.currentPhase ?? '')
-    if (!currentPhase || currentPhase === 'completed') {
-      emitDispatched(ref, { action: 'idle', reason: 'pipeline completed' })
-      forgetTask(ref.root, ref.taskId)
-    }
-    return
-  }
+  'job.finished': {
+    locked: true,
+    handle: async (ref, orch, event, eventJob) => {
+      const job = eventJob ?? jobOfEvent(event)
+      if (!job || !isStepJob(job)) return
+      const at = await readTaskPhase(ref.root, ref.taskId)
+      // Pipeline tiến được một bước ⇒ chuỗi lỗi (nếu có) của step đó đã được gỡ.
+      const stepId = String(job.metadata?.pipelineStepId ?? '')
+      failureAsks.delete(`${keyOf(ref.root, ref.taskId)}::${stepId}`)
+      const trigger = hasPendingStep(at) ? 'step_finished' : 'pipeline_completed'
+      await askAgent(ref, orch, trigger, at.phase, {
+        stepResult: stepResultOf(job, stepId, 'succeeded'),
+        gatePending: at.gatePending,
+      })
+    },
+  },
 
-  if (event.type === 'job.finished') {
-    const job = eventJob ?? jobOfEvent(event)
-    if (!job || !isStepJob(job)) return
-    const at = await readTaskPhase(ref.root, ref.taskId)
-    // Pipeline tiến được một bước ⇒ chuỗi lỗi (nếu có) của step đó đã được gỡ.
-    const stepId = String(job.metadata?.pipelineStepId ?? '')
-    failureAsks.delete(`${keyOf(ref.root, ref.taskId)}::${stepId}`)
-    const trigger = hasPendingStep(at) ? 'step_finished' : 'pipeline_completed'
-    await askAgent(ref, orch, trigger, at.phase, {
-      stepResult: stepResultOf(job, stepId, 'succeeded'),
-      gatePending: at.gatePending,
-    })
-    return
-  }
+  'orchestrator.start_requested': {
+    locked: true,
+    handle: async (ref, orch) => {
+      // Automation bị từ chối (409) vì task đang được điều phối — xin một lượt
+      // quyết định thay vì tự chạy step.
+      const at = await readTaskPhase(ref.root, ref.taskId)
+      if (!hasPendingStep(at) || at.gatePending) return
+      await askAgent(ref, orch, 'manual_start', at.phase, { gatePending: at.gatePending })
+    },
+  },
 
-  if (event.type === 'orchestrator.start_requested') {
-    // Automation bị từ chối (409) vì task đang được điều phối — xin một lượt
-    // quyết định thay vì tự chạy step.
-    const at = await readTaskPhase(ref.root, ref.taskId)
-    if (!hasPendingStep(at) || at.gatePending) return
-    await askAgent(ref, orch, 'manual_start', at.phase, { gatePending: at.gatePending })
-    return
-  }
+  'hitl.resolved': {
+    locked: true,
+    handle: async (ref, orch, event) => {
+      const payload = payloadOf(event)
+      // Gate bị hệ thống tự huỷ vì pipeline đổi hình dạng — không phải quyết định
+      // của người, không có gì để điều phối.
+      if (payload.reason === 'pipeline_changed') return
 
-  if (event.type === 'hitl.resolved') {
-    // Gate bị hệ thống tự huỷ vì pipeline đổi hình dạng — không phải quyết định
-    // của người, không có gì để điều phối.
-    if (payload.reason === 'pipeline_changed') return
+      const currentPhase = String(payload.currentPhase ?? '')
+      const approved = payload.action === 'approve'
+      if (approved && (!currentPhase || currentPhase === 'completed')) return
+      await askAgent(ref, orch, approved ? 'gate_approved' : 'gate_rejected', currentPhase, {
+        detail: await readFeedbackFile(ref.root, ref.taskId),
+      })
+    },
+  },
 
-    const currentPhase = String(payload.currentPhase ?? '')
-    const approved = payload.action === 'approve'
-    if (approved && (!currentPhase || currentPhase === 'completed')) return
-    await askAgent(ref, orch, approved ? 'gate_approved' : 'gate_rejected', currentPhase, {
-      detail: await readFeedbackFile(ref.root, ref.taskId),
-    })
-    return
-  }
+  'job.failed': {
+    locked: true,
+    handle: async (ref, orch, event, eventJob) => {
+      const job = eventJob ?? jobOfEvent(event)
+      const stepId = typeof job?.metadata?.pipelineStepId === 'string' ? job.metadata.pipelineStepId : ''
+      if (!stepId) return
+      const key = `${keyOf(ref.root, ref.taskId)}::${stepId}`
+      const asked = (failureAsks.get(key) ?? 0) + 1
+      if (asked > MAX_FAILURE_ASKS) {
+        await haltTask(ref, `failure loop: ${stepId} failed ${asked} times`)
+        return
+      }
+      failureAsks.set(key, asked)
+      await askAgent(ref, orch, 'job_failed', stepId, {
+        detail: String(payloadOf(event).error ?? job?.error ?? ''),
+        stepResult: stepResultOf(job, stepId, 'failed'),
+      })
+    },
+  },
+}
 
-  if (event.type === 'job.failed') {
-    const job = eventJob ?? jobOfEvent(event)
-    const stepId = typeof job?.metadata?.pipelineStepId === 'string' ? job.metadata.pipelineStepId : ''
-    if (!stepId) return
-    const key = `${keyOf(ref.root, ref.taskId)}::${stepId}`
-    const asked = (failureAsks.get(key) ?? 0) + 1
-    if (asked > MAX_FAILURE_ASKS) {
-      await haltTask(ref, `failure loop: ${stepId} failed ${asked} times`)
-      return
-    }
-    failureAsks.set(key, asked)
-    await askAgent(ref, orch, 'job_failed', stepId, {
-      detail: String(payload.error ?? job?.error ?? ''),
-      stepResult: stepResultOf(job, stepId, 'failed'),
-    })
-  }
+/** Nhánh của một loại event — chỉ khoá RIÊNG của bảng, 🚫 không lọt khoá prototype (`constructor`, …). */
+function eventEntryOf(type: string): EventEntry | undefined {
+  return Object.hasOwn(EVENT_HANDLERS, type) ? EVENT_HANDLERS[type] : undefined
 }
 
 function stdoutOf(job: JobRecord | null): string {
@@ -791,17 +841,17 @@ export async function handleEvent(event: DashboardEvent): Promise<void> {
     return
   }
 
-  if (!ACTIONABLE.has(event.type)) return
+  // Bảng quyết định cũng là danh sách event khiến orchestrator hành động.
+  const entry = eventEntryOf(event.type)
+  if (!entry) return
 
   const orch = await resolveOrchestration(ref.root, ref.taskId)
   if (!orch.active) return
   // Đã thấy một task đang được điều phối ⇒ từ giờ mới cần quét định kỳ.
   ensureSweepScheduled()
 
-  // `task.advanced` chỉ dọn dẹp, không dispatch. Giữ khoá cho nó là chặn mất
-  // lượt `job.finished` mà cùng lần chạy job phát ra ngay sau đó.
-  if (event.type === 'task.advanced') {
-    await decide(ref, orch, event, job)
+  if (!entry.locked) {
+    await entry.handle(ref, orch, event, job)
     return
   }
 
@@ -809,7 +859,7 @@ export async function handleEvent(event: DashboardEvent): Promise<void> {
   if (inFlight.has(key)) return
   inFlight.add(key)
   try {
-    await decide(ref, orch, event, job)
+    await entry.handle(ref, orch, event, job)
   } finally {
     inFlight.delete(key)
   }
@@ -840,16 +890,8 @@ async function consumeAgentDecision(ref: TaskRef, job: JobRecord): Promise<void>
   }
   if (!hasDecisionLine(stdout)) return
 
-  const pipeline = await loadPipelineConfig(ref.root, ref.taskId)
-  const stepIds = (pipeline.steps || []).map((s: any) => s?.id).filter(Boolean)
-  const decision = parseDecision(stdout, stepIds)
-  if ('error' in decision) {
-    await recoverFromBadTurn(ref, trigger, `invalid decision: ${decision.error}`)
-    return
-  }
-
-  const at = await readTaskPhase(ref.root, ref.taskId)
-  await applyDecision(ref, decision, { gatePending: at.gatePending, completed: !hasPendingStep(at) })
+  const decision = await applyCheckedDecision(ref, (stepIds) => parseDecision(stdout, stepIds))
+  if ('error' in decision) await recoverFromBadTurn(ref, trigger, `invalid decision: ${decision.error}`)
 }
 
 /**
@@ -970,8 +1012,7 @@ export async function sweepStuckTasks(root: string, projectId: string): Promise<
     const ref: TaskRef = { root, taskId, projectId }
     const last = listJobs(200).find(
       (j) =>
-        j.metadata?.taskId === taskId &&
-        (!j.metadata?.devTeamRoot || j.metadata.devTeamRoot === root) &&
+        jobBelongsToTask(j, root, taskId) &&
         j.metadata?.orchestratorJob !== true &&
         j.metadata?.respawn !== true &&
         !j.applyTarget,
