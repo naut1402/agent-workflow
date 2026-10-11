@@ -183,12 +183,16 @@ export async function resolveCatalogSkillPath(
 /**
  * Fallback `<projectRoot>/plugins/<plugin>` cho id `repo:` mà chuỗi resolve không
  * ra — hook riêng, chỉ route xem nội dung gọi, để chuỗi resolve public giữ nguyên.
- * ⚠️ Không sanitise `pluginName` (hành vi có sẵn của route agent).
+ * `name` và `pluginName` đều qua `sanitiseName`; không hợp lệ → `null` (404).
  */
-export async function resolveRepoFallbackAgentPath(projectRoot: string, id: string): Promise<string | null> {
+export async function resolveRepoFallbackAgentPath(
+  projectRoot: string,
+  id: string,
+  sanitiseName: (name: string) => string | null,
+): Promise<string | null> {
   const parsed = parseCatalogItemId(id)
   if (!parsed) return null
-  return repoPlugins.fallbackAgentPath(projectRoot, parsed.source, parsed.name)
+  return repoPlugins.fallbackAgentPath(projectRoot, parsed.source, parsed.name, sanitiseName)
 }
 
 /** Như `resolveRepoFallbackAgentPath` cho skill — `name` và `pluginName` đều qua `sanitiseName`. */

@@ -41,7 +41,7 @@ export class PipelineEditorBusiness extends AbstractBusiness {
       (await resolveCatalogAgentPath(projectRoot, root, id, {
         ...catalogAgentStore(),
         scanPatterns: loadScanPatternsConfig().agents,
-      })) ?? (await resolveRepoFallbackAgentPath(projectRoot, id))
+      })) ?? (await resolveRepoFallbackAgentPath(projectRoot, id, sanitiseAgentName))
     if (!agentPath) return this.notFound('agent file not found')
     try {
       const raw = await readTextFile(agentPath)
