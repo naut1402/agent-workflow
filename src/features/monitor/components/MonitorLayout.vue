@@ -67,7 +67,7 @@ const needsRepair = computed(() => taskNeedsStateRepair(props.selected))
 const worktree = ref<any>(null)
 const worktreeAmbiguous = ref(false)
 const worktreeError = ref('')
-const cleaning = ref(false)
+const { pending: cleaning, run: runClean } = useApiAction()
 
 // Cleanup is offered only for tasks that already ended — a running step may
 // still be writing into that worktree. The server enforces the same rule.
@@ -220,19 +220,20 @@ async function cleanWorktreeSelected() {
   const taskId = props.selected?.task_id
   if (!taskId) return
   const projectId = props.selectedProjectId ?? null
-  worktreeError.value = ''
-  cleaning.value = true
-  try {
-    if (!confirm(await worktreeConfirmMessage(taskId, projectId, wt))) return
-    if (props.selected?.task_id !== taskId) return
-    if ((props.selectedProjectId ?? null) !== projectId) return
-    await cleanupTaskWorktree(taskId, projectId ?? undefined)
-    await loadWorktree(taskId, projectId)
-  } catch (e: any) {
-    worktreeError.value = describeWorktreeError(e)
-  } finally {
-    cleaning.value = false
-  }
+  // `run` giữ guard suốt cả lượt dò job + `confirm()`: bấm lặp trong lúc đó bị
+  // bỏ qua, không bật hộp confirm thứ hai.
+  await runClean(async () => {
+    worktreeError.value = ''
+    try {
+      if (!confirm(await worktreeConfirmMessage(taskId, projectId, wt))) return
+      if (props.selected?.task_id !== taskId) return
+      if ((props.selectedProjectId ?? null) !== projectId) return
+      await cleanupTaskWorktree(taskId, projectId ?? undefined)
+      await loadWorktree(taskId, projectId)
+    } catch (e: any) {
+      worktreeError.value = describeWorktreeError(e)
+    }
+  })
 }
 </script>
 
@@ -271,7 +272,7 @@ async function cleanWorktreeSelected() {
     <section ref="contentRef" class="monitor-content">
       <template v-if="selected">
         <div class="task-head">
-          <CLoadingOverlay :active="deleting" />
+          <CLoadingOverlay :active="deleting || cleaning" />
           <h2 :title="selected.task_id">
             {{ taskDisplayName(selected) }}
             <span v-if="selected.parent_task_id" class="subtask">{{ t('monitor.layout.subtaskOf', { id: selected.parent_task_id }) }}</span>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
-import { computed, ref, watch } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import { slugify } from '../../../shared/lib/stringUtils'
 import { saveRunner, submitJob, fetchJob } from '../scripts/RunnerDialogApi'
 import { deleteConnection } from '../scripts/ConnectionDialogApi'
@@ -53,7 +53,24 @@ const isEdit = computed(() =>
   props.mode ? props.mode === 'edit' : Boolean(props.runner?.id),
 )
 const { pending: saving, run: runSave } = useApiAction()
-const testing = ref(false)
+/**
+ * Chạy thử tách hai pha: `submitJob` là action ghi (guard + overlay), còn vòng
+ * poll tới 120 s sau đó KHÔNG đi qua `useApiAction` — overlay phủ cả body suốt
+ * hai phút là khoá người dùng khỏi form chỉ để chờ một job chạy nền.
+ * `polling` bật ngay trong callback của `run`, trước khi `submitting` nhả, nên
+ * giữa hai pha không có khe nào để bấm lọt lượt thứ hai.
+ */
+const { pending: submitting, run: runSubmit } = useApiAction()
+const polling = ref(false)
+const testing = computed(() => submitting.value || polling.value)
+const { pending: removing, run: runRemoveConnection } = useApiAction()
+/** Mọi action ghi đang chạy — overlay phủ body và khoá nút ở footer. */
+const busy = computed(() => saving.value || submitting.value || removing.value)
+/** Dialog đóng giữa vòng poll thì dừng poll, không gọi `fetchJob` thêm tới 120 s. */
+let disposed = false
+onUnmounted(() => {
+  disposed = true
+})
 const error = ref('')
 const message = ref('')
 const showConnectionDialog = ref(false)
@@ -165,36 +182,48 @@ async function save() {
 }
 
 async function smokeTest() {
+  if (testing.value) return
   // Mode `copy` mang sẵn một id đã mint nhưng BE chưa có bản ghi đó — chạy thử
   // sẽ submit job vào một runner không tồn tại. Chỉ cho test khi đang sửa.
   if (!isEdit.value || !draft.value.id) {
     error.value = t('runner.errors.saveBeforeTest')
     return
   }
-  testing.value = true
-  error.value = ''
-  message.value = ''
+  const runnerId = draft.value.id
+  const job = await runSubmit(async () => {
+    error.value = ''
+    message.value = ''
+    try {
+      // Console command: no agent ref / system prompt — just run the registered CLI.
+      const { job } = await submitJob(
+        isConsoleCommand.value
+          ? {
+              runnerId,
+              agentRef: '',
+              workspace: '.',
+              userPrompt: '',
+            }
+          : {
+              runnerId,
+              agentRef: 'dev-agent-teams:investigator',
+              workspace: '.',
+              userPrompt: 'Reply with exactly: OK',
+            },
+      )
+      message.value = `Job ${job.id} — ${formatJobStatus(job.status)}`
+      polling.value = true
+      return job
+    } catch (e: any) {
+      error.value = String(e.message || e)
+      return null
+    }
+  })
+  if (!job) return
   try {
-    // Console command: no agent ref / system prompt — just run the registered CLI.
-    const { job } = await submitJob(
-      isConsoleCommand.value
-        ? {
-            runnerId: draft.value.id,
-            agentRef: '',
-            workspace: '.',
-            userPrompt: '',
-          }
-        : {
-            runnerId: draft.value.id,
-            agentRef: 'dev-agent-teams:investigator',
-            workspace: '.',
-            userPrompt: 'Reply with exactly: OK',
-          },
-    )
-    message.value = `Job ${job.id} — ${formatJobStatus(job.status)}`
     let current = job
     for (let i = 0; i < 120; i++) {
       await new Promise((r) => setTimeout(r, 1000))
+      if (disposed) return
       const data = await fetchJob(job.id)
       current = data.job
       if (current.status === 'succeeded' || current.status === 'failed') break
@@ -204,7 +233,7 @@ async function smokeTest() {
   } catch (e: any) {
     error.value = String(e.message || e)
   } finally {
-    testing.value = false
+    polling.value = false
   }
 }
 
@@ -229,17 +258,20 @@ function openCopyConnection() {
 
 async function removeConnection() {
   const c = selectedConnection.value
-  if (!c) return
+  // Kiểm cờ TRƯỚC `confirm()`: lượt bấm mà `run` sẽ bỏ qua không được hỏi lại.
+  if (!c || removing.value) return
   if (!confirm(t('runner.messages.confirmDeleteConnection', { id: c.id }))) return
-  error.value = ''
-  try {
-    await deleteConnection(c.id)
-    message.value = t('runner.messages.connectionDeleted', { id: c.id })
-    if (draft.value.connectionId === c.id) draft.value.connectionId = ''
-    emit('refreshed')
-  } catch (e: any) {
-    error.value = String(e.message || e)
-  }
+  await runRemoveConnection(async () => {
+    error.value = ''
+    try {
+      await deleteConnection(c.id)
+      message.value = t('runner.messages.connectionDeleted', { id: c.id })
+      if (draft.value.connectionId === c.id) draft.value.connectionId = ''
+      emit('refreshed')
+    } catch (e: any) {
+      error.value = String(e.message || e)
+    }
+  })
 }
 
 async function onConnectionSaved(connectionId: string) {
@@ -261,7 +293,7 @@ function closeConnectionDialog() {
   <CDialog
     class="runner-dialog"
     :title="isEdit ? t('runner.dialog.editTitle') : t('runner.dialog.addTitle')"
-    :loading="saving"
+    :loading="busy"
     width="min(520px, 94vw)"
     @close="emit('close')"
   >
@@ -384,14 +416,14 @@ function closeConnectionDialog() {
           v-if="isEdit"
           type="button"
           class="btn-ghost btn-sm"
-          :disabled="testing || saving"
+          :disabled="testing || busy"
           @click="smokeTest"
         >
           {{ testing ? t('runner.actions.testing') : t('runner.actions.test') }}
         </button>
         <span class="spacer" />
-        <button type="button" class="btn-ghost btn-sm" :disabled="saving" @click="emit('close')">{{ t('runner.actions.cancel') }}</button>
-        <button type="button" class="btn-primary btn-sm" :disabled="saving" @click="save">
+        <button type="button" class="btn-ghost btn-sm" :disabled="busy" @click="emit('close')">{{ t('runner.actions.cancel') }}</button>
+        <button type="button" class="btn-primary btn-sm" :disabled="busy" @click="save">
           {{ saving ? t('runner.actions.saving') : t('runner.actions.save') }}
         </button>
       </div>
