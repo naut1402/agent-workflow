@@ -2,12 +2,8 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:tes
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import {
-  appendLog,
-  appendRequestLog,
-  emitAudit,
-  readLogs,
-} from '../../../../../src/features/logs/business/store.js'
+import { appendLog, appendRequestLog, emitAudit } from '../../../../../src/backend/log/index.js'
+import { readLogs } from '../../../../../src/features/logs/business/store.js'
 
 // Logger store round-trips against a tmp DEV_TEAM_DASHBOARD_HOME so it never
 // touches the real ~/.dev-team-dashboard.
