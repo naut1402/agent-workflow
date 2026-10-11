@@ -44,7 +44,7 @@ Xác định **feature sở hữu** trước, rồi đặt artifact đúng lớp
 |---|---|---|
 | **Là gì** | Hợp đồng và quy trình nghiệp vụ dựa vào | Cách hiện thực hợp đồng bằng một cơ chế cụ thể |
 | **Dạng** | `interface` vai trò · lớp `Abstract*` giữ trình tự cố định (template method) · rule nghiệp vụ thuần không I/O | Lớp / hàm gọi CLI, HTTP, SDK, file, DB, YAML cụ thể · tên env var, path, tên nhà cung cấp, định dạng thông điệp |
-| **Ví dụ trong repo** | `RunnerProvider`, `AgentCliProvider`, `*Store` (`runner`) · `AgenticApiProvider` · `AbstractMcpTools`, `ToolDef` | `claude-code-cli.ts`, `codex-cli.ts`, `anthropic-compatible-api.ts` · `tools/TaskTools.ts` |
+| **Ví dụ trong repo** | `RunnerProvider`, `AbstractAgentCliProvider` (template method), `*Store` (`runner`) · `AgenticApiProvider` · `AbstractMcpTools`, `ToolDef` | `ClaudeCliProvider.ts`, `CodexCliProvider.ts`, `AnthropicCompatibleProvider.ts` · `tools/TaskTools.ts` |
 | **Tần suất đổi** | Thấp nhất — đổi là đổi mọi hiện thực | Cao — đổi riêng từng hiện thực |
 
 Ba câu hỏi để xếp một đoạn logic:
@@ -78,7 +78,7 @@ Logic đơn lẻ (một hiện thực, không phải biên I/O) gom theo nghiệ
 
 ### 2.4 Áp dụng cho code hiện có
 
-- **Không đổi tên / tách hàng loạt.** Code đang có (`runner/business/types.ts`, `providers/claude-code-cli.ts`…) giữ nguyên tới khi task sửa đáng kể vùng đó.
+- **Không đổi tên / tách hàng loạt.** Code đang có (`runner/business/types.ts`, `runner/business/registry.ts`…) giữ nguyên tới khi task sửa đáng kể vùng đó.
 - **Task tạo mới hoặc sửa đáng kể một vùng có abstraction** — đưa vùng đó về §2.2 trong cùng thay đổi, hoặc ghi nợ `docs/todo/`.
 
 ### 2.5 Ranh giới HTTP

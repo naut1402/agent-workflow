@@ -118,7 +118,7 @@ Thêm hai chi tiết:
 
 ## 7. Tiêu thụ ở runner
 
-Mỗi provider mang **một cách giao MCP** — `RunnerProvider.mcpDelivery`, một hiện thực của `McpJobDelivery` (`src/features/runner/business/mcpDelivery/`). Chỗ lắp ráp duy nhất là `runner/business/registry.ts`; provider không khai delivery thì không nhận MCP.
+Mỗi provider mang **một cách giao MCP** — `RunnerProvider.mcpDelivery`, một hiện thực của `McpJobDelivery` (`src/features/runner/business/mcpDelivery/`). Chỗ lắp ráp duy nhất là `runner/business/providers/providerRegistry.ts`; provider không nhận MCP mang `NoMcpDelivery` (Null Object, catalog trả `unsupported`).
 
 | `kind` (catalog) | Lớp | Provider | Đến CLI / model bằng cách nào |
 |---|---|---|---|

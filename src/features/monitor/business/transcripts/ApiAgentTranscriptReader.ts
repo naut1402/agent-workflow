@@ -4,7 +4,7 @@ import { AbstractJsonlTranscriptReader, type TranscriptTurnDraft } from './Abstr
 
 /**
  * Read the transcript an `AgenticApiProvider` subclass (openai/gemini/xai/anthropic
- * — see runner/business/providers/agenticApiProvider.ts) wrote for a job, so task
+ * — see runner/business/providers/AgenticApiProvider.ts) wrote for a job, so task
  * chat can surface its tool-calls the same way it does for a CLI's own on-disk
  * transcript (ClaudeTranscriptReader / CursorTranscriptReader). Read-only
  * counterpart of `agentTranscriptStore.ts::appendTranscriptTurn` — kept in
