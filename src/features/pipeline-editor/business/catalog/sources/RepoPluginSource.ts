@@ -45,31 +45,43 @@ export class RepoPluginSource extends AbstractPluginSource {
   /**
    * Fallback `<projectRoot>/plugins/<plugin>/agents/<name>.md` khi marketplace.json
    * không cho ra file. Tách khỏi chuỗi resolve: chỉ route xem nội dung gọi tới.
-   *
-   * ⚠️ Không sanitise `pluginName` — giữ nguyên hành vi có sẵn của route agent
-   * (#447 chỉ dời code, không đổi hành vi); khe traversal sẽ vá ở issue riêng.
    */
-  async fallbackAgentPath(projectRoot: string, source: string, name: string): Promise<string | null> {
-    if (!this.owns(source)) return null
-    const file = joinPath(projectRoot, 'plugins', this.pluginNameOf(source), 'agents', `${name}.md`)
-    return (await statSafe(file)).exists ? file : null
-  }
-
-  /**
-   * Fallback `<projectRoot>/plugins/<plugin>/skills/<name>/SKILL.md`. Cả `name` lẫn
-   * `pluginName` phải qua whitelist ký tự (AGENTS.md §4), nếu không
-   * `repo:../../..:x` thoát khỏi `plugins/`; `resolvePathUnder` là lớp chặn thứ hai.
-   */
-  async fallbackSkillPath(
+  fallbackAgentPath(
     projectRoot: string,
     source: string,
     name: string,
     sanitiseName: (name: string) => string | null,
   ): Promise<string | null> {
+    return this.fallbackPath(projectRoot, source, name, sanitiseName, ['agents', `${name}.md`])
+  }
+
+  /** Fallback `<projectRoot>/plugins/<plugin>/skills/<name>/SKILL.md`. */
+  fallbackSkillPath(
+    projectRoot: string,
+    source: string,
+    name: string,
+    sanitiseName: (name: string) => string | null,
+  ): Promise<string | null> {
+    return this.fallbackPath(projectRoot, source, name, sanitiseName, ['skills', name, 'SKILL.md'])
+  }
+
+  /**
+   * `<projectRoot>/plugins/<plugin>/<...tail>` nếu file tồn tại. Cả `name` lẫn
+   * `pluginName` phải qua whitelist ký tự (AGENTS.md §4), nếu không
+   * `repo:../../..:x` thoát khỏi `plugins/`; `resolvePathUnder` là lớp chặn thứ hai.
+   * Không hợp lệ → `null`, route trả 404 như khi không tìm thấy.
+   */
+  private async fallbackPath(
+    projectRoot: string,
+    source: string,
+    name: string,
+    sanitiseName: (name: string) => string | null,
+    tail: string[],
+  ): Promise<string | null> {
     if (!this.owns(source) || sanitiseName(name) !== name) return null
     const pluginName = this.pluginNameOf(source)
     if (sanitiseName(pluginName) !== pluginName) return null
-    const file = resolvePathUnder(resolvePath(projectRoot, 'plugins'), pluginName, 'skills', name, 'SKILL.md')
+    const file = resolvePathUnder(resolvePath(projectRoot, 'plugins'), pluginName, ...tail)
     if (!file) return null
     return (await statSafe(file)).exists ? file : null
   }
