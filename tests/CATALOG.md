@@ -79,6 +79,7 @@ Quy ước: [`docs/agent-rules/testing.md`](../docs/agent-rules/testing.md) §3�
 | `tests/src/frontend/composables` | vitest | `frontend/composables`, `frontend/plugins`, `features/logs/scripts` | 11 | `npx vitest run tests/src/frontend/composables` |
 | `tests/src/frontend/configs` | vitest | `frontend/configs` | 1 | `npx vitest run tests/src/frontend/configs` |
 | `tests/src/frontend/container` | vitest | `frontend/container` | 1 | `npx vitest run tests/src/frontend/container` |
+| `tests/src/frontend/http` | vitest | `frontend/http` | 1 | `npx vitest run tests/src/frontend/http` |
 | `tests/src/frontend/lib` | vitest | `frontend/lib`, `backend/configs`, `features/monitor/composables` | 10 | `npx vitest run tests/src/frontend/lib` |
 | `tests/src/frontend/plugins` | vitest | `frontend/composables`, `frontend/plugins`, `shared/lib` | 3 | `npx vitest run tests/src/frontend/plugins` |
 | `tests/src/frontend/shell` | vitest | `frontend/shell` | 3 | `npx vitest run tests/src/frontend/shell` |
