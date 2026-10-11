@@ -1,5 +1,6 @@
-import { existsSync, joinPath, readTextFileSync, readdirSync } from '../../../backend/lib/fileHelper.js'
+import { existsSync, joinPath, readdirSync } from '../../../../backend/lib/fileHelper.js'
 import os from 'node:os'
+import { AbstractJsonlTranscriptReader, isSafeSessionId, type TranscriptTurnDraft } from './AbstractJsonlTranscriptReader.js'
 
 /**
  * Read a Claude Code CLI session transcript — the conversation history the CLI
@@ -18,24 +19,6 @@ import os from 'node:os'
  * monitors a runner mid-flight instead of only seeing the final result.
  */
 
-export type TranscriptRole = 'user' | 'assistant' | 'tool'
-
-export interface TranscriptTurn {
-  /** 0-based position among the turns this file yields — the poll cursor. */
-  index: number
-  role: TranscriptRole
-  text: string
-  at?: string
-  /** Tool name, for `role: 'tool'` activity turns. */
-  tool?: string
-  /** `text` was cut at `MAX_TURN_CHARS`. */
-  truncated?: boolean
-}
-
-/** Per-turn text cap — a single agent reply can be enormous. */
-const MAX_TURN_CHARS = 4000
-/** Newest-N turns returned, to bound both memory and payload size. */
-const MAX_TURNS = 200
 /** Directories scanned when the encoded-path lookup misses. */
 const MAX_SCAN_DIRS = 400
 
@@ -56,7 +39,7 @@ export function encodeWorkspacePath(workspace: string): string {
  * caller no longer knows exactly.
  */
 export function findTranscriptFile(sessionId: string, workspace?: string): string | null {
-  if (!sessionId || /[^\w-]/.test(sessionId)) return null
+  if (!isSafeSessionId(sessionId)) return null
   const root = transcriptRoot()
 
   if (workspace) {
@@ -75,12 +58,6 @@ export function findTranscriptFile(sessionId: string, workspace?: string): strin
     if (existsSync(candidate)) return candidate
   }
   return null
-}
-
-function clip(text: string): { text: string; truncated?: boolean } {
-  const t = text.trim()
-  if (t.length <= MAX_TURN_CHARS) return { text: t }
-  return { text: t.slice(0, MAX_TURN_CHARS), truncated: true }
 }
 
 /** One-line summary of a tool call — the "agent đang làm gì" signal. */
@@ -116,72 +93,27 @@ function textOfContent(content: unknown): { text: string; tools: { tool: string;
   return { text: parts.join('\n'), tools }
 }
 
-export interface ReadTranscriptOptions {
-  /** Only return turns at/after this index (poll cursor). */
-  fromIndex?: number
-  /** Include `role: 'tool'` activity turns (live monitoring). Default true. */
-  includeToolActivity?: boolean
-}
+export class ClaudeTranscriptReader extends AbstractJsonlTranscriptReader {
+  readonly label = 'claude-code-cli'
 
-export interface TranscriptResult {
-  turns: TranscriptTurn[]
-  /** Total turn count in the file — the next poll cursor. */
-  total: number
-}
-
-/** Parse an already-located transcript file into conversation turns. */
-export function readTranscript(file: string, opts: ReadTranscriptOptions = {}): TranscriptResult {
-  let raw = ''
-  try {
-    raw = readTextFileSync(file)
-  } catch {
-    return { turns: [], total: 0 }
+  protected locate(sessionId: string, workspace?: string): string | null {
+    return findTranscriptFile(sessionId, workspace)
   }
 
-  const includeTools = opts.includeToolActivity !== false
-  const all: TranscriptTurn[] = []
-
-  for (const line of raw.split('\n')) {
-    if (!line.trim()) continue
-    let entry: Record<string, unknown>
-    try {
-      entry = JSON.parse(line)
-    } catch {
-      continue // a half-written trailing line while the CLI is streaming
-    }
-    if (entry.isSidechain === true) continue
+  protected turnsOfEntry(entry: Record<string, unknown>, includeToolActivity: boolean): TranscriptTurnDraft[] {
+    if (entry.isSidechain === true) return []
     const type = entry.type
-    if (type !== 'user' && type !== 'assistant') continue
+    if (type !== 'user' && type !== 'assistant') return []
 
     const message = entry.message as Record<string, unknown> | undefined
     const at = typeof entry.timestamp === 'string' ? entry.timestamp : undefined
     const { text, tools } = textOfContent(message?.content)
 
-    if (text.trim()) {
-      all.push({ index: all.length, role: type, ...clip(text), at })
+    const turns: TranscriptTurnDraft[] = []
+    if (text.trim()) turns.push({ role: type, ...this.clip(text), at })
+    if (includeToolActivity) {
+      for (const t of tools) turns.push({ role: 'tool', text: t.text, tool: t.tool, at })
     }
-    if (includeTools) {
-      for (const t of tools) {
-        all.push({ index: all.length, role: 'tool', text: t.text, tool: t.tool, at })
-      }
-    }
+    return turns
   }
-
-  // Re-index after the newest-N window so `index` stays a stable cursor into
-  // the returned sequence.
-  const windowed = all.slice(Math.max(0, all.length - MAX_TURNS))
-  const total = all.length
-  const from = opts.fromIndex ?? 0
-  return { turns: windowed.filter((t) => t.index >= from), total }
-}
-
-/** Convenience: locate + read in one call. Missing transcript → empty result. */
-export function readSessionTranscript(
-  sessionId: string,
-  workspace?: string,
-  opts: ReadTranscriptOptions = {},
-): TranscriptResult & { file: string | null } {
-  const file = findTranscriptFile(sessionId, workspace)
-  if (!file) return { turns: [], total: 0, file: null }
-  return { ...readTranscript(file, opts), file }
 }
