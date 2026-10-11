@@ -1,11 +1,7 @@
-import { existsSync, joinPath, readdirSync, statSync } from '../../../backend/lib/fileHelper.js'
+import { existsSync, joinPath, readdirSync, statSync } from '../../../../backend/lib/fileHelper.js'
 import fs from 'node:fs'
 import os from 'node:os'
-import {
-  type ReadTranscriptOptions,
-  type TranscriptResult,
-  type TranscriptTurn,
-} from './sessionTranscript.js'
+import { AbstractJsonlTranscriptReader, isSafeSessionId, type TranscriptTurnDraft } from './AbstractJsonlTranscriptReader.js'
 
 /**
  * Read Cursor Agent CLI / IDE session transcripts.
@@ -18,8 +14,6 @@ import {
  * files return empty turns — never throw (chat UI shows transcriptFound: false).
  */
 
-const MAX_TURN_CHARS = 4000
-const MAX_TURNS = 200
 const MAX_SCAN_DIRS = 400
 const MAX_SCAN_FILES = 800
 /** Cap I/O — only the tail of the transcript is loaded for chat UI. */
@@ -31,14 +25,8 @@ function cursorHome(): string {
   return joinPath(os.homedir(), '.cursor')
 }
 
-function clip(text: string): { text: string; truncated?: boolean } {
-  const t = text.trim()
-  if (t.length <= MAX_TURN_CHARS) return { text: t }
-  return { text: t.slice(0, MAX_TURN_CHARS), truncated: true }
-}
-
 /** Read at most the last `maxBytes` of a file (UTF-8); drops a partial leading line. */
-export function readTextFileTailSync(file: string, maxBytes = MAX_READ_BYTES): string {
+function readTextFileTailSync(file: string, maxBytes = MAX_READ_BYTES): string {
   const size = statSync(file).size
   if (size <= 0) return ''
   if (size <= maxBytes) return fs.readFileSync(file, 'utf8')
@@ -63,7 +51,7 @@ function projectsRoot(): string {
  * Accepts uuid or uuid.jsonl; scans agent-transcripts trees defensively.
  */
 export function findCursorTranscriptFile(sessionId: string, _workspace?: string): string | null {
-  if (!sessionId || /[^\w-]/.test(sessionId)) return null
+  if (!isSafeSessionId(sessionId)) return null
   const root = projectsRoot()
   let projectDirs: string[]
   try {
@@ -183,47 +171,29 @@ function textFromCursorEntry(entry: Record<string, unknown>): { role: 'user' | '
   return { role, text: '', at }
 }
 
-/** Parse Cursor JSONL (or Claude-compatible) into turns — only the file tail is read. */
-export function readCursorTranscript(file: string, opts: ReadTranscriptOptions = {}): TranscriptResult {
-  let raw = ''
-  try {
-    raw = readTextFileTailSync(file)
-  } catch {
-    return { turns: [], total: 0 }
+/**
+ * Cursor JSONL (or Claude-compatible) — only the file tail is read. Tool
+ * activity is never surfaced, so `includeToolActivity` has no effect here.
+ */
+export class CursorTranscriptReader extends AbstractJsonlTranscriptReader {
+  readonly label = 'cursor-cli'
+
+  missingReason(): string {
+    return 'Không tìm thấy transcript Cursor cho session này (kiểm tra ~/.cursor/projects/*/agent-transcripts). Có thể CLI chưa ghi file hoặc session_id chưa capture.'
   }
 
-  const all: TranscriptTurn[] = []
-  for (const line of raw.split('\n')) {
-    if (!line.trim()) continue
-    let entry: Record<string, unknown>
-    try {
-      entry = JSON.parse(line)
-    } catch {
-      continue
-    }
-    if (entry.isSidechain === true) continue
+  protected locate(sessionId: string, workspace?: string): string | null {
+    return findCursorTranscriptFile(sessionId, workspace)
+  }
+
+  protected readTextOf(file: string): string {
+    return readTextFileTailSync(file)
+  }
+
+  protected turnsOfEntry(entry: Record<string, unknown>): TranscriptTurnDraft[] {
+    if (entry.isSidechain === true) return []
     const { role, text, at } = textFromCursorEntry(entry)
-    if (!role || !text.trim()) continue
-    all.push({ index: all.length, role, ...clip(text), at })
+    if (!role || !text.trim()) return []
+    return [{ role, ...this.clip(text), at }]
   }
-
-  const windowed = all.slice(Math.max(0, all.length - MAX_TURNS))
-  const total = all.length
-  const from = opts.fromIndex ?? 0
-  return { turns: windowed.filter((t) => t.index >= from), total }
-}
-
-export function readCursorSessionTranscript(
-  sessionId: string,
-  workspace?: string,
-  opts: ReadTranscriptOptions = {},
-): TranscriptResult & { file: string | null } {
-  const file = findCursorTranscriptFile(sessionId, workspace)
-  if (!file) return { turns: [], total: 0, file: null }
-  return { ...readCursorTranscript(file, opts), file }
-}
-
-/** @internal test helper */
-export function _cursorProjectsRootForTest(): string {
-  return projectsRoot()
 }
