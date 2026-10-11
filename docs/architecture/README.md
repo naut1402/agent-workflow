@@ -181,8 +181,12 @@ Chi tiết implementation cụ thể — tên file, hàm, bảng schema. Đây l
 | [4.4 DB (SQLite)](#44-db-sqlite) | Trước khi bật `logging.driver: sqlite` hoặc thêm bảng mới |
 | [4.5 Config shell](#45-config-shell) | Không chắc 1 setting nên đặt ở preference shell hay schema business |
 | [4.6 Styling](#46-styling) | Thêm style mới xuyên feature |
-| [`code/runner.md`](code/runner.md) | Sửa id runner/connection, runner mặc định, hoặc cách phân loại family của provider |
-| [`code/monitor.md`](code/monitor.md) | Sửa validate task id ở business `monitor` (`createQa`), hoặc pattern task id của MCP |
+| [`code/runner.md`](code/runner.md) | Sửa id runner/connection, runner mặc định, family provider, job queue, provider Agent CLI / API, cách giao MCP cho job (`mcpDelivery/`), hoặc dialog connection |
+| [`code/monitor.md`](code/monitor.md) | Sửa validate task id ở business `monitor` (`createQa`), pattern task id của MCP, clone project bằng PAT, hoặc cách chọn phiên / dựng lượt của chat với runner |
+| [`code/mcp.md`](code/mcp.md) | Sửa vai client MCP (mask secret, redirect/header, khôi phục `***`, migrate store, entry tự gắn `SelfMcpServer`) hoặc dialog MCP |
+| [`code/orchestrator.md`](code/orchestrator.md) | Sửa cách chọn tuyến ra lệnh điều phối (`mcp` / `sentinel`) |
+| [`code/agent-editor.md`](code/agent-editor.md) | Đổi import giữa business agent-editor ⇄ pipeline-editor, hoặc cách liệt kê pipeline profile |
+| [`code/backend.md`](code/backend.md) | Sửa import `node:*` trong `fileHelper`, hoặc ghi file atomic / quyền file |
 | [`events/`](events/README.md) | Viết subscriber, thêm emit mới, tra cứu 1 domain event cụ thể |
 
 ### 4.1 Frontend

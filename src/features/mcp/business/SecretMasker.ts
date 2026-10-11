@@ -1,24 +1,10 @@
-// Value object che secret trước khi một chuỗi rời tiến trình (log job, response
-// API, kết quả tool). Node-free: FE import thẳng file này (`components/*.vue`)
-// để dialog dùng CHÍNH quy tắc nhận diện secret của backend — 🚫 không import
-// `node:*` hay SDK MCP ở đây.
+// xem docs/architecture/code/mcp.md §6
 
 import { MCP_ENV_REF_PATTERN } from '../schemas/mcpServer.js'
 
-/** Key trông như secret + đủ dài ⇒ dialog cảnh báo nên dùng credential profile. */
 const SECRET_LIKE_KEY = /authorization|token|key|secret|password/i
 const SECRET_LIKE_MIN_LENGTH = 20
 
-/**
- * Nhận diện secret trong `stdio.args`. 🚫 KHÔNG dùng `isMaskable` ở đây:
- * ngưỡng 8 ký tự đơn thuần nuốt cả `@modelcontextprotocol/server-filesystem` và
- * mọi đường dẫn — mask chúng là làm hỏng đúng thứ người dùng cần để sửa cấu hình.
- *
- * Ba dạng được tính là secret, và chỉ ba dạng đó:
- *   1. giá trị đứng ngay sau một cờ mang tên secret (`--token sk-…`)
- *   2. dạng gộp `--token=sk-…`
- *   3. giá trị tự nó mang hình dạng token đã biết (`sk-`, `ghp_`, JWT, …)
- */
 const SECRET_ARG_FLAG =
   /^--?(token|api[-_]?key|key|secret|password|passwd|pwd|auth|access[-_]?token|bearer)$/i
 const SECRET_ARG_INLINE =
@@ -38,24 +24,21 @@ export interface SecretArgHit {
 export interface SecretStream {
   /** Nuốt một chunk, trả phần đã chắc chắn an toàn để phát ra ngoài. */
   push(chunk: string): string
-  /** Phát nốt phần còn giữ lại. Bắt buộc gọi ở CẢ nhánh thành công lẫn nhánh lỗi. */
+  /** Phát nốt phần còn giữ lại — gọi ở cả nhánh thành công lẫn nhánh lỗi. */
   flush(): string
 }
 
 export class SecretMasker {
   static readonly MASK = '***'
 
-  /**
-   * Mã cảnh báo trả qua API. FE map sang i18n (`mcp.warnings.*`) — 🚫 không trả
-   * chuỗi đã dịch từ backend: backend không biết người dùng đang xem ngôn ngữ nào.
-   */
+  /** Mã cảnh báo trả qua API — FE map sang i18n `mcp.warnings.*`. */
   static readonly WARN_ARGS_SECRET_LITERAL = 'args.secretLiteral'
   static readonly WARN_ARGS_SECRET_DROPPED = 'args.secretDropped'
 
   /** Masker rỗng — `mask` / `stream` trả nguyên văn, không buffer. */
   static readonly NONE: SecretMasker = new SecretMasker([])
 
-  /** Ngưỡng 8 ký tự: chuỗi ngắn hơn trùng ngẫu nhiên với text thường, mask vào là hỏng log. */
+  /** Chuỗi từ 8 ký tự, không phải `***` hay `env:NAME` — đủ điều kiện mask log. */
   static isMaskable(value: unknown): value is string {
     if (typeof value !== 'string' || value.length < 8) return false
     if (value === SecretMasker.MASK) return false
@@ -75,15 +58,12 @@ export class SecretMasker {
     for (let i = 0; i < list.length; i++) {
       const arg = list[i]
       if (typeof arg !== 'string') continue
-      // Bản thân sentinel không phải secret — không thì mọi vòng round-trip
-      // (`lấy về đã mask → bấm Lưu`) đều báo động giả.
       if (arg === SecretMasker.MASK || arg.endsWith(`=${SecretMasker.MASK}`)) continue
       const inline = SECRET_ARG_INLINE.exec(arg)
       if (inline) {
         hits.push({ index: i, value: inline[2], flag: inline[1] })
         continue
       }
-      // `!arg.startsWith('-')` — `--token --verbose` là cờ bị bỏ trống, không phải secret.
       const prev = i > 0 ? String(list[i - 1] ?? '') : ''
       if (SECRET_ARG_FLAG.test(prev) && !arg.startsWith('-')) {
         hits.push({ index: i, value: arg })
@@ -94,10 +74,7 @@ export class SecretMasker {
     return hits
   }
 
-  /**
-   * Bản `args` đã thay secret bằng `***`. 🚫 Không lọc `isMaskable` ở đây:
-   * với API thì thà che hụt độ dài còn hơn để lộ.
-   */
+  /** Bản `args` đã thay secret bằng `***` — không lọc theo `isMaskable`. */
   static maskArgs(args?: readonly string[]): string[] {
     const list = [...(args ?? [])]
     for (const hit of SecretMasker.secretArgs(list)) {
@@ -110,7 +87,6 @@ export class SecretMasker {
   static maskRecord(record?: Record<string, string>): Record<string, string> {
     const out: Record<string, string> = {}
     for (const [k, v] of Object.entries(record || {})) {
-      // `env:NAME` là tên biến, không phải giá trị — giữ để người dùng còn sửa được.
       out[k] = MCP_ENV_REF_PATTERN.test(v) ? v : SecretMasker.MASK
     }
     return out
@@ -119,19 +95,9 @@ export class SecretMasker {
   /** Secret theo thứ tự gặp lần đầu — đã bỏ trùng và bỏ chuỗi rỗng. */
   readonly values: readonly string[]
 
-  /**
-   * Thứ tự DÀI → NGẮN cho `mask`: nếu một secret là tiền tố của secret khác, thay
-   * cái ngắn trước sẽ ăn mất phần đầu và để lộ phần đuôi — `abcdefgh` thay trước
-   * biến `abcdefghXYZ` thành `***XYZ`. Sắp xếp giảm dần theo độ dài là đủ để
-   * không ca nào che hụt ca nào.
-   */
   private readonly ordered: readonly string[]
 
-  /**
-   * 🚫 Không lọc `isMaskable` ở đây — hai ngưỡng lọc khác nhau là có chủ ý: danh
-   * sách mask LOG lọc ở chỗ dựng (`McpServer.secretValues`, …), còn masker nhận
-   * gì che nấy.
-   */
+  /** Nhận gì che nấy — không lọc theo `isMaskable`. */
   constructor(secrets: readonly string[]) {
     this.values = [...new Set(secrets)].filter(Boolean)
     this.ordered = [...this.values].sort((a, b) => b.length - a.length)
@@ -151,11 +117,7 @@ export class SecretMasker {
     return out
   }
 
-  /**
-   * Kết quả tool đi thẳng vào log job và vào `messages` được persist, nên secret
-   * phải bị thay TRƯỚC khi nó rời tiến trình — ràng buộc này áp cho cả họ `ai-api`,
-   * không riêng `agent-cli` (ở đó `maskLog` lo phần tương ứng).
-   */
+  /** Bản sao đã mask mọi chuỗi lồng trong `value`. */
   maskDeep(value: unknown): unknown {
     if (!this.values.length) return value
     if (typeof value === 'string') return this.mask(value)
@@ -168,37 +130,16 @@ export class SecretMasker {
     return value
   }
 
-  /**
-   * Vì sao cần trạng thái: `mask` là split/join không trạng thái, nên một secret
-   * bị tiến trình con xuất làm hai chunk (`"sk-test-LEAK"` + `"CANARY"`) lọt qua cả
-   * hai lần gọi — mỗi nửa không khớp chuỗi nào nên không bị thay.
-   *
-   * Cách chữa: giữ ít nhất `max(len(secret)) - 1` ký tự RAW ở cuối buffer.
-   * Nếu điểm cắt nằm trong secret hoàn chỉnh, lùi về đầu secret trước khi mask
-   * và phát phần đầu. `pending` chưa mask để chunk sau còn nhận diện secret dài hơn.
-   *
-   * ⚠️ Đánh đổi thật, không phải refactor thuần: log stream TRỄ phần đuôi
-   * cho tới chunk sau hoặc `flush()`. Không flush ở nhánh lỗi là nuốt mất
-   * đuôi log — đúng đoạn người dùng cần để biết job hỏng vì sao.
-   *
-   * Đặt ở `mcp/business/` chứ không ở `runner/business/providers/`: `maskLog` hiện
-   * chỉ phủ `createLocalConsoleProvider`, họ `ai-api` không đi qua đó. Để ở đây thì
-   * cả hai họ provider dùng chung được một bản.
-   */
+  // xem docs/architecture/code/mcp.md §6
+  /** Bộ lọc mask có trạng thái cho log stream — giữ đuôi chưa chắc an toàn tới chunk sau hoặc `flush()`. */
   stream(): SecretStream {
     const list = this.values
-    // 📌 Hai điều kiện tách hẳn nhau. `keep === 0` có thể nghĩa là "không có
-    // secret" HOẶC "secret dài nhất đúng 1 ký tự" — gộp chúng thì ca thứ hai trả
-    // chunk CHƯA MASK. Hôm nay bất khả (mọi caller lọc qua `isMaskable`,
-    // ≥ 8 ký tự) nhưng đó là một cửa sập: bỏ bộ lọc ở caller là mất mask mà
-    // 🚫 không test nào đỏ.
     const hasSecret = list.length > 0
     const keep = hasSecret ? Math.max(...list.map((s) => s.length)) - 1 : 0
     let pending = ''
 
     return {
       push: (chunk) => {
-        // Không secret nào ⇒ đường cũ y nguyên: không buffer, không trễ một ký tự.
         if (!hasSecret) return chunk
         const buffer = pending + chunk
         let cut = Math.max(0, buffer.length - keep)

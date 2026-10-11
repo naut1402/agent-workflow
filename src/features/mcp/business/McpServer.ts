@@ -26,7 +26,7 @@ export interface McpResolveContext {
 
 /** `env` (stdio) hoặc `headers` (remote) sau khi giải `env:NAME` và credential. */
 export interface ResolvedMcpServer {
-  /** Giá trị THẬT — chỉ đi vào transport / file config, 🚫 không bao giờ ra log. */
+  /** Giá trị thật — chỉ đi vào transport / file config, không ra log. */
   values: Record<string, string>
   /** Secret giải từ credential profile; `null` khi không khai hoặc không giải được. */
   secret: string | null
@@ -58,14 +58,7 @@ export interface McpTransportPlan {
   warnings: string[]
 }
 
-/**
- * Một MCP server người dùng khai (hoặc dashboard tự gắn). Mỗi transport là một
- * hiện thực — `StdioMcpServer`, `RemoteMcpServer` — và CHỈ `McpRegistry.normalise`
- * biết chọn lớp nào: caller khác chỉ làm việc với lớp này.
- *
- * Bất biến: `config` là bản ghi đã chuẩn hoá; mọi phép biến đổi (`restoreMasked`,
- * `withLastCheck`) trả bản MỚI.
- */
+/** Một MCP server người dùng khai (hoặc dashboard tự gắn); biến đổi trả bản mới, hiện thực do `McpRegistry.normalise` chọn. */
 export abstract class McpServer<C extends McpServerConfig = McpServerConfig> {
   protected constructor(readonly config: C) {}
 
@@ -90,7 +83,8 @@ export abstract class McpServer<C extends McpServerConfig = McpServerConfig> {
     return McpServer.sanitiseId(this.config.id)
   }
 
-  /** Cùng luật với `sanitiseRunnerId` — bản sao cố ý, để `mcp` không phụ thuộc `runner`. */
+  // xem docs/architecture/code/mcp.md §3
+  /** Chuẩn hoá id về `[a-zA-Z0-9_-]`, tối đa 64 ký tự; `null` khi không dùng được. */
   static sanitiseId(id: unknown): string | null {
     if (typeof id !== 'string' || !id.trim()) return null
     if (/[\\/\0]/.test(id)) return null
@@ -123,48 +117,20 @@ export abstract class McpServer<C extends McpServerConfig = McpServerConfig> {
   /** Bản sao đã thay giá trị secret bằng `***`; bản gốc giữ nguyên. */
   abstract masked(): C
 
-  /**
-   * Gộp bản gửi lên với bản đang lưu: API trả cấu hình đã mask, nên client gửi
-   * ngược lại đúng `***` ở mọi khoá nó không sửa. Coi `***` là sentinel "giữ
-   * nguyên" — nếu không, một cú bấm bật/tắt là ghi đè secret thật bằng `***`.
-   *
-   * Khoá mang `***` mà bản cũ không có thì bỏ hẳn: không có gì để khôi phục, và
-   * ghi literal `***` xuống server con còn tệ hơn thiếu khoá.
-   *
-   * `warnings` — sink tuỳ chọn: nhận mã cảnh báo khi một ô `***` bị bỏ vì neo không khớp.
-   */
+  /** Gộp bản gửi lên với bản đang lưu — `***` là sentinel "giữ nguyên"; `warnings` nhận mã khi một ô `***` bị bỏ. */
   abstract restoreMasked(previous: McpServer | null, warnings?: string[]): McpServer<C>
 
-  /**
-   * Giá trị do người dùng gõ tay có thể là secret literal — gom để mask log/API.
-   * Bỏ `env:NAME` (tên biến, không phải giá trị) và `***` (đã mask rồi): mask
-   * chúng chỉ làm log khó đọc mà không che thêm gì.
-   */
+  /** Giá trị gõ tay có thể là secret literal (trừ `env:NAME` và `***`) — để mask log/API. */
   abstract secretValues(): string[]
 
-  /**
-   * Đích thật mà probe sẽ nói chuyện. Dùng để so bản nháp với bản đã lưu: cùng
-   * `id` là chưa đủ, vì `id` do người gửi đặt còn secret thì lấy từ bản đã lưu.
-   *
-   * 📌 So trên giá trị THÔ, 🚫 không mask. Mask hai vế thì mọi arg đứng sau một cờ
-   * mang tên secret (`--auth`, `--token`, …) đều thành `***` ở cả hai bên, nên đổi
-   * GIÁ TRỊ của nó không còn làm đích khác đi — tức nới đúng cái cổng này ra.
-   * Ca cụ thể: đã lưu `--auth https://internal --token sk-REAL`, gửi lên
-   * `--auth https://attacker --token ***` ⇒ mask hai vế cho kết quả bằng nhau ⇒
-   * khôi phục `sk-REAL` rồi probe tới host của người gửi.
-   *
-   * Vấn đề "bản nháp mang `***` nên không bao giờ khớp" (E3) được xử lý ở CHỖ GỌI,
-   * bằng cách so bản ĐÃ KHÔI PHỤC thay vì bản thô — xem `McpController.testServer`.
-   */
+  // xem docs/architecture/code/mcp.md §3
+  /** Đích thật mà probe sẽ nói chuyện, tính trên giá trị thô chưa mask. */
   abstract destination(): string
 
   /** Bản nháp có ô nào đang là `***`, tức đang trông chờ khôi phục từ bản đã lưu. */
   abstract needsStoredSecret(): boolean
 
-  /**
-   * Mã cảnh báo cấu hình (`SecretMasker.WARN_*`) — 🚫 KHÔNG chặn lưu. Mặc định
-   * không có gì để cảnh báo.
-   */
+  /** Mã cảnh báo cấu hình (`SecretMasker.WARN_*`) — không chặn lưu. */
   warnings(): string[] {
     return []
   }
@@ -172,7 +138,7 @@ export abstract class McpServer<C extends McpServerConfig = McpServerConfig> {
   /** Ném `Error` khi đích kết nối không được phép. Mặc định không có đích mạng nào để kiểm. */
   assertEndpoint(): void {}
 
-  /** Giải `env:NAME` và credential — 🚫 không ném; thiếu gì thì bỏ khoá kèm cảnh báo. */
+  /** Giải `env:NAME` và credential — không ném; thiếu gì thì bỏ khoá kèm cảnh báo. */
   abstract resolve(ctx?: McpResolveContext): ResolvedMcpServer
 
   /** Một entry `mcpServers` cho file cấu hình CLI (`--mcp-config`, `.cursor/mcp.json`). */
@@ -181,11 +147,7 @@ export abstract class McpServer<C extends McpServerConfig = McpServerConfig> {
   /** Transport SDK để `McpClient` kết nối, kèm danh sách mask cho thông điệp lỗi. */
   abstract createTransport(opts?: McpTransportOptions): McpTransportPlan
 
-  /**
-   * `env:NAME` → `process.env.NAME`. Biến không tồn tại thì BỎ HẲN khoá đó: ghi
-   * literal `env:NAME` xuống server con còn tệ hơn thiếu biến, vì nó trông như
-   * một token hợp lệ.
-   */
+  /** `env:NAME` → `process.env.NAME`; biến chưa đặt thì bỏ hẳn khoá, kèm cảnh báo. */
   protected static resolveEnvRefs(record?: Record<string, string>): {
     values: Record<string, string>
     warnings: string[]

@@ -1,7 +1,3 @@
-/**
- * Clone a git repo into dashboard workspace and register as a project.
- */
-
 import fs from 'node:fs'
 import path from 'node:path'
 import { formatGitFailure, runGit, GIT_CLONE_TIMEOUT_MS } from '../git.js'
@@ -13,7 +9,6 @@ import {
   resolveGithubTokenForRepo,
 } from '../../../settings/business/index.js'
 
-/** Git metadata kept on registry JSON without extending core Project. */
 type ProjectGitMeta = Project & {
   gitUrl?: string
   defaultBranch?: string
@@ -28,11 +23,10 @@ function sanitiseBranch(branch: unknown): string | null {
   return b.slice(0, 200)
 }
 
-/** Reject private/loopback hosts (same policy spirit as fetchUrlSafe). Exported for tests. */
+/** Accepts `https://host/owner/repo` (no userinfo) or `git@host:owner/repo.git`; null for private/loopback hosts. */
 export function sanitiseGitUrl(url: unknown): string | null {
   if (typeof url !== 'string' || !url.trim()) return null
   const u = url.trim().slice(0, 500)
-  // https://host/owner/repo — no userinfo (@); blocks SSRF to private hosts.
   if (/^https:\/\/[^\s/@]+\/[^\s/]+\/[^\s/]+/i.test(u)) {
     try {
       const host = new URL(u).hostname
@@ -42,7 +36,6 @@ export function sanitiseGitUrl(url: unknown): string | null {
       return null
     }
   }
-  // git@host:owner/repo.git
   const ssh = u.match(/^git@([\w.-]+):[\w./-]+\.git$/i)
   if (ssh) {
     if (isPrivateHostname(ssh[1])) return null
@@ -51,7 +44,7 @@ export function sanitiseGitUrl(url: unknown): string | null {
   return null
 }
 
-/** True only for github.com HTTPS or SSH remotes (PAT must never leave GitHub). */
+/** True only for github.com HTTPS or SSH remotes. */
 export function isGithubGitRemote(gitUrl: string): boolean {
   return /^https:\/\/(?:www\.)?github\.com\//i.test(gitUrl) || /^git@github\.com:/i.test(gitUrl)
 }
@@ -66,7 +59,6 @@ function ensureDevTeamAgent(repoDir: string): string {
   return fs.realpathSync(inner)
 }
 
-/** Last path segment of URL / SSH ref, without `.git`. */
 function deriveRepoName(gitUrl: string): string {
   const slug = parseGithubRepoRef(gitUrl)
   if (slug) {
@@ -91,10 +83,6 @@ function sanitiseDestSegment(raw: string): string {
   )
 }
 
-/**
- * Folder under clones/: prefer `repo-branch`; if exists append base36 timestamp
- * so same repo + other branch (or re-clone) still works.
- */
 function allocateCloneDest(
   clonesRoot: string,
   opts: { destName?: string; repoName: string; branch: string },
@@ -110,8 +98,7 @@ function allocateCloneDest(
 
 /**
  * Canonical HTTPS clone URL from already-parsed owner/repo.
- * Exported for unit tests — do not re-match the path with a non-anchored
- * non-greedy regex (that truncated `agent-workflow` → `a`).
+ * xem docs/architecture/code/monitor.md §2
  */
 export function normaliseGithubCloneUrl(gitUrl: string, owner: string, repo: string): string {
   if (/^git@github\.com:/i.test(gitUrl) || /^https:\/\/github\.com\//i.test(gitUrl)) {
@@ -121,9 +108,8 @@ export function normaliseGithubCloneUrl(gitUrl: string, owner: string, repo: str
 }
 
 /**
- * GitHub git Smart HTTP rejects `Authorization: Bearer` (`remote: invalid credentials`).
- * Use Basic with username `x-access-token` (token stays out of the remote URL).
- * Exported for unit tests.
+ * `http.extraHeader` value carrying a GitHub PAT as Basic auth.
+ * xem docs/architecture/code/monitor.md §2
  */
 export function githubGitAuthExtraHeader(token: string): string {
   const safeToken = token.replace(/[\r\n]/g, '').split(String.fromCharCode(0)).join('').trim()
@@ -131,13 +117,15 @@ export function githubGitAuthExtraHeader(token: string): string {
   return `Authorization: Basic ${basic}`
 }
 
-/** Map clone URL → PAT from Settings / GITHUB_TOKEN (GitHub remotes only). */
+/**
+ * Map clone URL → PAT from Settings / GITHUB_TOKEN (GitHub remotes only).
+ * xem docs/architecture/code/monitor.md §2
+ */
 export function resolveCloneAuth(gitUrl: string): {
   cloneUrl: string
   extraHeader: string | null
   usedToken: boolean
 } {
-  // Defense in depth: never send PAT to a non-github host even if slug parse matches.
   if (!isGithubGitRemote(gitUrl)) {
     return { cloneUrl: gitUrl, extraHeader: null, usedToken: false }
   }
@@ -164,10 +152,7 @@ export type CloneResult =
   | { ok: true; project: Project; repoPath: string; branch: string }
   | { ok: false; status: number; error: string }
 
-/**
- * `git clone --branch <branch> --single-branch <url> <dest>` then register
- * the `.dev-team-agent` path (created if missing).
- */
+/** Shallow-clone `branch` of `gitUrl` under `clones/`, then register its `.dev-team-agent` (created if missing). */
 export function cloneProject(input: {
   gitUrl: string
   branch?: string

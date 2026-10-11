@@ -10,8 +10,7 @@ import { ProjectTools } from './tools/ProjectTools.js'
 import { TaskTools } from './tools/TaskTools.js'
 
 export class DashboardMcpServer extends AbstractMcpServer {
-  // Hợp đồng với dashboard — bên ghi entry `--mcp-config` cho job điều phối.
-  // Đọc từ `SelfMcpServer` để hai tiến trình không thể lệch tên.
+  // xem docs/mcp/server.md §8.1
   static readonly SERVER_NAME = SelfMcpServer.SERVER_ID
   static readonly MODE_ENV_VAR = SelfMcpServer.MODE_ENV_VAR
 
@@ -42,8 +41,6 @@ export class DashboardMcpServer extends AbstractMcpServer {
       new TaskTools(resolveRoot),
       new KnowledgeTools(resolveRoot),
       new ProjectTools(resolveRoot),
-      // Không dùng `requireRoot` (token của lượt đã xác định task), vẫn nhận
-      // `resolveRoot` cho đồng dạng với ba nhóm trên.
       new OrchestratorTools(resolveRoot),
     ]
   }

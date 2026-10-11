@@ -4,29 +4,11 @@ import { SelfMcpServer } from '../../src/features/mcp/business/index.js'
 import { OrchestratorDecisionShape } from '../../src/features/orchestrator/schemas/orchestrator.js'
 import { AbstractMcpTools, type ToolDef } from '../AbstractMcpTools.js'
 
-/**
- * Không có timeout thì một dashboard treo làm tool treo vô hạn và CLI chờ mãi —
- * ca gây thiệt hại lớn nhất của tuyến này.
- */
 const DECIDE_TIMEOUT_MS = 15_000
 
 const FALLBACK_HINT = 'Ra lệnh bằng dòng cuối output: `ORCHESTRATOR_DECISION: {"action":…}`.'
 
-/**
- * Tool ra lệnh điều phối, thay cho việc in dòng `ORCHESTRATOR_DECISION` ở cuối
- * output.
- *
- * Lớp vỏ mỏng `fetch` tới `POST /api/orchestrator/decide`
- * (`SelfMcpServer.DECIDE_PATH`) — endpoint đó đã có token guard và chốt chống
- * thi hành hai lần.
- *
- * 🚫 KHÔNG import gì từ `src/features/orchestrator/business/`: tiến trình MCP là
- * tiến trình KHÁC với dashboard, nên gọi `applyDecision` in-process sẽ thi hành
- * vào một job queue khác hẳn và làm stdio server treo không thoát. Chỉ mượn
- * `schemas/` cho raw shape (zod thuần, không side effect), và hằng hợp đồng
- * (hai biến env, header token, path decide) từ `SelfMcpServer` (barrel `mcp`,
- * không side effect lúc nạp).
- */
+/** Tool `orchestrator_decide`: chuyển quyết định điều phối tới `POST /api/orchestrator/decide` của dashboard. */
 export class OrchestratorTools extends AbstractMcpTools {
   definitions(): ToolDef[] {
     return [
@@ -46,8 +28,6 @@ export class OrchestratorTools extends AbstractMcpTools {
             + 'Gọi tool này xong thì KHÔNG in thêm dòng ORCHESTRATOR_DECISION nào nữa.',
           inputSchema: OrchestratorDecisionShape,
           outputSchema: { applied: z.string() },
-          // `openWorldHint: true` vì tool gọi ra ngoài tiến trình — khác
-          // `READ_ONLY_ANNOTATIONS` của các nhóm tool đọc state.
           annotations: {
             readOnlyHint: false,
             destructiveHint: false,
@@ -61,7 +41,6 @@ export class OrchestratorTools extends AbstractMcpTools {
   }
 
   async decide(args: unknown): Promise<any> {
-    // Dashboard khai hai biến này vào entry tự gắn (`SelfMcpServer.forJob`).
     const token = process.env[SelfMcpServer.TOKEN_ENV]
     const base = process.env[SelfMcpServer.BASE_URL_ENV]
     if (!token || !base) {
@@ -84,14 +63,10 @@ export class OrchestratorTools extends AbstractMcpTools {
         signal: AbortSignal.timeout(DECIDE_TIMEOUT_MS),
       })
     } catch (err: any) {
-      // Gồm cả timeout. Ném ra ngoài handler là CLI nhận `McpError` không đọc
-      // được; trả `isError` thì agent còn đọc được lý do và rơi về sentinel.
       return this.fail('internal', `không gọi được dashboard: ${String(err?.message ?? err)}. ${FALLBACK_HINT}`)
     }
 
     const payload: any = await res.json().catch(() => null)
-    // 400 là quyết định sai (thiếu `stepId`, `stepId` lạ, `message` rỗng với
-    // `resume`) — trả nguyên văn lý do để agent sửa và gọi lại.
     if (res.status === 400) return this.fail('invalid_input', payload?.error ?? 'quyết định không hợp lệ')
     if (res.status === 401) {
       return this.fail('internal', `token điều phối hết hạn hoặc không hợp lệ. ${FALLBACK_HINT}`)

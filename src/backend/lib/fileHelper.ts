@@ -1,10 +1,7 @@
 import fsPromises from 'node:fs/promises'
 import fs from 'node:fs'
 import path from 'node:path'
-// Namespace imports — named `from 'node:*'` is rewritten by Vite to property
-// access at module init (`ext["fileURLToPath"]` / `ext["randomBytes"]`), which
-// throws in the browser if this file is ever pulled into the client graph.
-// Defer access to call sites.
+// xem docs/architecture/code/backend.md §1
 import * as nodeUrl from 'node:url'
 import * as nodeCrypto from 'node:crypto'
 import * as nodeUtil from 'node:util'
@@ -22,8 +19,6 @@ export type { Dirent, Stats, FSWatcher, FileHandle }
 export function homeDir(): string {
   return process.env.USERPROFILE || process.env.HOME || ''
 }
-
-// ── path wrappers
 
 export function joinPath(...parts: string[]): string {
   return path.join(...parts)
@@ -92,8 +87,6 @@ export function resolvePathUnder(baseDir: string, ...segments: string[]): string
   if (target !== base && !target.startsWith(base + path.sep)) return null
   return target
 }
-
-// ── async fs
 
 /** Read a directory, returning [] instead of throwing on any error. */
 export async function safeReadDir(dir: string): Promise<Dirent[]> {
@@ -212,11 +205,7 @@ export async function openFile(
   return fsPromises.open(p, flags)
 }
 
-/**
- * Bản async của `writeTextFileAtomicSync` — cho business không muốn chặn event
- * loop. Temp file mang pid + random nên hai ghi song song không giẫm lên nhau;
- * ghi hỏng thì dọn temp và ném tiếp, không để lại file rách.
- */
+/** Bản async của `writeTextFileAtomicSync`: ghi temp rồi rename; lỗi thì dọn temp và ném tiếp. */
 export async function writeTextFileAtomic(target: string, data: string): Promise<void> {
   await mkdir(dirname(target), { recursive: true })
   const tmp = `${target}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`
@@ -228,8 +217,6 @@ export async function writeTextFileAtomic(target: string, data: string): Promise
     throw err
   }
 }
-
-// ── sync fs
 
 export function existsSync(p: string): boolean {
   return fs.existsSync(p)
@@ -252,16 +239,12 @@ export function mkdirSync(p: string, opts?: { recursive?: boolean }): string | u
   return fs.mkdirSync(p, opts) ?? undefined
 }
 
-/** Đặt quyền POSIX. Trên win32 gần như vô nghĩa — đừng dựa vào nó làm rào duy nhất. */
+/** Đặt quyền POSIX; trên win32 gần như không có tác dụng. */
 export function chmodSync(p: string, mode: number): void {
   fs.chmodSync(p, mode)
 }
 
-/**
- * `chmodSync` không ném — cho chỗ quyền chỉ là lớp rào phụ. Rào chính phải nằm
- * ở chỗ khác: `mode` ngay lúc tạo file, hoặc vị trí file dưới thư mục hồ sơ
- * người dùng.
- */
+/** `chmodSync` không ném — nuốt lỗi khi filesystem không hỗ trợ POSIX mode. */
 export function chmodSafe(target: string, mode: number): void {
   try {
     chmodSync(target, mode)
@@ -279,10 +262,8 @@ export function copyFileSync(from: string, to: string): void {
 }
 
 /**
- * Best-effort atomic text write: temp file + rename. Some filesystems (Docker
- * bind mounts, SMB/NFS shares, antivirus-scanned dirs) return EBUSY/EPERM
- * transiently when rename targets an existing file — retry briefly, then fall
- * back to copy-over + unlink, which those filesystems do allow.
+ * Best-effort atomic text write: temp file + rename, with copy-over fallback.
+ * xem docs/architecture/code/backend.md §2
  */
 export function writeTextFileAtomicSync(
   file: string,
@@ -293,18 +274,14 @@ export function writeTextFileAtomicSync(
   writeTextFileSync(tmp, data, opts)
   const renamed = renameOverExisting(tmp, file)
   if (!renamed) {
-    // `copyFileSync` GIỮ mode của file đích khi đích đã tồn tại, nên nhánh này
-    // không thừa hưởng `mode` của temp — `chmodSync` bên dưới mới là thứ chốt.
     copyFileSync(tmp, file)
     rmSync(tmp, { force: true })
   }
-  // Cả hai nhánh đều cần: file tạo từ lần chạy TRƯỚC khi có `mode` vẫn đang
-  // mang mode cũ, mà `writeFileSync` không đổi mode của file đã tồn tại.
   if (opts?.mode != null) {
     try {
       chmodSync(file, opts.mode)
     } catch {
-      /* win32 / FS không hỗ trợ POSIX mode — nội dung vẫn ghi đúng, không chặn luồng */
+      /* win32 / FS không hỗ trợ POSIX mode */
     }
   }
 }

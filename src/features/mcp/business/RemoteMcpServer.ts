@@ -20,12 +20,9 @@ import {
 } from './McpServer.js'
 import { SecretMasker } from './SecretMasker.js'
 
-// Chốt riêng cho endpoint MCP, cố ý KHÔNG dùng `fetchUrlSafe`: MCP server cục bộ
-// (playwright, serena) chạy trên loopback qua http, đúng thứ `fetchUrlSafe` chặn.
-// Nới `fetchUrlSafe` sẽ mở bề mặt SSRF ở mọi call site khác của nó.
+// xem docs/mcp/client.md §4
 const LOOPBACK_LITERALS = new Set(['::1', '[::1]', '0.0.0.0'])
 
-/** Đủ cho chuỗi redirect thật (`/mcp` → `/mcp/` → canonical host); hơn nữa là vòng lặp. */
 const MAX_REDIRECT_HOPS = 3
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308])
 
@@ -58,7 +55,7 @@ export class RemoteMcpServer extends McpServer<McpRemoteServer> {
     throw new Error('mcp: chỉ chấp nhận https, hoặc http trên loopback/private')
   }
 
-  /** 📌 Guard `url` rỗng ⇒ `null` ở đây, cùng lý do với `StdioMcpServer.normalise`. */
+  /** Bản ghi đã chuẩn hoá — `null` khi `url` rỗng. */
   static normalise(
     raw: any,
     base: McpServerBaseFields,
@@ -107,10 +104,7 @@ export class RemoteMcpServer extends McpServer<McpRemoteServer> {
     RemoteMcpServer.assertEndpoint(this.config.url)
   }
 
-  /**
-   * Thứ tự cố định: header gõ tay trước, credential ghi đè sau. Credential đã
-   * chọn là nguồn sự thật; ô gõ tay chỉ để bổ sung khoá khác.
-   */
+  /** Giải header: header gõ tay trước, credential ghi đè sau. */
   resolve(ctx?: McpResolveContext): ResolvedMcpServer {
     const server = this.config
     const secret = server.credentialId ? ctx?.credentials?.secretFor(server.credentialId) ?? null : null
@@ -127,8 +121,6 @@ export class RemoteMcpServer extends McpServer<McpRemoteServer> {
 
   toCliEntry(ctx: McpCliContext): McpCliEntry {
     const server = this.config
-    // Cả giá trị gõ tay lẫn giá trị đã giải đều đi vào file config, nên cả hai
-    // phải nằm trong danh sách mask log.
     const secrets = this.secretValues()
     const resolved = this.resolve(ctx)
     if (resolved.secret) secrets.push(resolved.secret)
@@ -149,8 +141,7 @@ export class RemoteMcpServer extends McpServer<McpRemoteServer> {
     const url = RemoteMcpServer.assertEndpoint(server.url)
     const resolved = this.resolve(opts)
     const headers = resolved.values
-    // `requestInit` chỉ áp cho POST; stream GET của SSE lấy fetch ở tuỳ chọn gốc,
-    // nên header phải đi qua `fetch` chứ không chỉ `requestInit`.
+    // xem docs/architecture/code/mcp.md §5
     const common = { requestInit: { headers }, fetch: guardedFetch(headers, url.origin) }
     return {
       transport:
@@ -167,40 +158,14 @@ function isRemoteConfig(config: McpServerConfig): config is McpRemoteServer {
   return config.transport === 'http' || config.transport === 'sse'
 }
 
-/**
- * `fetch` tự đi từng hop thay vì để runtime đi hộ. Hai lý do, cả hai đều là lỗ
- * bảo mật thật của bản trước:
- *
- *  1. `assertEndpoint` chỉ chạy trên URL người dùng khai. Với `redirect: 'follow'`
- *     mặc định, một server `https` hợp lệ trả 302 sang `http://attacker.example`
- *     là chính sách endpoint bị đi vòng hoàn toàn — nên guard chạy lại ở MỌI hop.
- *  2. Header ta tiêm (`Authorization`, `X-API-Key`, … do người dùng đặt) bám theo
- *     redirect sang origin lạ ⇒ secret rời tiến trình. Đổi origin là bỏ sạch.
- *
- * `origin` chốt theo URL NGƯỜI DÙNG KHAI, không phải hop trước: redirect
- * A→B→A không được khôi phục header — B đã biết đường dẫn, A có thể là B dựng.
- *
- * ⚠️ Bỏ `injected` là CHƯA ĐỦ, và đây là chỗ bản trước vá hụt: SDK đã gộp sẵn
- * header của ta vào `init.headers` ở `_commonHeaders()`
- * (`@modelcontextprotocol/sdk` `client/streamableHttp.js`, `client/sse.js`), nên
- * spread `init.headers` tiêm lại nguyên vẹn đúng những khoá vừa xoá. Phải lọc
- * cả phần KẾ THỪA theo tên khoá — xem `injectedKeys` / `stripInherited`.
- */
+// xem docs/architecture/code/mcp.md §5
 function guardedFetch(headers: Record<string, string>, origin: string): FetchLike {
-  // So theo tên khoá đã hạ chữ thường: `Headers` chuẩn hoá về chữ thường, còn
-  // `headers` là do người dùng gõ (`X-API-Key`) nên hai bên không khớp nếu so thô.
   const ownKeys = new Set(Object.keys(headers).map((k) => k.toLowerCase()))
-  // Định danh phiên do origin GỐC cấp — gửi sang origin lạ là trao cho nó một
-  // phiên hợp lệ của server khác. Không phải secret người dùng khai nhưng cùng
-  // lớp rủi ro, nên cùng diện gỡ — chỉ khi đổi origin, vì cùng origin thì SDK
-  // bắt buộc phải echo lại nó.
   const SESSION_KEY = 'mcp-session-id'
 
   return async (url, init) => {
     let current = new URL(String(url))
     let injected: Record<string, string> = { ...headers }
-    // Bật khi đã rời origin gốc: từ đó trở đi `init.headers` 🚫 không được mang
-    // khoá nào thuộc `injectedKeys` nữa.
     let stripInherited = false
     let body = init?.body
     let method = init?.method ?? 'GET'
@@ -211,14 +176,8 @@ function guardedFetch(headers: Record<string, string>, origin: string): FetchLik
       }
       RemoteMcpServer.assertEndpoint(current)
 
-      // Dựng bằng `Headers` chứ 🚫 không phải object spread: `init.headers` đã
-      // chuẩn hoá về chữ thường (`x-api-key`) còn `injected` giữ nguyên dạng
-      // người dùng gõ (`X-API-Key`), nên spread hai bên để lại HAI khoá và
-      // `fetch` gửi đi `"tok, tok"` — server nào so khớp chặt sẽ từ chối.
       const outHeaders = new Headers()
       for (const [key, value] of new Headers(init?.headers).entries()) {
-        // Khoá của ta: luôn bỏ ở đây rồi đặt lại từ `injected` bên dưới. Khi đã
-        // đổi origin thì `injected` rỗng ⇒ khoá biến mất hẳn, đúng ý đồ.
         if (ownKeys.has(key)) continue
         if (stripInherited && key === SESSION_KEY) continue
         outHeaders.set(key, value)
@@ -235,7 +194,6 @@ function guardedFetch(headers: Record<string, string>, origin: string): FetchLik
       if (!REDIRECT_STATUSES.has(res.status)) return res
 
       const location = res.headers.get('location')
-      // 3xx không `Location` không phải redirect — trả nguyên cho SDK tự xử.
       if (!location) return res
 
       let next: URL
@@ -245,15 +203,11 @@ function guardedFetch(headers: Record<string, string>, origin: string): FetchLik
         return res
       }
 
-      // 307/308 giữ nguyên method + body. `init.body` của SDK là chuỗi JSON nên
-      // gửi lại an toàn; thứ gì khác có thể là stream đã tiêu thụ ⇒ 🚫 không đoán,
-      // trả thẳng 3xx cho SDK.
       const keepsBody = res.status === 307 || res.status === 308
       if (keepsBody && body !== undefined && typeof body !== 'string' && !(body instanceof Uint8Array)) {
         return res
       }
 
-      // Không huỷ body của 3xx là rò socket — response đã mở nhưng không ai đọc.
       await res.body?.cancel().catch(() => {})
 
       if (next.origin !== origin) {

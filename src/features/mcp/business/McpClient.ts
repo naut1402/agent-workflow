@@ -3,23 +3,15 @@ import { MCP_MAX_TOOL_DESCRIPTION_LENGTH, MCP_MAX_TOOL_NAMES } from '../schemas/
 import type { CredentialResolver } from './CredentialResolver.js'
 import type { McpServer } from './McpServer.js'
 import { SecretMasker } from './SecretMasker.js'
-// Không thành vòng: `SelfMcpServer` → `StdioMcpServer` → `McpServer` 🚫 import
-// file này, nên hằng đã khởi tạo xong trước khi dòng dưới chạy.
 import { SelfMcpServer } from './SelfMcpServer.js'
 
-/** Dashboard tự xưng cùng một tên ở cả hai vai — client và server stdio. */
 const CLIENT_INFO = { name: SelfMcpServer.SERVER_ID, version: '1.0.0' }
 const MAX_ERROR_LENGTH = 500
 
 export interface McpProbeTool {
   name: string
   description: string
-  /**
-   * JSON Schema của tham số, CHỈ `McpClient.open` điền. `McpClient.probe` để
-   * trống có chủ ý: kết quả probe chảy thẳng ra `GET /api/mcp-servers/test` và
-   * được persist vào `lastCheck`, mà schema tool là payload lớn, không ai đọc ở
-   * đó. Vòng tool-use thì bắt buộc có nó để khai tool với SDK.
-   */
+  /** JSON Schema của tham số — chỉ `McpClient.open` điền. */
   inputSchema?: unknown
 }
 
@@ -39,35 +31,16 @@ export interface McpProbeOptions {
   cwd?: string
   /** Giải secret của credential profile — caller (controller/runner) tiêm vào. */
   credentials?: CredentialResolver | null
-  /**
-   * Nhận cảnh báo lúc DỰNG transport, ngay khi phát sinh.
-   *
-   * 📌 Phải là callback chứ 🚫 không thể chỉ nằm trong giá trị trả về: cảnh báo
-   * quan trọng nhất ("credential … không giải được secret — bỏ header xác thực")
-   * sinh ra TRƯỚC `connect()`, và chính nó là nguyên nhân làm `connect()` ném
-   * 401/timeout. Đường trả về 🚫 không bao giờ chạy ở đúng ca cần giải thích nhất.
-   */
+  /** Nhận cảnh báo lúc dựng transport, ngay khi phát sinh — trước `connect()`. */
   onWarning?: (message: string) => void
 }
 
-/**
- * `timeoutMs` là NGÂN SÁCH TỔNG cho cả lượt kiểm tra, không phải hạn mức từng bước:
- * `connect` và `tools/list` chia chung một deadline. Cấp trọn `timeoutMs` cho mỗi
- * bước thì xấu nhất người dùng chờ 2×, mà mặc định nay là 120s (khớp
- * `startupTimeoutSec` của CLI) trên một nút 🚫 không huỷ được ⇒ 4 phút đứng hình.
- *
- * Hết ngân sách thì trả 0: `withTimeout` bỏ cuộc ngay thay vì cấp thêm giờ.
- */
+// xem docs/architecture/code/mcp.md §1
 function remainingMs(deadline: number): number {
   return Math.max(0, deadline - Date.now())
 }
 
-/**
- * Phiên MCP sống theo JOB, khác `McpClient.probe` (mở–đo–đóng trong một lần gọi).
- * Vòng tool-use của `ai-api` cần giữ client mở suốt cuộc hội thoại để gọi tool
- * nhiều lần, nên vòng đời do caller quản — và `close()` PHẢI ở trong `finally`:
- * transport stdio là một tiến trình con, quên đóng là rò tiến trình theo từng job.
- */
+/** Phiên MCP sống theo job — caller gọi `close()` trong `finally`. */
 export class McpSession {
   constructor(
     private readonly client: Client,
@@ -85,7 +58,7 @@ export class McpSession {
   }
 }
 
-/** Kết nối MCP vai client — dùng `McpServer.createTransport`, 🚫 không tự rẽ nhánh transport. */
+/** Kết nối MCP vai client — dùng `McpServer.createTransport`, không tự rẽ nhánh transport. */
 export class McpClient {
   /** `message` do caller đặt — mỗi đường giữ thông điệp quá hạn riêng của nó. */
   static withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
@@ -98,13 +71,7 @@ export class McpClient {
     }) as Promise<T>
   }
 
-  /**
-   * Kết nối thật tới MCP server để kiểm tra cấu hình. Không bao giờ ném: lỗi trả
-   * về trong `error` đã mask secret. `client.close()` trong `finally` là thứ giết
-   * tiến trình con của transport stdio.
-   *
-   * `timeoutMs` hiệu lực là ngân sách cho CẢ lượt — xem `remainingMs`.
-   */
+  /** Kết nối thật để kiểm tra cấu hình; không ném — lỗi trả trong `error` đã mask secret. */
   static async probe(server: McpServer, opts: McpProbeOptions = {}): Promise<McpProbeResult> {
     const started = Date.now()
     const deadline = started + server.timeoutMs(opts.timeoutMs)
@@ -154,18 +121,11 @@ export class McpClient {
     }
   }
 
-  /**
-   * Mở phiên giữ kết nối cho vòng tool-use. Dùng lại `createTransport` nguyên vẹn
-   * ⇒ guard endpoint, danh sách mask và cách dựng env của phiên này giống hệt
-   * đường probe, không có bản thứ hai để lệch.
-   */
+  /** Mở phiên giữ kết nối cho vòng tool-use; ném khi `connect` hoặc `tools/list` lỗi. */
   static async open(server: McpServer, opts: McpProbeOptions = {}): Promise<McpSession> {
-    // 📌 `opts.listTools` KHÔNG áp dụng ở đây: phiên này sinh ra để nối tool vào
-    // vòng tool-use, mà không có `tools/list` thì 🚫 không có gì để nối. Caller
-    // muốn chỉ thử kết nối thì dùng `probe`.
+    // xem docs/architecture/code/mcp.md §1
     const timeoutMs = server.timeoutMs(opts.timeoutMs)
     const plan = server.createTransport(opts)
-    // Đẩy ra NGAY, trước `connect()` — xem `McpProbeOptions.onWarning`.
     for (const message of plan.warnings) opts.onWarning?.(message)
     const client = new Client(CLIENT_INFO, { capabilities: {} })
 
@@ -188,8 +148,6 @@ export class McpClient {
 
       return new McpSession(client, tools, new SecretMasker(plan.secrets))
     } catch (err) {
-      // Mở hụt thì đóng ngay tại đây: caller nhận exception và không có handle nào
-      // để gọi `close()`, nên tiến trình con của transport stdio sẽ ở lại mãi.
       await client.close().catch(() => {})
       throw err
     }

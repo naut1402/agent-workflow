@@ -70,32 +70,7 @@ function normaliseBase(raw: any, id: string): McpServerBaseFields {
   }
 }
 
-/**
- * v1: `timeoutMs` chỉ tác động nút Kiểm tra kết nối. v2 ghi nó xuống
- * `startupTimeoutSec` của file config, nên nó tác động cả lúc job chạy server.
- *
- * Vì thế migrate bỏ trường ở MỌI bản ghi v1, không riêng mặc định cũ `15000`: người
- * đặt `30000` ở v1 đang chọn «probe chờ 30s», họ chưa từng chọn «job cho server 30s
- * để khởi động». Giữ lại là im lặng rút thời gian khởi động của job từ 120s xuống —
- * đúng lớp hồi quy hàm này sinh ra để chặn. Bỏ trường là trả về mặc định, không
- * phải mất dữ liệu.
- *
- * ⚠️ Điều kiện `< MCP_DEFAULT_TIMEOUT_MS` chứ 🚫 không xoá vô điều kiện: trần v1 là
- * 60s ở tầng endpoint (`schemas/mcpServer.ts` `.max()`), nhưng đường ĐỌC file không
- * kẹp gì (`toPositiveInt` chỉ làm tròn), nên file sửa tay vẫn có thể mang giá trị
- * vượt 120s. Giá trị như vậy chỉ làm job chờ LÂU hơn mặc định — không thuộc lớp lỗi
- * đang chặn, và xoá nó là vứt một con số người dùng cố ý ghi vào file.
- *
- * Ở v2 mọi giá trị đều là lựa chọn có chủ ý ⇒ chỉ bản ghi còn mang cờ v1 mới bị
- * đụng. Version thiếu/sai kiểu/`0` coi như v1: bỏ qua migrate ở đó là để lọt đúng
- * ca đang muốn chặn.
- *
- * Chạy ở đường đọc nên idempotent — file chỉ thật sự lên `version: 2` ở lần
- * ghi kế tiếp; dashboard chỉ đọc thì migrate lặp lại mỗi lần, vô hại.
- *
- * Sửa tại chỗ `config` của entity: entity ở đây vừa dựng từ đĩa trong cùng lượt
- * đọc, chưa ai khác giữ tham chiếu.
- */
+// xem docs/architecture/code/mcp.md §2
 function migrateToV2(servers: McpServer[], rawVersion: unknown): McpServer[] {
   const fileVersion = Number(rawVersion) || 1
   if (fileVersion >= MCP_SERVERS_VERSION) return servers
@@ -107,11 +82,7 @@ function migrateToV2(servers: McpServer[], rawVersion: unknown): McpServer[] {
   return servers
 }
 
-/**
- * Store `mcp-servers.json` của registry và chỗ lắp ráp DUY NHẤT biết hai hiện
- * thực `StdioMcpServer` / `RemoteMcpServer`: mọi bản ghi — đọc từ đĩa, form gửi
- * lên, entry dashboard tự gắn — thành entity qua `normalise`.
- */
+/** Store `mcp-servers.json` và chỗ lắp ráp duy nhất biết hai hiện thực `StdioMcpServer` / `RemoteMcpServer`. */
 export class McpRegistry {
   /** `file` — đường dẫn store, tính lại mỗi lần dùng (mặc định `registryHome()/mcp-servers.json`). */
   constructor(private readonly file: () => string = defaultServersFile) {}
@@ -144,11 +115,7 @@ export class McpRegistry {
     const raw = input as any
     const id = McpServer.sanitiseId(raw?.id)
     if (!id) return { ok: false, status: 400, error: 'invalid mcp server id' }
-    // `sanitiseId` là ánh xạ NHIỀU-MỘT (`my.server` và `my server` cùng
-    // ra `myserver`). Ở đường đọc thì vô hại, nhưng upsert ghi đè theo id đã
-    // chuẩn hoá: tạo mới `my.server` khi `myserver` đã tồn tại sẽ xoá sổ cấu hình
-    // kia mà không báo gì. Chỉ nhận id đã ở dạng canonical — người dùng thấy lỗi
-    // và tự sửa, thay vì mất dữ liệu trong im lặng.
+    // xem docs/mcp/client.md §8
     if (String(raw?.id ?? '').trim() !== id) {
       return { ok: false, status: 400, error: `invalid mcp server id — dùng dạng chuẩn "${id}"` }
     }
@@ -158,9 +125,7 @@ export class McpRegistry {
     const store = this.load()
     const idx = store.servers.findIndex((s) => s.id === id)
     const previous = idx >= 0 ? store.servers[idx] : null
-    // `lastCheck` là kết quả đo, không phải thứ form gửi lên — giữ lại bản cũ.
-    // `***` ở env/headers cũng vậy: đó là bản mask client nhận từ API, không phải
-    // giá trị người dùng vừa nhập.
+    // xem docs/mcp/client.md §5
     const warnings: string[] = []
     const merged = entry
       .restoreMasked(previous, warnings)
@@ -171,11 +136,7 @@ export class McpRegistry {
     return { ok: true, server: merged, warnings: [...new Set(warnings)] }
   }
 
-  /**
-   * DELETE idempotent: id lạ vẫn `ok` — người dùng đã đạt được trạng thái họ muốn.
-   * Trả luôn `id` đã sanitise để caller dùng chung một giá trị cho audit, event và
-   * response, thay vì lặp lại chuỗi thô từ query string.
-   */
+  /** Xoá idempotent — id lạ vẫn `ok`; trả `id` đã sanitise. */
   delete(id: unknown): McpMutationResult<{ deleted: boolean; id: string }> {
     const clean = McpServer.sanitiseId(id)
     if (!clean) return { ok: false, status: 400, error: 'invalid id' }
@@ -198,17 +159,7 @@ export class McpRegistry {
     this.save(store)
   }
 
-  /**
-   * Bộ server cho một job: lọc server đang bật theo `ids`, cảnh báo id rụng, rồi
-   * nối `extras` (entry dashboard tự gắn) vào SAU. Chưa chạm đĩa một byte nào.
-   *
-   * Bất biến `null`: không `ids` VÀ không `extras` ⇒ `null`, nên mọi cách giao cùng
-   * hưởng "không bật MCP ⇒ argv không đổi, không file nào chạm đĩa".
-   *
-   * `onWarning` nhận cảnh báo ngay khi phát sinh, kể cả khi hàm trả `null`. Id bị
-   * tắt/xoá sau khi Connection đã chọn thì không còn bộ nào để mang `warnings` ra,
-   * mà job chạy thiếu tool trong im lặng là thứ không ai truy ngược được.
-   */
+  /** Bộ server cho một job: server đang bật theo `ids` rồi tới `extras`; `null` khi không còn server nào, kể cả lúc đó `onWarning` vẫn nhận cảnh báo. */
   select(input: {
     ids: unknown
     extras?: McpServer[]
@@ -216,8 +167,7 @@ export class McpRegistry {
   }): McpServerSet | null {
     const ids = Array.isArray(input.ids) ? input.ids.filter((x): x is string => typeof x === 'string') : []
     const extras = input.extras ?? []
-    // Bất biến: KHÔNG id nào VÀ không entry tự gắn nào ⇒ vẫn `null`, không file
-    // nào chạm đĩa, argv CLI không đổi. Đây là đường mặc định của mọi job thường.
+    // xem docs/mcp/client.md §7
     if (!ids.length && !extras.length) return null
 
     const warnings: string[] = []
@@ -233,21 +183,15 @@ export class McpRegistry {
       warn(`mcp ${id}: không tìm thấy hoặc đang tắt — job chạy không có server này`)
     }
 
-    // Ghi đè im lặng là thứ không ai truy ngược được từ log job. So trên khoá ĐÃ
-    // sanitise vì file dedup theo khoá đó: id `dev team dashboard` sanitise về
-    // đúng `dev-team-dashboard` và bị ghi đè thật, so id thô sẽ bỏ sót.
+    // xem docs/architecture/code/mcp.md §2
     const extraKeys = new Set(extras.map((s) => s.key).filter(Boolean))
     for (const server of servers) {
       if (!extraKeys.has(server.key)) continue
       warn(`mcp ${server.id}: entry của người dùng bị entry tự gắn của dashboard ghi đè cho job điều phối`)
     }
 
-    // Rụng hết thì vẫn `null` để giữ bất biến "không file nào chạm đĩa"; cảnh báo
-    // đã đi ra qua `onWarning` ở trên nên không im lặng tuyệt đối.
     if (!servers.length && !extras.length) return null
 
-    // `extras` sau `servers`: `toCliConfig` ghi theo thứ tự nên trùng khoá thì
-    // entry tự gắn thắng.
     return new McpServerSet([...servers, ...extras], warnings)
   }
 
@@ -270,17 +214,7 @@ export class McpRegistry {
     }
   }
 
-  /**
-   * Ghi 0600: `env`/`headers` ở đây có thể là secret literal người dùng gõ tay
-   * (dialog chỉ *cảnh báo* khi giá trị trông như secret, không chặn). Đây là chỗ
-   * duy nhất trong repo persist secret dạng thô — `credentials.json` chỉ giữ ref,
-   * giá trị thật nằm trong `secret-vault.json` đã mã hoá. Bản sao theo job của
-   * đúng những secret này đã là 0600 (`ConfigFlagMcpDelivery` ở `runner`), nên để bản gốc theo
-   * umask (thường 0644, user khác trên máy đọc được) là lệch ngay trong một tính năng.
-   *
-   * 🚫 Không chmod `registryHome()`: thư mục đó dùng chung cho mọi feature, siết
-   * quyền ở đó là quyết định ngoài phạm vi. Mode của chính file đã đủ chặn đọc.
-   */
+  // xem docs/mcp/client.md §2
   private save(store: McpServersStore): void {
     const file = this.file()
     mkdirSync(dirname(file), { recursive: true })
