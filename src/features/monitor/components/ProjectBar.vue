@@ -2,10 +2,11 @@
 // Sidebar project selector + CRUD. Two entry points after title:
 // ＋ local path, Git clone (separate forms under the header).
 import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from 'vue'
 import { onClickOutside } from '@vueuse/core'
 import { addProject, removeProject } from '../scripts/monitorApi'
 import FolderPickerDialog from '../../../frontend/ui/FolderPickerDialog.vue'
+import { PROJECT_SELECT_MENU_CLASS } from '../../../frontend/configs/outsideClickIgnore'
 import { useApiAction } from '../../../frontend/composables/useApiAction'
 import CLoadingOverlay from '../../../frontend/ui/CLoadingOverlay.vue'
 
@@ -50,6 +51,16 @@ const selectedProject = computed(
 
 const selectedIndex = computed(() =>
   props.projects.findIndex((p) => p.id === props.selectedId),
+)
+
+const highlightIndex = ref(-1)
+const restoreFocusOnClose = ref(false)
+const menuId = useId()
+function optionId(index: number) {
+  return `${menuId}-opt-${index}`
+}
+const activeDescendantId = computed(() =>
+  highlightIndex.value >= 0 ? optionId(highlightIndex.value) : undefined,
 )
 
 onClickOutside(selectRootRef, () => {
@@ -101,10 +112,26 @@ watch(selectOpen, (open) => {
   if (open) {
     updateMenuPosition()
     addPositionListeners()
+    highlightIndex.value = selectedIndex.value >= 0 ? selectedIndex.value : 0
+    nextTick(() => menuRef.value?.focus())
   } else {
     removePositionListeners()
+    highlightIndex.value = -1
+    if (restoreFocusOnClose.value) {
+      restoreFocusOnClose.value = false
+      triggerRef.value?.focus()
+    }
   }
 })
+
+watch(
+  () => props.projects.length,
+  (n) => {
+    if (selectOpen.value && highlightIndex.value >= n) {
+      highlightIndex.value = n ? Math.min(highlightIndex.value, n - 1) : -1
+    }
+  },
+)
 
 function clearFields() {
   errorMsg.value = ''
@@ -162,8 +189,62 @@ function toggleSelect() {
 }
 
 function pickProject(id: string) {
+  restoreFocusOnClose.value = true
   selectOpen.value = false
   if (id !== props.selectedId) emit('select', id)
+}
+
+function moveHighlight(delta: number) {
+  const n = props.projects.length
+  if (!n) return
+  const base = highlightIndex.value < 0 ? (delta > 0 ? -1 : 0) : highlightIndex.value
+  highlightIndex.value = (base + delta + n) % n
+  nextTick(() => {
+    const el = menuRef.value?.children[highlightIndex.value] as HTMLElement | undefined
+    el?.scrollIntoView?.({ block: 'nearest' })
+  })
+}
+
+function closeSelect(restoreFocus = true) {
+  restoreFocusOnClose.value = restoreFocus
+  selectOpen.value = false
+}
+
+function onMenuKeydown(e: KeyboardEvent) {
+  if (!selectOpen.value) return
+  switch (e.key) {
+    case 'ArrowDown':
+      e.preventDefault()
+      moveHighlight(1)
+      break
+    case 'ArrowUp':
+      e.preventDefault()
+      moveHighlight(-1)
+      break
+    case 'Home':
+      e.preventDefault()
+      if (props.projects.length) highlightIndex.value = 0
+      break
+    case 'End':
+      e.preventDefault()
+      if (props.projects.length) highlightIndex.value = props.projects.length - 1
+      break
+    case 'Enter':
+    case ' ': {
+      const p = props.projects[highlightIndex.value]
+      if (!p) return
+      e.preventDefault()
+      pickProject(p.id)
+      break
+    }
+    case 'Escape':
+      e.preventDefault()
+      closeSelect()
+      break
+    case 'Tab':
+      closeSelect(false)
+      break
+  }
 }
 
 function onSelectWheel(e: WheelEvent) {
@@ -399,18 +480,23 @@ async function onRemove(project) {
           <ul
             v-if="selectOpen"
             ref="menuRef"
-            class="project-select-menu"
+            :class="PROJECT_SELECT_MENU_CLASS"
             :style="menuStyle"
             role="listbox"
+            tabindex="-1"
+            :aria-activedescendant="activeDescendantId"
             :aria-label="t('monitor.projectBar.selectLabel')"
+            @keydown="onMenuKeydown"
           >
             <li
-              v-for="p in projects"
+              v-for="(p, i) in projects"
+              :id="optionId(i)"
               :key="p.id"
               role="option"
               class="project-item"
-              :class="{ active: p.id === selectedId }"
+              :class="{ active: p.id === selectedId, highlighted: i === highlightIndex }"
               :aria-selected="p.id === selectedId"
+              @mousemove="highlightIndex = i"
             >
               <button type="button" class="project-pick" @click="pickProject(p.id)">
                 <span class="project-name">{{ p.name }}</span>
@@ -624,6 +710,17 @@ async function onRemove(project) {
 }
 .project-item.active {
   background: rgba(var(--accent-rgb), 0.16);
+}
+.project-item:not(.active):hover,
+.project-item.highlighted {
+  background: rgba(var(--accent-rgb), 0.12);
+}
+.project-item.active.highlighted {
+  background: rgba(var(--accent-rgb), 0.24);
+}
+.project-select-menu:focus,
+.project-select-menu:focus-visible {
+  outline: none;
 }
 .project-pick {
   flex: 1;

@@ -1,10 +1,19 @@
 import { mountWithI18n as mount } from '../../../helpers/i18n'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { flushPromises } from '@vue/test-utils'
+import { DOMWrapper, flushPromises } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import MonitorLayout from '@/features/monitor/components/MonitorLayout.vue'
 import { STORAGE_KEY, useAppSettings } from '@/frontend/composables/useAppSettings'
 import { localeMessages } from '../../../helpers/localeYaml'
+import { removeProject } from '../../../../../src/features/monitor/scripts/monitorApi'
+
+// Partial mock: chỉ `removeProject` bị thay. Các ca xoá task / dọn worktree ở
+// dưới đi qua `deleteTask` / `fetchTaskWorktree` thật trên nền `fetch` stub —
+// mock nguyên module sẽ làm chúng mất đối tượng để assert.
+vi.mock('@/features/monitor/scripts/monitorApi', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/features/monitor/scripts/monitorApi')>()
+  return { ...actual, removeProject: vi.fn(async () => ({ removed: true })) }
+})
 
 const viMonitor = localeMessages('vi', 'monitor')
 const enMonitor = localeMessages('en', 'monitor')
@@ -1006,5 +1015,121 @@ describe('MonitorLayout — nút lên đầu trang (TC-G02, TC-G12, TC-G13)', ()
     await flushPromises()
 
     expect(w.find('.c-scroll-top__btn').exists()).toBe(false)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// T86917a08 — click chọn project trong menu đã Teleport ra body không được
+// kích hoạt auto-collapse của sub-sidebar. Phải ở tầng MonitorLayout: mount cô
+// lập ProjectBar thì `onClickOutside` của sub-sidebar không tồn tại trong bài
+// test, nên TC05 của ProjectBar.test.ts xanh mà bug vẫn lọt.
+// ---------------------------------------------------------------------------
+
+const projectsTriple = [
+  { id: 'p-current', name: 'Current project', default: true },
+  { id: 'p-other', name: 'Other project', default: false },
+  { id: 'p-third', name: 'Third project', default: false },
+]
+
+/** ProjectBar chỉ render hàng select khi `projects` không rỗng. */
+function mountWithProjects(extra: Record<string, any> = {}) {
+  return mount(MonitorLayout, {
+    attachTo: document.body,
+    props: {
+      tasks,
+      projects: projectsTriple,
+      defaultProjectId: 'p-current',
+      selectedProjectId: 'p-current',
+      ...extra,
+    },
+  })
+}
+
+/** `<ul>` của menu bị Teleport ra body — ngoài cây DOM của wrapper. */
+function projectMenu(): HTMLElement | null {
+  return document.body.querySelector('.project-select-menu')
+}
+
+function menuButtons(selector: string) {
+  const menu = projectMenu()
+  expect(menu).not.toBeNull()
+  return Array.from(menu!.querySelectorAll(selector)) as HTMLElement[]
+}
+
+async function openProjectMenu(w: ReturnType<typeof mount>) {
+  await w.find('.project-select-trigger').trigger('click')
+  // Cú click mở menu và cú click chọn item phải nằm ở hai macrotask khác nhau:
+  // `onClickOutside` chặn click thứ hai trong cùng macrotask bằng cờ
+  // `isProcessingClick` (setTimeout 0) ⇒ thiếu dòng này là test xanh giả.
+  await flushMacrotask()
+}
+
+describe('MonitorLayout — chọn project bằng click không làm sập sub-sidebar (T86917a08)', () => {
+  it('TC-R1 — setting BẬT: click item trong menu teleport đổi project, sub-sidebar giữ nguyên', async () => {
+    seedAppSettings({ collapseMonitorSubSidebarOnOutside: true })
+    const w = mountWithProjects()
+    await flushMacrotask()
+
+    await openProjectMenu(w)
+    const picks = menuButtons('.project-pick')
+    expect(picks).toHaveLength(projectsTriple.length)
+    await new DOMWrapper(picks[1]).trigger('click')
+    await w.vm.$nextTick()
+
+    expect(w.emitted('select-project')).toEqual([['p-other']])
+    expect(w.emitted('update:subSidebarCollapsed')).toBeUndefined()
+    expect(w.find('.project-bar').exists()).toBe(true)
+    w.unmount()
+  })
+
+  it('TC-R2 — setting BẬT: xoá project trong menu teleport refresh danh sách, sub-sidebar giữ nguyên', async () => {
+    seedAppSettings({ collapseMonitorSubSidebarOnOutside: true })
+    vi.mocked(removeProject).mockClear()
+    vi.mocked(removeProject).mockResolvedValue({ removed: true } as any)
+    vi.stubGlobal('confirm', vi.fn(() => true))
+
+    const w = mountWithProjects()
+    await flushMacrotask()
+
+    await openProjectMenu(w)
+    const removes = menuButtons('.project-remove')
+    await new DOMWrapper(removes[1]).trigger('click')
+    await flushPromises()
+
+    expect(removeProject).toHaveBeenCalledTimes(1)
+    expect(removeProject).toHaveBeenCalledWith('p-other')
+    expect(w.emitted('projects-changed')).toBeTruthy()
+    expect(w.emitted('update:subSidebarCollapsed')).toBeUndefined()
+    w.unmount()
+  })
+
+  it('TC-R3 (đối chứng) — click `div` trần ngoài sub-sidebar vẫn thu gọn như cũ', async () => {
+    seedAppSettings({ collapseMonitorSubSidebarOnOutside: true })
+    const outside = document.createElement('div')
+    document.body.appendChild(outside)
+
+    const w = mountWithProjects()
+    await flushMacrotask()
+
+    dispatchOutsideClick(outside)
+    await w.vm.$nextTick()
+
+    // Fix thu hẹp điều kiện auto-collapse, không tắt nó.
+    expect(w.emitted('update:subSidebarCollapsed')).toEqual([[true]])
+    w.unmount()
+  })
+
+  it('TC-R4 — setting TẮT: click item trong menu teleport vẫn đổi project, không phát collapse', async () => {
+    seedAppSettings()
+    const w = mountWithProjects()
+    await flushMacrotask()
+
+    await openProjectMenu(w)
+    await new DOMWrapper(menuButtons('.project-pick')[1]).trigger('click')
+    await w.vm.$nextTick()
+
+    expect(w.emitted('select-project')).toEqual([['p-other']])
+    expect(w.emitted('update:subSidebarCollapsed')).toBeUndefined()
+    w.unmount()
   })
 })

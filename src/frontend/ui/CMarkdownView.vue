@@ -3,12 +3,21 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { useI18nHelpers } from '../composables/useI18nHelpers'
 import { useAppSettings } from '../composables/useAppSettings'
 import {
+  readArtifactSectionDefault,
   resolveArtifactViewMode,
   resolveArtifactSectionAccordion,
   resolveArtifactSectionDefault,
 } from '../configs/appSettings'
 import { parseMarkdown, renderMermaid } from '../lib/markdownLib'
-import { buildMarkdownBlocks, fenceYaml } from '../lib/markdownBlocks'
+import {
+  buildMarkdownBlocks,
+  collectNodePaths,
+  fenceYaml,
+  renderNodes,
+} from '../lib/markdownBlocks'
+import { useMarkdownCollapse } from '../composables/useMarkdownCollapse'
+import CMarkdownNodes from './CMarkdownNodes.vue'
+import CScrollToTop from './CScrollToTop.vue'
 
 /**
  * Viewer markdown dùng chung (agent editor + knowledge) — thuần trình bày,
@@ -40,10 +49,8 @@ const { t } = useI18nHelpers()
 const { settings } = useAppSettings()
 
 // Dùng lại `artifactViewMode` + `artifactSection*` sẵn có thay vì thêm khoá AppSettings riêng.
-// Logic gập section ở đây là bản sao độc lập của ArtifactPanel.vue — sửa một bên thì sửa cả hai.
 const blockMode = ref(resolveArtifactViewMode(settings.value) === 'block')
 const accordionMode = computed(() => resolveArtifactSectionAccordion(settings.value))
-const openBlocks = ref<Set<number>>(new Set())
 const viewRoot = ref<HTMLElement | null>(null)
 
 const blocks = computed(() =>
@@ -53,55 +60,40 @@ const blocks = computed(() =>
       b.kind === 'frontmatter'
         ? t('common.markdownView.metadata')
         : b.heading || t('common.markdownView.untitledSection'),
-    html: parseMarkdown(b.kind === 'frontmatter' ? fenceYaml(b.source) : b.source),
+    // `intro` chứ không `source`: phần của các mục con do `CMarkdownNodes` render.
+    // Khối không có mục con ⇒ `intro === source` ⇒ HTML y hệt như trước.
+    html: parseMarkdown(b.kind === 'frontmatter' ? fenceYaml(b.source) : b.intro),
+    // HTML của cả cây dựng SẴN ở đây — xem cảnh báo trong `renderNodes`.
+    children: renderNodes(b.children, parseMarkdown),
   })),
 )
 
 const fullHtml = computed(() => parseMarkdown(props.content || ''))
-
-const allBlocksOpen = computed(
-  () => blocks.value.length > 0 && openBlocks.value.size === blocks.value.length,
-)
 
 async function scheduleMermaid() {
   await nextTick()
   await renderMermaid(viewRoot.value)
 }
 
-function onBlockToggle(i: number, ev: Event) {
-  const el = ev.target as HTMLDetailsElement
-  if (el.open) {
-    // Accordion: mở block i ⇒ tập mở chỉ còn {i}. Các block anh em bị Vue đóng sẽ
-    // bắn `toggle` vọng lại, rơi vào nhánh dưới và chỉ `delete` — idempotent, không lặp.
-    openBlocks.value = accordionMode.value ? new Set([i]) : new Set(openBlocks.value).add(i)
-    scheduleMermaid()
-  } else {
-    const next = new Set(openBlocks.value)
-    next.delete(i)
-    openBlocks.value = next
-  }
-}
-
-function toggleAllBlocks() {
-  if (allBlocksOpen.value) {
-    openBlocks.value = new Set()
-  } else {
-    openBlocks.value = new Set(blocks.value.map((_, i) => i))
-    scheduleMermaid()
-  }
-}
+const collapse = useMarkdownCollapse({
+  blockCount: () => blocks.value.length,
+  nodePaths: () => collectNodePaths(blocks.value),
+  accordion: () => accordionMode.value,
+  blockDefault: () => resolveArtifactSectionDefault(settings.value),
+  // Mục con đọc giá trị LƯU, không qua resolver: resolver trả 'collapsed' bất cứ
+  // khi nào accordion bật (mặc định bật), mà accordion thì không áp cho mục con.
+  // Dùng resolver ở đây là mở một block ra chỉ thấy dãy tiêu đề rỗng — đổi hành
+  // vi hiện tại mà không ai yêu cầu.
+  nodeDefault: () => readArtifactSectionDefault(settings.value),
+  onOpened: scheduleMermaid,
+})
+const { openBlocks, allBlocksOpen } = collapse
 
 // Đổi tài liệu → seed lại theo preference: index của tài liệu trước không còn cùng ý nghĩa.
-watch(
-  () => props.docKey || props.title,
-  () => {
-    openBlocks.value =
-      resolveArtifactSectionDefault(settings.value) === 'expanded'
-        ? new Set(blocks.value.map((_, i) => i))
-        : new Set()
-  },
-  { immediate: true },
-)
+watch(() => props.docKey || props.title, collapse.seed, { immediate: true })
+
+// Cùng tài liệu nhưng nội dung đổi: giữ lựa chọn của người dùng, chỉ bỏ phần đã chết.
+watch(() => props.content, collapse.prune)
 
 watch([() => props.content, blockMode], () => scheduleMermaid())
 </script>
@@ -115,7 +107,7 @@ watch([() => props.content, blockMode], () => scheduleMermaid())
         class="icon-btn"
         :title="allBlocksOpen ? t('common.markdownView.collapseAll') : t('common.markdownView.expandAll')"
         :aria-label="allBlocksOpen ? t('common.markdownView.collapseAll') : t('common.markdownView.expandAll')"
-        @click="toggleAllBlocks"
+        @click="collapse.toggleAll()"
       >
         <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
           <path
@@ -158,15 +150,28 @@ watch([() => props.content, blockMode], () => scheduleMermaid())
           class="block-item"
           :data-block-index="i"
           :open="openBlocks.has(i)"
-          @toggle="onBlockToggle(i, $event)"
+          @toggle="collapse.onBlockToggle(i, $event)"
         >
           <summary>{{ block.label }}</summary>
-          <!-- eslint-disable-next-line vue/no-v-html -- parseMarkdown đã sanitise -->
-          <div class="md block-content" v-html="block.html" />
+          <!-- `.md block-content` giữ nguyên trên phần tử ngoài như trước; phần
+               `v-html` lùi vào một div con để cây mục con có chỗ đứng cạnh nó. -->
+          <div class="md block-content">
+            <!-- eslint-disable-next-line vue/no-v-html -- parseMarkdown đã sanitise -->
+            <div v-html="block.html" />
+            <CMarkdownNodes
+              v-if="block.children.length"
+              :nodes="block.children"
+              :path="String(i)"
+              :is-open="collapse.isNodeOpen"
+              :on-toggle="collapse.onNodeToggle"
+            />
+          </div>
         </details>
       </div>
+      <!-- Toàn văn: không có `<details>` nào, nên cũng không có tầng mục con. -->
       <!-- eslint-disable-next-line vue/no-v-html -- parseMarkdown đã sanitise -->
       <div v-else class="md" v-html="fullHtml" />
+      <CScrollToTop :scroller="viewRoot" :content-key="content" />
     </div>
   </div>
 </template>
