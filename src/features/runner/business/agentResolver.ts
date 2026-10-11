@@ -12,8 +12,8 @@ import {
   parseAgentMarkdown,
   ensureSectionOrder,
   getSectionTitle,
-} from '../../agent-editor/business/agentMarkdown.js'
-import { sanitiseAgentName } from '../../agent-editor/business/agents.js'
+  sanitiseAgentName,
+} from '../../agent-editor/business/index.js'
 import type { ResolvedAgent } from './types.js'
 
 function homeDir(): string {
@@ -195,7 +195,7 @@ function buildSystemPrompt(draft: any): string {
  * deliberate "no agent" job (e.g. a quick action whose prompt_template is
  * already a complete, free-form instruction) — it runs with no system prompt
  * merged in, just the job's own userPrompt (see buildPrompt in
- * providers/claude-code-cli.ts). */
+ * providers/AbstractAgentCliProvider.ts). */
 export async function resolveAgent(
   agentRef: string,
   ctx: { projectRoot: string; devTeamRoot: string },

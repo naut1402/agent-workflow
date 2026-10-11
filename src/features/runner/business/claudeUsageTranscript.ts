@@ -6,6 +6,10 @@ import {
   resolvePathUnder,
   safeReadDir,
 } from '../../../backend/lib/fileHelper.js'
+import { isLogTypeEnabled } from '../../../backend/log/loggingPrefsIo.js'
+import { getUsageCursor, setUsageCursor } from './sessionLedger.js'
+import { recordJobUsage } from './usageCapture.js'
+import type { JobRecord } from './types.js'
 
 /**
  * Claude Code CLI transcript reader — parse `~/.claude/projects/…` JSONL for
@@ -181,3 +185,91 @@ export function totalTokensOf(u: ClaudeTokenUsage): number {
 }
 
 export { hasAnyTokens }
+
+type UsagePart = {
+  source: 'main' | 'subagent'
+  usage: ClaudeTokenUsage
+  model: string | null
+}
+
+function metaString(job: JobRecord, key: string): string | null {
+  const v = job.metadata?.[key]
+  return typeof v === 'string' && v ? v : null
+}
+
+/**
+ * Capture Claude transcript token delta for a finished job — hook
+ * `captureUsage` của `ClaudeCliProvider`, ghi `source: 'aggregate'`.
+ * Prefs `logging.types.usage === false` skips JobRecord + JSONL (least surprise).
+ * Never throws to callers — jobQueue invokes fire-and-forget.
+ */
+export async function captureClaudeTranscriptUsage(
+  job: JobRecord,
+  sessionId: string,
+  providerId: string,
+): Promise<void> {
+  if (!isLogTypeEnabled('usage')) return
+  if (!sessionId) return
+
+  const projectId = metaString(job, 'projectId')
+  const taskId = metaString(job, 'taskId')
+  const cursor =
+    projectId && taskId
+      ? getUsageCursor(projectId, taskId, sessionId) ?? { mainLines: 0, subagentFiles: [] }
+      : { mainLines: 0, subagentFiles: [] }
+
+  const mainPath = sessionTranscriptPath(job.workspace, sessionId)
+  const main = mainPath ? await readNewUsage(mainPath, cursor.mainLines) : null
+
+  const parts: UsagePart[] = []
+  if (main && hasAnyTokens(main.usage)) {
+    parts.push({ source: 'main', usage: main.usage, model: main.model })
+  }
+
+  const newSubFiles: string[] = []
+  const subDir = subagentsDir(job.workspace, sessionId)
+  if (subDir) {
+    const names = await listNewSubagentFiles(subDir, cursor.subagentFiles)
+    for (const name of names) {
+      newSubFiles.push(name)
+      const abs = resolveSubagentFile(subDir, name)
+      if (!abs) continue
+      const sub = await readSubagentUsage(abs)
+      if (sub && hasAnyTokens(sub.usage)) {
+        parts.push({ source: 'subagent', usage: sub.usage, model: sub.model })
+      }
+    }
+  }
+
+  const nextCursor = {
+    mainLines: main?.totalLines ?? cursor.mainLines,
+    subagentFiles: [...cursor.subagentFiles, ...newSubFiles],
+  }
+
+  if (parts.length === 0) {
+    if (projectId && taskId) setUsageCursor(projectId, taskId, sessionId, nextCursor)
+    return
+  }
+
+  const agg = sumTokenUsage(parts.map((p) => p.usage))
+  let model: string | null = null
+  for (const p of parts) {
+    if (p.model) model = p.model
+  }
+
+  await recordJobUsage(job, {
+    providerId,
+    tokens: {
+      inputTokens: agg.inputTokens,
+      outputTokens: agg.outputTokens,
+      cacheReadTokens: agg.cacheReadTokens,
+      cacheWriteTokens: agg.cacheWriteTokens,
+      totalTokens: totalTokensOf(agg),
+    },
+    model,
+    sessionId,
+    source: 'aggregate',
+  })
+
+  if (projectId && taskId) setUsageCursor(projectId, taskId, sessionId, nextCursor)
+}

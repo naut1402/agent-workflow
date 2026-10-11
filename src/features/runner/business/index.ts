@@ -78,15 +78,37 @@ export {
   deleteCustomCommand,
 } from './commands.js'
 export { resolveAgent, resolveAgentFilePath, normalizeAgentRef, describeAgentSearchPaths } from './agentResolver.js'
-export { getProvider, listProviderIds, listProviderCatalog, providerFamilyOf, registerProvider } from './registry.js'
-export { listAvailableModels } from './modelCatalog.js'
-export type { ListModelsInput, ListModelsResult } from './modelCatalog.js'
 export {
+  getProvider,
+  listProviderIds,
+  listProviderCatalog,
+  providerDescriptorOf,
+  providerFamilyOf,
+  registerProvider,
+  transcriptFormatOf,
   AGENT_CLI_PROVIDER_IDS,
   isAgentCliProviderId,
-  isAgentCliProvider,
-} from './providers/agentCli.js'
-export type { AgentCliProvider, AgentCliCapabilities, TokenUsage, ProviderFamily as AgentProviderFamily } from './providers/agentCli.js'
+} from './providers/providerRegistry.js'
+/** Path transcript phiên provider API — runner là bên ghi, monitor đọc qua đây (#441). */
+export { agentTranscriptFile } from './providers/agentTranscriptStore.js'
+/** Giải API key của credential cho provider API — dùng chung execute / complete (#448). */
+export { resolveProviderApiKey } from './oauthCredentials.js'
+export { listAvailableModels } from './modelCatalog.js'
+export type { ListModelsInput, ListModelsResult } from './modelCatalog.js'
+export { isAgentCliProvider } from './providers/AbstractAgentCliProvider.js'
+export type { AgentCliProvider, AgentCliCapabilities } from './providers/AbstractAgentCliProvider.js'
+export type {
+  CompletionRequest,
+  CompletionResult,
+  ModelListing,
+  ProviderDescriptor,
+  RegisteredProvider,
+  TokenUsage,
+  TranscriptFormat,
+  UsageCaptureInput,
+  UsageSource,
+  ProviderFamily as AgentProviderFamily,
+} from './providers/RunnerProvider.js'
 export {
   submitJob,
   submitAndWait,
@@ -122,13 +144,8 @@ export {
   closeTaskSession,
 } from './sessionLedger.js'
 export type { SessionEntry, TaskSessionLedger, SessionEntryStatus } from './sessionLedger.js'
-export {
-  parseCursorJsonOutput,
-  buildCursorJsonArgs,
-  buildCursorJsonInvocation,
-  prepareSessionInvocation,
-  mintSessionId,
-} from './sessionLedger.js'
+export { prepareSessionInvocation, mintSessionId } from './sessionLedger.js'
+export { parseCursorJsonOutput, buildCursorJsonArgs, buildCursorJsonInvocation } from './providers/CursorCliProvider.js'
 
 export type {
   CredentialProfile,
@@ -139,13 +156,10 @@ export type {
   ScannedCommand,
   RunnerConfig,
   ResolvedAgent,
-  ExecuteRequest,
-  ExecuteResult,
   JobStatus,
   JobRecord,
-  RunnerProvider,
   MutationResult,
-  ProviderFamily,
   ProviderConfig,
   ProviderConfigsStore,
 } from './types.js'
+export type { ExecuteRequest, ExecuteResult, ProviderFamily, RunnerProvider } from './providers/RunnerProvider.js'

@@ -3,6 +3,8 @@ import { useI18nHelpers } from '../../../frontend/composables/useI18nHelpers'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { slugify } from '../../../shared/lib/stringUtils'
 import { fetchRunners } from '../../runner/scripts/runnerApi'
+import { acceptsAgentOf } from '../../runner/lib/providerCatalog'
+import type { ProviderEntry } from '../../runner/types'
 import { fetchCatalog } from '../../pipeline-editor/scripts/pipelineEditorApi'
 import { useQuickActionCatalog, type QuickActionDraft } from '../composables/useQuickActionCatalog'
 import CDialog from '../../../frontend/ui/CDialog.vue'
@@ -33,6 +35,7 @@ const ATTACH_OPTIONS = [
 const catalog = useQuickActionCatalog({ getProjectId: () => props.projectId ?? null })
 const runners = ref<Array<{ id: string; name: string; connectionId?: string }>>([])
 const connections = ref<Array<{ id: string; providerId?: string }>>([])
+const providers = ref<ProviderEntry[]>([])
 const defaultRunnerId = ref<string | null>(null)
 const agents = ref<Array<{ id: string; name?: string; description?: string }>>([])
 const agentIds = computed(() => new Set(agents.value.map((a) => a.id)))
@@ -137,7 +140,7 @@ const effectiveProviderId = computed(() => {
 })
 
 /** Console-command runners: no agent_ref / system prompt — prompt is extra CLI argv. */
-const isConsoleCommandRunner = computed(() => effectiveProviderId.value === 'console-command')
+const isConsoleCommandRunner = computed(() => !acceptsAgentOf(effectiveProviderId.value, providers.value))
 
 // Action id is derived from the label — only when creating; an edited action
 // keeps its original id so its identity stays stable.
@@ -155,10 +158,12 @@ async function loadRunnerOptions() {
     const res = await fetchRunners()
     runners.value = Array.isArray(res?.runners) ? res.runners : []
     connections.value = Array.isArray(res?.connections) ? res.connections : []
+    providers.value = Array.isArray(res?.providers) ? res.providers : []
     defaultRunnerId.value = res?.effectiveDefaultRunnerId ?? res?.defaultRunnerId ?? null
   } catch {
     runners.value = []
     connections.value = []
+    providers.value = []
     defaultRunnerId.value = null
   }
 }

@@ -4,19 +4,20 @@ import {
   AgenticRunError,
   EMPTY_REPLY_ERROR_MESSAGE,
   EMPTY_REPLY_NUDGE_TEXT,
-  SHELL_ALLOWLIST,
   summarizeResult,
+  type AgenticCompletionContext,
   type AgenticRunContext,
   type AgenticRunResult,
-  type ExtraTool,
-} from './agenticApiProvider.js'
+} from './AgenticApiProvider.js'
+import * as workspaceTools from './agenticWorkspaceTools.js'
+import type { TokenUsage } from './RunnerProvider.js'
 import type { McpJobDelivery } from '../mcpDelivery/McpJobDelivery.js'
 import type { McpToolBridge } from '../mcpDelivery/ToolBridgeMcpDelivery.js'
 
-/** Chặn vòng lặp vô hạn khi model liên tục gọi tool — mirror anthropic-compatible-api. */
+/** Chặn vòng lặp vô hạn khi model liên tục gọi tool — mirror AnthropicCompatibleProvider. */
 const MAX_AGENT_LOOP_TURNS = 8
 
-/** One-line summary of tool args for the transcript — mirrors sessionTranscript.ts's describeToolUse. */
+/** One-line summary of tool args for the transcript — mirrors monitor transcripts/ClaudeTranscriptReader.ts's describeToolUse. */
 function summarizeArgs(args: unknown): string {
   try {
     const json = typeof args === 'string' ? args : JSON.stringify(args)
@@ -86,18 +87,18 @@ const BASE_TOOLS: OpenAI.Chat.Completions.ChatCompletionFunctionTool[] = [
 
 /**
  * Base 4 file-ops always registered; `extraTools` (from `Connection.config.extraTools`,
- * default `[]`) opts a Connection into shell/git/search/web on top — see agenticApiProvider.ts.
+ * default `[]`) opts a Connection into shell/git/search/web on top — see agenticWorkspaceTools.ts.
  * `webSearchConfigured` additionally gates `web_search` alone so an unconfigured
  * `BRAVE_SEARCH_API_KEY` hides the tool instead of registering one that always errors.
  */
-function buildTools(extraTools: ExtraTool[], webSearchConfigured: boolean): OpenAI.Chat.Completions.ChatCompletionFunctionTool[] {
+function buildTools(extraTools: workspaceTools.ExtraTool[], webSearchConfigured: boolean): OpenAI.Chat.Completions.ChatCompletionFunctionTool[] {
   const tools: OpenAI.Chat.Completions.ChatCompletionFunctionTool[] = [...BASE_TOOLS]
   if (extraTools.includes('shell')) {
     tools.push({
       type: 'function',
       function: {
         name: 'run_command',
-        description: `Run a shell command in the workspace. Only these binaries are allowed: ${SHELL_ALLOWLIST.join(', ')}.`,
+        description: `Run a shell command in the workspace. Only these binaries are allowed: ${workspaceTools.SHELL_ALLOWLIST.join(', ')}.`,
         parameters: {
           type: 'object',
           properties: {
@@ -194,10 +195,29 @@ export class OpenAiCompatibleProvider extends AgenticApiProvider {
   readonly providerId: string
   private readonly defaultBaseURL: string
 
-  constructor(providerId: string, defaultBaseURL: string, mcpDelivery?: McpJobDelivery<McpToolBridge>) {
+  /**
+   * @param ui nhãn + gợi ý UI của endpoint này — có thì provider vào catalog
+   *   (`providerRegistry.ts` truyền; test dựng tay có thể bỏ).
+   */
+  constructor(
+    providerId: string,
+    defaultBaseURL: string,
+    mcpDelivery?: McpJobDelivery<McpToolBridge>,
+    ui?: { label: string; modelHint?: string; secretEnvHint?: string },
+  ) {
     super(mcpDelivery)
     this.providerId = providerId
     this.defaultBaseURL = defaultBaseURL
+    if (ui) {
+      this.catalog = {
+        kind: 'ai-provider',
+        label: ui.label,
+        modelListing: 'api',
+        defaultBaseURL,
+        ...(ui.modelHint ? { modelHint: ui.modelHint } : {}),
+        ...(ui.secretEnvHint ? { secretEnvHint: ui.secretEnvHint } : {}),
+      }
+    }
   }
 
   async listModels(apiKey: string, baseURL: string): Promise<string[]> {
@@ -208,6 +228,36 @@ export class OpenAiCompatibleProvider extends AgenticApiProvider {
     return ids.sort()
   }
 
+  /** Hook một lượt (`complete()`): một request chat, không tool. */
+  protected override async completeOnce(ctx: AgenticCompletionContext): Promise<{ text: string; usage?: TokenUsage }> {
+    if (!ctx.model) throw new Error('model is required — set it on the runner connection (ConnectionDialog)')
+    const client = new OpenAI({
+      baseURL: ctx.baseURL || this.defaultBaseURL,
+      apiKey: ctx.apiKey,
+      ...(ctx.timeoutMs ? { timeout: ctx.timeoutMs } : {}),
+    })
+    const response = await client.chat.completions.create(
+      {
+        model: ctx.model,
+        messages: [
+          ...(ctx.system ? [{ role: 'system' as const, content: ctx.system }] : []),
+          { role: 'user' as const, content: ctx.prompt },
+        ],
+        ...(ctx.maxTokens ? { max_tokens: ctx.maxTokens } : {}),
+      },
+      { signal: ctx.signal },
+    )
+    const text = response.choices?.[0]?.message?.content ?? ''
+    const usage = response.usage
+      ? {
+          inputTokens: response.usage.prompt_tokens ?? 0,
+          outputTokens: response.usage.completion_tokens ?? 0,
+          totalTokens: response.usage.total_tokens ?? 0,
+        }
+      : undefined
+    return { text, usage }
+  }
+
   protected async runConversation(ctx: AgenticRunContext): Promise<AgenticRunResult> {
     const model = String(ctx.runnerConfig.model || '')
     if (!model) throw new Error('model is required — set it on the runner connection (ConnectionDialog)')
@@ -215,8 +265,8 @@ export class OpenAiCompatibleProvider extends AgenticApiProvider {
     const timeoutMs = Number(ctx.req.timeoutMs) || Number(ctx.runnerConfig.timeoutMs) || 600_000
     const client = new OpenAI({ baseURL: ctx.runnerConfig.baseURL || this.defaultBaseURL, apiKey: ctx.apiKey, timeout: timeoutMs })
 
-    const extraTools = this.resolveExtraTools(ctx.runnerConfig)
-    const baseTools = buildTools(extraTools, this.isWebSearchConfigured())
+    const extraTools = workspaceTools.resolveExtraTools(ctx.runnerConfig)
+    const baseTools = buildTools(extraTools, workspaceTools.isWebSearchConfigured())
     // `mcpBridge === null` ⇒ `bridgeTools` rỗng ⇒ `tools` và preamble
     // byte-identical với bản trước khi có bridge.
     const bridgeTools = ctx.mcpBridge?.tools ?? []
@@ -232,8 +282,8 @@ export class OpenAiCompatibleProvider extends AgenticApiProvider {
       })),
     ]
     const systemContent = [
-      this.buildToolUsagePreamble(baseTools.map((t) => t.function.name), bridgeTools),
-      this.buildProjectContextPreamble(ctx.req),
+      workspaceTools.buildToolUsagePreamble(baseTools.map((t) => t.function.name), bridgeTools),
+      workspaceTools.buildProjectContextPreamble(ctx.req),
       ctx.req.resolvedAgent.systemPrompt || '',
     ]
       .filter(Boolean)
@@ -316,7 +366,7 @@ export class OpenAiCompatibleProvider extends AgenticApiProvider {
         // Empty content + no tool call — the model may not understand this
         // provider's toolset. Give it exactly one nudge before treating this
         // as a real failure instead of silently reporting job success (see
-        // agenticApiProvider.ts's EMPTY_REPLY_NUDGE_TEXT for rationale).
+        // AgenticApiProvider.ts's EMPTY_REPLY_NUDGE_TEXT for rationale).
         if (!hasNudgedEmptyReply) {
           hasNudgedEmptyReply = true
           messages.push({ role: 'assistant', content: '' })
@@ -366,50 +416,42 @@ export class OpenAiCompatibleProvider extends AgenticApiProvider {
     } catch {
       return { ok: false, error: 'invalid tool arguments JSON' }
     }
-    // TRƯỚC `switch`: xem chú thích tương ứng ở `anthropic-compatible-api.ts`.
+    // TRƯỚC `switch`: xem chú thích tương ứng ở `AnthropicCompatibleProvider.ts`.
     if (bridge?.has(call.function.name)) return bridge.call(call.function.name, args)
     const path = typeof args.path === 'string' ? args.path : ''
     switch (call.function.name) {
       case 'read_file':
-        return this.readWorkspaceFile(workspace, path)
+        return workspaceTools.readWorkspaceFile(workspace, path)
       case 'write_file':
-        return this.writeWorkspaceFile(workspace, path, typeof args.content === 'string' ? args.content : '')
+        return workspaceTools.writeWorkspaceFile(workspace, path, typeof args.content === 'string' ? args.content : '')
       case 'edit_file':
-        return this.editWorkspaceFile(
+        return workspaceTools.editWorkspaceFile(
           workspace,
           path,
           typeof args.old_string === 'string' ? args.old_string : '',
           typeof args.new_string === 'string' ? args.new_string : '',
         )
       case 'list_directory':
-        return this.listWorkspaceDirectory(workspace, typeof args.path === 'string' ? args.path : undefined)
+        return workspaceTools.listWorkspaceDirectory(workspace, typeof args.path === 'string' ? args.path : undefined)
       case 'run_command': {
         const command = typeof args.command === 'string' ? args.command : ''
         const cmdArgs = Array.isArray(args.args) ? args.args.filter((a): a is string => typeof a === 'string') : []
-        return this.runShellCommand(workspace, command, cmdArgs)
+        return workspaceTools.runShellCommand(workspace, command, cmdArgs)
       }
       case 'git_status':
-        return this.gitStatus(workspace)
+        return workspaceTools.gitStatus(workspace)
       case 'git_diff':
-        return this.gitDiff(workspace, typeof args.path === 'string' ? args.path : undefined, Boolean(args.staged))
+        return workspaceTools.gitDiff(workspace, typeof args.path === 'string' ? args.path : undefined, Boolean(args.staged))
       case 'git_log':
-        return this.gitLog(workspace, typeof args.limit === 'number' ? args.limit : undefined)
+        return workspaceTools.gitLog(workspace, typeof args.limit === 'number' ? args.limit : undefined)
       case 'search_files':
-        return this.searchFiles(workspace, typeof args.pattern === 'string' ? args.pattern : '', typeof args.path === 'string' ? args.path : undefined)
+        return workspaceTools.searchFiles(workspace, typeof args.pattern === 'string' ? args.pattern : '', typeof args.path === 'string' ? args.path : undefined)
       case 'web_search':
-        return this.webSearch(typeof args.query === 'string' ? args.query : '')
+        return workspaceTools.webSearch(typeof args.query === 'string' ? args.query : '')
       case 'fetch_url':
-        return this.fetchUrl(typeof args.url === 'string' ? args.url : '')
+        return workspaceTools.fetchUrl(typeof args.url === 'string' ? args.url : '')
       default:
         return { ok: false, error: `unknown tool: ${call.function.name}` }
     }
   }
-}
-
-export function createOpenAiCompatibleProvider(
-  providerId: string,
-  defaultBaseURL: string,
-  mcpDelivery?: McpJobDelivery<McpToolBridge>,
-): OpenAiCompatibleProvider {
-  return new OpenAiCompatibleProvider(providerId, defaultBaseURL, mcpDelivery)
 }
