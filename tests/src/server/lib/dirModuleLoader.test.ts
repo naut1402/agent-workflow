@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { loadModulesUnder } from '../../../../src/backend/lib/dirModuleLoader.js'
+import { loadEntriesUnder, loadModulesUnder } from '../../../../src/backend/lib/dirModuleLoader.js'
 
 let root: string
 
@@ -35,5 +35,61 @@ describe('loadModulesUnder', () => {
     } finally {
       await fs.rm(empty, { recursive: true, force: true })
     }
+  })
+})
+
+describe('loadEntriesUnder', () => {
+  let tree: string
+
+  beforeAll(async () => {
+    tree = await fs.mkdtemp(path.join(os.tmpdir(), 'dir-entries-loader-'))
+    // a: kiểu cũ (api.ts) + controller.ts
+    await fs.mkdir(path.join(tree, 'a'))
+    const put = (rel: string, id: string) => fs.writeFile(path.join(tree, rel), `export const id = ${JSON.stringify(id)}`)
+    await put('a/api.ts', 'a/api')
+    await put('a/controller.ts', 'a/controller')
+    // b: chỉ controller.ts + controllers/*.ts (sắp theo tên, bỏ .d.ts / file không phải .ts / thư mục con)
+    await fs.mkdir(path.join(tree, 'b', 'controllers', 'nested'), { recursive: true })
+    await put('b/controller.ts', 'b/controller')
+    await put('b/controllers/zeta.ts', 'b/zeta')
+    await put('b/controllers/alpha.ts', 'b/alpha')
+    await fs.writeFile(path.join(tree, 'b', 'controllers', 'types.d.ts'), 'export type X = 1')
+    await fs.writeFile(path.join(tree, 'b', 'controllers', 'notes.md'), '# no')
+    await put('b/controllers/nested/deep.ts', 'deep')
+    // c: không có entry nào
+    await fs.mkdir(path.join(tree, 'c'))
+    await put('c/index.ts', 'c')
+    await put('root-file.ts', 'root')
+  })
+
+  afterAll(async () => {
+    await fs.rm(tree, { recursive: true, force: true })
+  })
+
+  it('nạp entryFiles theo thứ tự khai rồi entryDirs theo tên; bỏ thư mục không có entry', async () => {
+    const got = await loadEntriesUnder<{ id: string }>(tree, {
+      entryFiles: ['api.ts', 'controller.ts'],
+      entryDirs: ['controllers'],
+    })
+    const rows = got.map((e) => `${e.dir}:${e.file}:${e.mod.id}`).sort()
+    expect(rows).toEqual([
+      'a:api.ts:a/api',
+      'a:controller.ts:a/controller',
+      'b:controller.ts:b/controller',
+      'b:controllers/alpha.ts:b/alpha',
+      'b:controllers/zeta.ts:b/zeta',
+    ])
+    // trong một thư mục: đúng thứ tự khai
+    expect(got.filter((e) => e.dir === 'b').map((e) => e.file)).toEqual([
+      'controller.ts',
+      'controllers/alpha.ts',
+      'controllers/zeta.ts',
+    ])
+    expect(got.filter((e) => e.dir === 'a').map((e) => e.file)).toEqual(['api.ts', 'controller.ts'])
+  })
+
+  it('không khai entryDirs → chỉ entryFiles', async () => {
+    const got = await loadEntriesUnder<{ id: string }>(tree, { entryFiles: ['controller.ts'] })
+    expect(got.map((e) => e.mod.id).sort()).toEqual(['a/controller', 'b/controller'])
   })
 })

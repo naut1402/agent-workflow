@@ -103,4 +103,67 @@ describe('HTTP GET /api/statistics/usage', () => {
     expect(res.status).toBe(400)
     expect(await res.json()).toEqual({ error: 'invalid from' })
   })
+
+  // ── #508: chuyển sang @Controller + UsageStatsRequest — hành vi giữ nguyên văn ──
+
+  test('to không parse được → 400 invalid to (from hợp lệ vẫn chạy trước)', async () => {
+    const app = await createApp(createRegistryContext({ defaultRoot: null }))
+    const res = await app.request('/api/statistics/usage?from=2026-08-01&to=nope')
+    expect(res.status).toBe(400)
+    expect(res.headers.get('cache-control')).toBe('no-store')
+    expect(await res.json()).toEqual({ error: 'invalid to' })
+  })
+
+  test('from và to cùng hỏng → báo from trước', async () => {
+    const app = await createApp(createRegistryContext({ defaultRoot: null }))
+    const res = await app.request('/api/statistics/usage?from=x&to=y')
+    expect(await res.json()).toEqual({ error: 'invalid from' })
+  })
+
+  test('schema fail ưu tiên hơn from/to (ký tự cấm trong task)', async () => {
+    const app = await createApp(createRegistryContext({ defaultRoot: null }))
+    const res = await app.request('/api/statistics/usage?task=a%2Fb&from=x')
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ error: 'invalid usage stats query' })
+  })
+
+  test('tham số rỗng coi như không gửi (task=&groupBy= → mặc định task, không lọc)', async () => {
+    const app = await createApp(createRegistryContext({ defaultRoot: null }))
+    const res = await app.request('/api/statistics/usage?task=&step=&groupBy=&from=&to=')
+    expect(res.status).toBe(200)
+    expect(res.headers.get('cache-control')).toBe('no-store')
+    const body = await res.json()
+    expect(body.groupBy).toBe('task')
+    expect(body.totals.totalTokens).toBe(1300)
+  })
+
+  test('tên trên dây task / step lọc đúng; taskId / stepId trên query bị bỏ qua', async () => {
+    const app = await createApp(createRegistryContext({ defaultRoot: null }))
+    const wire = await (await app.request('/api/statistics/usage?step=implement&task=TB')).json()
+    expect(wire.totals.totalTokens).toBe(900)
+    const dtoNames = await (await app.request('/api/statistics/usage?taskId=TB&stepId=x')).json()
+    expect(dtoNames.totals.totalTokens).toBe(1300)
+  })
+
+  test('project không resolve được root vẫn 200 (usage là global, route không đòi root)', async () => {
+    const app = await createApp(createRegistryContext({ defaultRoot: null }))
+    const res = await app.request('/api/statistics/usage?project=ghost')
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.groups).toEqual([])
+  })
+
+  test('to dạng epoch-ms lọc theo mốc', async () => {
+    const app = await createApp(createRegistryContext({ defaultRoot: null }))
+    const res = await app.request(`/api/statistics/usage?to=${T0 - 1}`)
+    expect(res.status).toBe(200)
+    expect((await res.json()).totals.entries).toBe(0)
+  })
+
+  test('method khác GET trên path đã khai → 405 method not allowed', async () => {
+    const app = await createApp(createRegistryContext({ defaultRoot: null }))
+    const res = await app.request('/api/statistics/usage', { method: 'POST' })
+    expect(res.status).toBe(405)
+    expect(await res.json()).toEqual({ error: 'method not allowed' })
+  })
 })
