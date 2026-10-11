@@ -13,9 +13,9 @@ export {
   // fallow-ignore-next-line unused-export
   listPipelineProfileNames,
 } from '../../agent-editor/business/index.js'
-export { buildCatalog } from '../../pipeline-editor/business/catalog/index.js'
+export { buildCatalog } from '../../pipeline-editor/business/index.js'
 // fallow-ignore-next-line unused-type
-export type { CatalogScanPatterns } from '../../pipeline-editor/business/catalog/index.js'
+export type { CatalogScanPatterns } from '../../pipeline-editor/business/index.js'
 export { loadScanPatternsConfig } from '../../settings/business/index.js'
 // Barrel `automations/business` thuần (không side effect) nhưng kéo module
 // chỉ chạy trên server — đừng import module này từ code FE.
