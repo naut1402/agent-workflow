@@ -831,7 +831,7 @@ onUnmounted(() => {
     min-height="560px"
     @close="emit('close')"
   >
-    <div v-if="error" class="err-banner">{{ error }}</div>
+    <div v-if="error" class="err-banner banner-danger">{{ error }}</div>
 
     <div class="field">
       <label class="cfg-label">{{ t('runner.connectionDialog.labelField') }}
@@ -1215,7 +1215,7 @@ onUnmounted(() => {
     width="min(440px, 92vw)"
     @close="showRegisterCommand = false"
   >
-    <div v-if="registerError" class="err-banner">{{ registerError }}</div>
+    <div v-if="registerError" class="err-banner banner-danger">{{ registerError }}</div>
     <div class="field">
       <label class="cfg-label">{{ t('runner.registerDialog.commandField') }}
         <input v-model="registerDraft.command" class="cfg-input" :placeholder="t('runner.registerDialog.commandPlaceholder')" />
@@ -1256,18 +1256,9 @@ onUnmounted(() => {
 
 <style scoped lang="scss">
 .connection-dialog .cfg-hint { margin: 0.2rem 0 0; font-size: 11px; opacity: 0.75; }
-.err-banner {
-  background: rgba(248, 81, 73, 0.12);
-  border: 1px solid var(--danger);
-  color: var(--danger);
-  padding: 0.5rem;
-  border-radius: 6px;
-  margin-bottom: 0.75rem;
-}
 .kind-radios { display: flex; gap: 1rem; margin-top: 0.35rem; flex-wrap: wrap; }
 .extra-tools-group { display: flex; flex-direction: column; gap: 0.4rem; margin-top: 0.35rem; }
 .kind-radio,
-.label-with-hint,
 .icon-btn-group { display: inline-flex; align-items: center; }
 .kind-radio {
   gap: 0.4rem;
@@ -1285,7 +1276,6 @@ onUnmounted(() => {
   margin-bottom: 0.35rem;
 }
 .row-btns { display: flex; gap: 0.35rem; }
-.label-with-hint { gap: 0.3rem; white-space: nowrap; flex-direction: row; }
 .command-row,
 .credential-row {
   display: flex;
