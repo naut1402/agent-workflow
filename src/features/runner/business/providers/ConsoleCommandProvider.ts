@@ -17,41 +17,43 @@ import { collectProducedArtifacts, createJobLogAppender, describeExecuteResult, 
  * Empty / whitespace-only input → [].
  */
 export function splitCommandArgs(input: string): string[] {
-  const out: string[] = []
-  let cur = ''
-  let quote: "'" | '"' | null = null
-  let escaped = false
+  const s: SplitState = { out: [], cur: '', quote: null, escaped: false }
   for (const ch of input) {
-    if (escaped) {
-      cur += ch
-      escaped = false
-      continue
+    if (s.escaped) {
+      s.cur += ch
+      s.escaped = false
+    } else if (ch === '\\') {
+      s.escaped = true
+    } else {
+      consumeUnescapedChar(s, ch)
     }
-    if (ch === '\\') {
-      escaped = true
-      continue
-    }
-    if (quote) {
-      if (ch === quote) quote = null
-      else cur += ch
-      continue
-    }
-    if (ch === "'" || ch === '"') {
-      quote = ch
-      continue
-    }
-    if (/\s/.test(ch)) {
-      if (cur) {
-        out.push(cur)
-        cur = ''
-      }
-      continue
-    }
-    cur += ch
   }
-  if (escaped) cur += '\\'
-  if (cur) out.push(cur)
-  return out
+  if (s.escaped) s.cur += '\\'
+  flushToken(s)
+  return s.out
+}
+
+type SplitState = { out: string[]; cur: string; quote: "'" | '"' | null; escaped: boolean }
+
+function flushToken(s: SplitState): void {
+  if (s.cur) {
+    s.out.push(s.cur)
+    s.cur = ''
+  }
+}
+
+/** Ký tự không bị escape: đóng/mở quote, tách token ở khoảng trắng ngoài quote, còn lại nối vào token. */
+function consumeUnescapedChar(s: SplitState, ch: string): void {
+  if (s.quote) {
+    if (ch === s.quote) s.quote = null
+    else s.cur += ch
+  } else if (ch === "'" || ch === '"') {
+    s.quote = ch
+  } else if (/\s/.test(ch)) {
+    flushToken(s)
+  } else {
+    s.cur += ch
+  }
 }
 
 export interface ConsoleInvocationInput {

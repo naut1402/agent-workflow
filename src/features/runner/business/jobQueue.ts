@@ -18,7 +18,7 @@ import { getCredential } from './credentials.js'
 import { resolveAgent } from './agentResolver.js'
 import { loadTaskSessionLedger, recordSessionUsage, resolveSessionPlan, mintSessionId, type SessionMode } from './sessionLedger.js'
 import { captureTokenUsageFromExecute } from './usageCapture.js'
-import { ensureJobsDir, jobsDir, loadJob, mergeJobUsage, saveJob, stepIdOf } from './jobRecords.js'
+import { ensureJobsDir, jobsDir, loadJob, saveJob, stepIdOf } from './jobRecords.js'
 import type { Connection, CredentialProfile, ExecuteResult, JobRecord, JobStatus, MutationResult } from './types.js'
 import type { RunTaskStepResult } from '../../monitor/business/tasks/runStep.js'
 import { stepSummaryOf } from '../../../shared/lib/orchestrator.js'
@@ -412,7 +412,7 @@ function foldProposalIntoScratch(job: JobRecord, stdout: string): void {
 }
 
 // Đọc/ghi JobRecord nằm ở `jobRecords.ts` — giữ export ở đây cho caller hiện có.
-export { loadJob, mergeJobUsage, stepIdOf }
+export { loadJob, stepIdOf }
 
 /**
  * Đánh dấu job orchestrator đã thi hành 1 quyết định qua `POST /api/orchestrator/decide`
