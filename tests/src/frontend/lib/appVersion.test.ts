@@ -22,10 +22,10 @@ describe('APP_VERSION', () => {
    * xuất từ MỘT nguồn. Con số được viết tường minh vì nó chính là acceptance
    * criterion, 🚫 không phải hằng nội bộ.
    */
-  it('TC-G10: backend và giao diện cùng báo 1.2.0, cùng dẫn xuất từ package.json', () => {
-    expect(pkg.version).toBe('1.2.0')
-    expect(APP_VERSION).toBe('1.2.0')
-    expect(BACKEND_APP_VERSION).toBe('1.2.0')
+  it('TC-G10: backend và giao diện cùng báo 1.2.1, cùng dẫn xuất từ package.json', () => {
+    expect(pkg.version).toBe('1.2.1')
+    expect(APP_VERSION).toBe('1.2.1')
+    expect(BACKEND_APP_VERSION).toBe('1.2.1')
     expect(BACKEND_APP_VERSION).toBe(APP_VERSION)
   })
 })

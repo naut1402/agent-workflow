@@ -792,7 +792,8 @@ describe('tiến trình bun run mcp (stdio thật)', () => {
     try {
       const seen = await waitFor(() => /mode=full/.test(err.join('')))
       expect(seen).toBe(true)
-      expect(err.join('')).toContain('1.2.0')
+      const { version } = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'package.json'), 'utf8'))
+      expect(err.join('')).toContain(version)
       // `stdout` là kênh JSON-RPC — một dòng log lạc vào đó hỏng cả phiên.
       expect(out.join('')).toBe('')
     } finally {
