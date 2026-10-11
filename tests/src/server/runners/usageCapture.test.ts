@@ -14,7 +14,8 @@ import {
   setUsageCursor,
   saveTaskSessionLedger,
 } from '../../../../src/features/runner/business/sessionLedger.js'
-import { loadJob, mergeJobUsage } from '../../../../src/features/runner/business/jobQueue.js'
+import { loadJob } from '../../../../src/features/runner/business/jobQueue.js'
+import { mergeJobUsage } from '../../../../src/features/runner/business/jobRecords.js'
 import type { JobRecord } from '../../../../src/features/runner/business/types.js'
 import { registryHome } from '../../../../src/backend/registry.js'
 
