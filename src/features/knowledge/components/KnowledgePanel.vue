@@ -396,7 +396,7 @@ onMounted(async () => {
     :hide-main="!viewingId"
   >
     <template #left>
-      <div class="knowledge-left">
+      <div class="knowledge-left flex-col-fill">
         <template v-if="!subSidebarCollapsed">
           <KnowledgeSideMenu
             v-model:scope="scope"
@@ -425,20 +425,20 @@ onMounted(async () => {
             @new-tag="newTag"
             @edit-tag="editTag"
           />
-          <p v-if="error" class="err knowledge-msg">{{ error }}</p>
-          <p v-if="message" class="ok-msg knowledge-msg">{{ message }}</p>
+          <p v-if="error" class="err knowledge-msg panel-msg">{{ error }}</p>
+          <p v-if="message" class="ok-msg knowledge-msg panel-msg">{{ message }}</p>
         </template>
       </div>
     </template>
 
     <template #main>
-      <div class="knowledge-main">
+      <div class="knowledge-main flex-col-fill">
         <!-- Sub-menu thu về rail thì cột trái rộng 0, nên chỗ duy nhất còn thấy
              được là main. Hai trạng thái loại trừ nhau nên thông báo không bao
              giờ render hai lần. -->
         <template v-if="subSidebarCollapsed">
-          <p v-if="error" class="err knowledge-msg">{{ error }}</p>
-          <p v-if="message" class="ok-msg knowledge-msg">{{ message }}</p>
+          <p v-if="error" class="err knowledge-msg panel-msg">{{ error }}</p>
+          <p v-if="message" class="ok-msg knowledge-msg panel-msg">{{ message }}</p>
         </template>
         <!-- 🚫 `with-frontmatter`: `driver.read()` đã bóc front-matter sẵn, nên
              chỉ còn phần text — đúng yêu cầu "không hiển thị siêu dữ liệu". -->
@@ -499,14 +499,7 @@ onMounted(async () => {
 </template>
 
 <style scoped lang="scss">
-// Hai cột trái/phải cùng là cột flex lấp đầy chiều cao; chỉ cột trái chặn tràn.
-.knowledge-left,
-.knowledge-main {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-height: 0;
-}
+// Cột flex lấp đầy lấy từ class chung `.flex-col-fill`; chỉ cột trái chặn tràn.
 .knowledge-left {
   overflow: hidden;
 }
@@ -514,12 +507,6 @@ onMounted(async () => {
 // cột xám rỗng. Selector đích nằm TRÊN slot "left" nên override neo vào gốc.
 .knowledge-layout :deep(.c-screen-layout__body--left-collapsed) {
   grid-template-columns: 0 1fr;
-}
-.knowledge-msg {
-  margin: 0;
-  padding: 8px 10px;
-  font-size: 12px;
-  flex-shrink: 0;
 }
 // Root của component con nhận luôn scope id của cha, nên không cần `:deep`.
 // Viewer và empty state loại trừ nhau (v-if/v-else), cùng là lá lấp phần còn lại.
