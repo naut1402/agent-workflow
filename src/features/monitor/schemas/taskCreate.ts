@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { MAX_BUNDLE_IDS } from '../../knowledge/schemas/knowledge.js'
 
 /**
  * Body for creating a task from the dashboard (`POST /api/tasks`).
@@ -41,7 +42,7 @@ export const CreateTaskRequest = z.object({
   /** Inline pipeline content — takes precedence over `profileName` when both are sent. */
   pipeline: CreateTaskPipeline.nullish(),
   /** Knowledge entry ids (`<scope>/<slug>`) injected into the first step. */
-  knowledgeInputs: z.array(z.string().min(1)).max(50).default([]),
+  knowledgeInputs: z.array(z.string().min(1)).max(MAX_BUNDLE_IDS).default([]),
   autoReview: z.boolean().default(false),
   exportJson: z.boolean().default(false),
   /** Submit the first step to a runner right after scaffolding. */

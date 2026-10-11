@@ -3,9 +3,10 @@ import type { z } from 'zod'
 import { knowledgeCollections, knowledgeTagAliases } from '../../../backend/db/schema.js'
 import { slugify } from '../../../shared/lib/stringUtils.js'
 import type { CollectionBody, TagRenameBody } from '../schemas/knowledge.js'
-import { createFileDriver, sanitiseTags } from './fileDriver.js'
+import { sanitiseTags } from './KnowledgeDriver.js'
 import { knowledgeDb, storeKeysOf, type KnowledgeStoreKeys } from './knowledgeDb.js'
-import { moveTagMetaInTx, readTagMetaRows } from './tags.js'
+import { getKnowledgeDriver } from './knowledgeDriverRegistry.js'
+import { moveTagMetaInTx, readTagMetaRows, resolveTagAliases } from './tags.js'
 
 /**
  * Collection = nhóm knowledge, lưu ở bảng `knowledge_collections` của
@@ -122,12 +123,13 @@ export async function findCollectionSafe(
 
 export async function listCollections(devTeamRoot: string) {
   const keys = storeKeysOf(devTeamRoot)
-  const entries = await createFileDriver(devTeamRoot).list({ scope: 'all' })
+  const { driver } = await getKnowledgeDriver(devTeamRoot)
+  const entries = await driver.listEntries(driver.scopes())
   const rows = await rowsOf(keys)
   const collections = rows
     .map((row) => {
       const c = toCollection(row)
-      return { ...c, entryCount: resolveCollectionEntries(c, entries as any).length }
+      return { ...c, entryCount: resolveCollectionEntries(c, entries).length }
     })
     .sort((a, b) => a.name.localeCompare(b.name))
 
@@ -265,8 +267,10 @@ export async function renameTag(devTeamRoot: string, { from, to }: z.infer<typeo
   if (src === dst) return { renamed: 0, entries: [], alias: null }
 
   const keys = storeKeysOf(devTeamRoot)
-  const driver = createFileDriver(devTeamRoot)
-  const matches = await driver.list({ scope: 'all', tags: [src] })
+  const { driver } = await getKnowledgeDriver(devTeamRoot)
+  // Tìm qua bước giải alias, đúng như `?tags=` của danh sách entry.
+  const want = await resolveTagAliases(devTeamRoot, [src])
+  const matches = (await driver.listEntries(driver.scopes())).filter((e) => want.every((t) => e.tags.includes(t)))
 
   const touched: string[] = []
   for (const meta of matches) {
@@ -297,7 +301,7 @@ export async function renameTag(devTeamRoot: string, { from, to }: z.infer<typeo
 
   // Phạm vi bên DB là mọi store, không phải store có entry bị chạm.
   //
-  // `driver.list({ scope: 'all' })` ở trên vốn đã quét mọi scope; và từ khi tag
+  // Bước tìm entry ở trên vốn đã quét mọi scope; và từ khi tag
   // là thực thể, "tag 0 entry" là trạng thái hợp lệ thường gặp — bám theo
   // `touched` thì đúng lúc alias + metadata là thứ duy nhất cần sửa lại là lúc
   // không có gì được ghi, trong khi hàm vẫn trả `alias` như đã ghi xong.

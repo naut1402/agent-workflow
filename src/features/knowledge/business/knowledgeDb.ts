@@ -1,9 +1,12 @@
 import { getDb, type Db } from '../../../backend/db/client.js'
-import { resolveBases } from './fileDriver.js'
+import { joinPath } from '../../../backend/lib/fileHelper.js'
+import { globalKnowledgeRoot } from '../../../backend/registry.js'
+import type { KnowledgeBases } from './drivers/FileKnowledgeDriver.js'
 
 /**
  * Hạ tầng dùng chung cho hai module knowledge chạy trên `dashboard.sqlite`
- * (`collections.ts` và `tags.ts`).
+ * (`collections.ts` và `tags.ts`), cùng bảng `scope → base` mà khoá
+ * `store_key` và driver file cùng dựa vào (`resolveBases`).
  *
  * Không `import { Database } from 'bun:sqlite'` ở bất kỳ đâu trong feature:
  * `vite build` nạp `vite.config.ts` dưới Node và không resolve được scheme
@@ -41,6 +44,36 @@ export async function knowledgeDb(): Promise<Db> {
  * `collections.ts` mở.
  */
 export type KnowledgeTx = Parameters<Parameters<Db['transaction']>[0]>[0]
+
+export function knowledgeRoot(devTeamRoot: string): string {
+  return joinPath(devTeamRoot, 'knowledge')
+}
+
+let globalScopeWarned = false
+
+/**
+ * Bảng tra `scope → base` — thuần path, không chạm đĩa. Nguồn chung của hai
+ * thứ phải khớp nhau tuyệt đối: thư mục driver file đọc/ghi entry
+ * (`knowledgeDriverRegistry.ts`) và khoá phân vùng `store_key` của mọi bảng
+ * knowledge (`storeKeysOf`).
+ *
+ * Không mkdir ở đây — xem `FileKnowledgeDriver`.
+ */
+export function resolveBases(devTeamRoot: string): KnowledgeBases {
+  const projectBase = knowledgeRoot(devTeamRoot)
+  const bases: KnowledgeBases = { project: projectBase, system: projectBase }
+  try {
+    bases.global = globalKnowledgeRoot()
+  } catch (e: any) {
+    // Warn một lần: hàm này chạy ở đầu mọi thao tác, một vòng refresh của
+    // panel đủ để log ngập cùng một dòng.
+    if (!globalScopeWarned) {
+      globalScopeWarned = true
+      console.warn(`[knowledge] global scope disabled: ${e?.message ?? e}`)
+    }
+  }
+  return bases
+}
 
 export interface KnowledgeStoreKeys {
   /** Scope của collection/tag (`project` | `global`) → khoá store. */
