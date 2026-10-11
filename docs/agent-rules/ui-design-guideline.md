@@ -85,6 +85,30 @@ Nút **có nhãn chữ** (label bắt buộc) cho quick action — cùng triết
 </button>
 ```
 
+### 1.6 Nút nổi trong vùng cuộn: `CScrollToTop`
+
+Nút "lên đầu trang" cho một vùng cuộn dài dùng component chung
+`src/frontend/ui/CScrollToTop.vue` — **không** dựng lại bằng tay.
+
+```html
+<!-- phần tử CUỐI bên trong chính vùng cuộn -->
+<CScrollToTop :scroller="viewRoot" :content-key="content" />
+```
+
+- **Neo bằng sticky cao 0px**, không bọc scroller trong container `position: relative`:
+  bọc thêm một tầng flex là đúng cạm bẫy ở §2.2. Vì vậy cắm được vào mọi vùng cuộn
+  mà không phải sửa cấu trúc layout.
+- **Ngoại lệ có chủ ý của `.icon-btn` borderless (§1.4):** nút này được phép có
+  `background` + `border` + `box-shadow`, vì nó nổi đè lên nội dung và cần tách
+  khỏi nền. Đây là ngoại lệ **duy nhất** đang được ghi nhận; nút borderless ở
+  toolbar / danh sách vẫn theo §1.4.
+- `z-index: 5` — dưới `.selection-toolbar` (50) và `.art-busy-overlay` (20).
+- Ẩn bằng `v-if` chứ không `opacity: 0`: nút ẩn phải không nhận chuột và không
+  nằm trong tab order.
+- `contentKey` là bắt buộc khi nội dung đổi mà **element** scroller thì không
+  (đổi tài liệu trong cùng một viewer) — thiếu nó thì nút kẹt lại ở trạng thái
+  hiện dù tài liệu mới không còn gì để cuộn.
+
 ---
 
 ## 2. Chiến lược tràn nội dung
@@ -95,6 +119,12 @@ Nút **có nhãn chữ** (label bắt buộc) cho quick action — cùng triết
 2. **Không giả định "dữ liệu chắc là ngắn".** Catalog 7 agent hôm nay là 70 agent sau khi thêm plugin; danh sách rule của project dài ra theo thời gian. Layout đúng phải chịu được cả dữ liệu dài lẫn dữ liệu rỗng.
 3. **Cắt cụt tệ hơn cuộn.** Nội dung bị cắt không để lại dấu hiệu nào trên UI — người dùng không biết là còn mục phía dưới. Vùng cuộn ít nhất luôn tự tố cáo bằng thanh cuộn.
 4. **Một trục, một thanh cuộn.** Hai scroller lồng nhau trên cùng một trục là lỗi, không phải "cho chắc": chuột lăn rơi nhầm tầng và mục cuối vẫn có thể không tới được.
+5. **Tiện ích cuộn thuộc về VÙNG CUỘN, không thuộc về panel hiển thị.** Nút
+   "lên đầu trang" (§1.6) phải gắn vào đúng phần tử mang `overflow-y: auto`.
+   Ví dụ trong repo: artifact lấy nút ở `MonitorLayout` (`.monitor-content` mới
+   là vùng cuộn) chứ **không** ở `ArtifactPanel` — `.art-view` cố ý
+   `overflow: visible` theo đúng mục 4 ở trên. Gắn nhầm vào panel là vừa không
+   neo đúng chỗ, vừa đẻ ra scroller thứ hai cùng trục.
 
 ### 2.2 Chuỗi sizing chuẩn
 

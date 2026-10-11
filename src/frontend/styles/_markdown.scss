@@ -47,3 +47,39 @@
   text-align: center;
 }
 .md .mermaid svg { max-width: 100%; height: auto; }
+
+/* Mục con (###…######) trong một block — nhẹ hơn `.block-item` một bậc: thụt lề,
+   không hộp viền đầy đủ, mũi nhỏ hơn. Selector bám class riêng `.block-sub`
+   chứ KHÔNG dùng `details details`: `.md` còn render ở qa panel / chat / log.
+
+   Không khai báo `::details-content` ở đây: nó mới đạt Baseline "newly
+   available" (09/2025) nên chưa chắc có ở trình duyệt người dùng, và
+   `.block-sub` nằm trong dòng chảy block thường chứ không trong chuỗi chia
+   chiều cao flex nên cũng không cần. Nếu chạy thật thấy nội dung bị cắt ở
+   Chrome ≥ 131 thì thêm đúng một khối `.block-sub::details-content { display:
+   block; overflow: visible; }` ngay tại đây (global, vì nội dung dựng runtime
+   không mang `data-v-…`). */
+.block-sub {
+  margin: 6px 0 6px 10px;
+  border-left: 2px solid var(--border);
+  overflow: visible; /* không clip như `.block-item`, tránh cắt nội dung lồng */
+}
+.block-sub > summary {
+  padding: 4px 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.block-sub > summary::before { content: '›'; font-size: 11px; transition: transform 0.15s; }
+.block-sub[open] > summary::before { transform: rotate(90deg); color: var(--accent); }
+.block-sub[open] > summary { color: var(--text); }
+.block-sub > summary:hover { background: rgba(var(--accent-rgb), 0.04); }
+.block-sub__body { padding: 0 0 2px 10px; }
+/* Heading của mục con đã thành tiêu đề `<summary>` — bỏ gạch chân để không lặp đường kẻ. */
+.block-sub__body > .md > :is(h3, h4, h5, h6):first-child { border-bottom: none; padding-bottom: 0; }

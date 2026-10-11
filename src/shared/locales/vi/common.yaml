@@ -69,6 +69,8 @@ markdownView:
   toBlock: Xem theo block
   expandAll: Mở tất cả
   collapseAll: Thu gọn tất cả
+scrollTop:
+  label: Lên đầu trang
 artifactNode:
   producesTitle: Đầu ra
   knowledgeTitle: Knowledge
