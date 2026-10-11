@@ -561,6 +561,61 @@ describe('PipelineEditor — Save / set-default rẽ nhánh theo tab', () => {
     expect(confirmSpy).toHaveBeenCalled()
     expect(deletePipelineProfile).not.toHaveBeenCalled()
   })
+
+  // Tef1d7fb7 — xoá profile đi chung cờ `runSave` với Lưu / Đặt mặc định.
+  it('D6b: xoá profile bấm hai lần khi đang chờ ⇒ một confirm, một API; panel nhận saving', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    let release: (v: unknown) => void = () => {}
+    vi.mocked(deletePipelineProfile).mockImplementationOnce(
+      () => new Promise((r) => { release = r }) as any,
+    )
+    const w = mountEditor({ scope: 'global' })
+    await flushPromises()
+
+    const panel = w.findComponent({ name: 'EditorTargetPanel' })
+    await panel.vm.$emit('update:profileSelected', 'p1')
+    await flushPromises()
+    panel.vm.$emit('delete-profile')
+    panel.vm.$emit('delete-profile')
+    await flushPromises()
+
+    expect(confirmSpy).toHaveBeenCalledTimes(1)
+    expect(deletePipelineProfile).toHaveBeenCalledTimes(1)
+    // `saving` là cờ bật `CLoadingOverlay` trong panel.
+    expect(panel.props('saving')).toBe(true)
+
+    release({ ok: true })
+    await flushPromises()
+
+    expect(panel.props('saving')).toBe(false)
+  })
+
+  it('D6c: đang lưu ⇒ bấm xoá profile bị bỏ qua, không hỏi confirm', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    let release: (v: unknown) => void = () => {}
+    vi.mocked(savePipelineProfile).mockImplementationOnce(
+      () => new Promise((r) => { release = r }) as any,
+    )
+    const w = mountEditor({ scope: 'global' })
+    await flushPromises()
+
+    const panel = w.findComponent({ name: 'EditorTargetPanel' })
+    await panel.vm.$emit('update:profileSelected', 'p1')
+    await panel.vm.$emit('update:profileName', 'p1')
+    await flushPromises()
+    panel.vm.$emit('save')
+    await flushPromises()
+    expect(savePipelineProfile).toHaveBeenCalledTimes(1)
+
+    panel.vm.$emit('delete-profile')
+    await flushPromises()
+
+    expect(confirmSpy).not.toHaveBeenCalled()
+    expect(deletePipelineProfile).not.toHaveBeenCalled()
+
+    release({ ok: true })
+    await flushPromises()
+  })
 })
 
 // E3 — bỏ nút Load nên đổi select là mất thay đổi chưa lưu; phải hỏi trước.

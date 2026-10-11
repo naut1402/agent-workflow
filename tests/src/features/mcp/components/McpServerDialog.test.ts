@@ -354,6 +354,29 @@ describe('McpServerDialog — credential và kiểm tra kết nối', () => {
     // Thông điệp gốc là thứ duy nhất người dùng có để sửa cấu hình.
     expect(document.body.textContent).toContain('ECONNREFUSED 127.0.0.1:8931')
   })
+
+  // Tef1d7fb7 — cờ `testing` đi qua `useApiAction`: overlay phủ body, footer
+  // (ngoài overlay) tự khoá bằng `:disabled`.
+  it('đang chạy thử ⇒ overlay phủ body, nút Lưu tắt; xong thì gỡ cả hai', async () => {
+    let resolveProbe: (v: any) => void = () => {}
+    vi.mocked(testMcpServer).mockImplementationOnce(
+      () => new Promise((resolve) => { resolveProbe = resolve }),
+    )
+
+    await mountDialog()
+    await fillMinimalStdio('gh')
+    await click(buttonByText(mcpVi.dialog.test))
+
+    expect(document.body.querySelector('.c-loading-host > .c-loading-overlay')).not.toBe(null)
+    expect(buttonByText(mcpVi.dialog.save).disabled).toBe(true)
+
+    resolveProbe({ ok: true, tools: [], warnings: [], durationMs: 3 })
+    await flushPromises()
+
+    expect(buttonByText(mcpVi.dialog.save).disabled).toBe(false)
+    // Overlay đã kịp vẽ thì giữ tối thiểu `minVisibleMs` — chờ, đừng assert tức thì.
+    await vi.waitFor(() => expect(document.body.querySelector('.c-loading-overlay')).toBe(null))
+  })
 })
 
 describe('McpServerDialog — cảnh báo secret literal', () => {

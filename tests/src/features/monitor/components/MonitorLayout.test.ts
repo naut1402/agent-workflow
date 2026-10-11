@@ -670,6 +670,32 @@ describe('MonitorLayout — nút dọn worktree (T161678b4)', () => {
     expect(w.find('.badges .badge.worktree').exists()).toBe(false)
     expect(w.find('.badges .btn-clean-worktree').exists()).toBe(false)
   })
+
+  // Cờ `cleaning` đi qua `useApiAction` và chung overlay với nút xoá task.
+  it('đang dọn: overlay phủ khu tiêu đề và nút tắt; DELETE xong thì gỡ (Tef1d7fb7)', async () => {
+    let release: (v: unknown) => void = () => {}
+    const pendingDelete = new Promise((r) => { release = r })
+    const fetchMock = stubFetch({
+      worktreeResponse: worktreeOk(cleanWorktree),
+      deleteResponse: pendingDelete,
+    })
+    vi.stubGlobal('confirm', vi.fn(() => true))
+
+    const w = mountDone()
+    await flushPromises()
+    await w.find('.badges .btn-clean-worktree').trigger('click')
+    await flushPromises()
+
+    expect(deleteCalls(fetchMock).length).toBe(1)
+    expect(w.find('.task-head > .c-loading-overlay').exists()).toBe(true)
+    expect(w.find('.badges .btn-clean-worktree').attributes('disabled')).toBeDefined()
+
+    release(jsonRes({ ok: true }))
+    await flushPromises()
+
+    // Overlay đã kịp vẽ thì giữ tối thiểu `minVisibleMs` — chờ, đừng assert tức thì.
+    await vi.waitFor(() => expect(w.find('.task-head > .c-loading-overlay').exists()).toBe(false))
+  })
 })
 
 // Hai mã lỗi mới của bước dọn worktree phải ra chữ tiếng Việt của khoá tương
