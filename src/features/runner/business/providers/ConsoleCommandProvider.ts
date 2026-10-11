@@ -1,7 +1,5 @@
-import { appendTextFileSync, existsSync, joinPath } from '../../../../backend/lib/fileHelper.js'
-import { spawn } from '../../../../backend/lib/processHelper.js'
 import type { CredentialProfile } from '../types.js'
-import { formatJobLogFooter, formatJobLogHeader } from '../jobLogFormat.js'
+import { formatJobLogHeader } from '../jobLogFormat.js'
 import { NoMcpDelivery } from '../mcpDelivery/NoMcpDelivery.js'
 import type {
   ExecuteRequest,
@@ -10,13 +8,8 @@ import type {
   RunnerProvider,
   TranscriptFormat,
 } from './RunnerProvider.js'
-
-interface ProcResult {
-  exitCode: number | null
-  stdout: string
-  stderr: string
-  killed: boolean
-}
+import { formatProcessFailure, runCliProcess, type ProcResult } from './cliProcess.js'
+import { collectProducedArtifacts, createJobLogAppender, describeExecuteResult, jobLogHeaderMeta } from './providerJobReport.js'
 
 /**
  * Split a free-form command-line string into argv tokens.
@@ -78,13 +71,6 @@ export function buildConsoleInvocation(input: ConsoleInvocationInput): ConsoleIn
   return { args: [...flags, ...extra] }
 }
 
-function formatFailure(procResult: ProcResult, timeoutMs: number): string {
-  if (procResult.killed) return `process timed out after ${timeoutMs}ms`
-  const fromStreams = [procResult.stderr, procResult.stdout].filter(Boolean).join('\n').trim()
-  if (fromStreams) return fromStreams.slice(0, 1000)
-  return `exit code ${procResult.exitCode ?? 'unknown'}`
-}
-
 function describePayload(opts: {
   workspace: string
   cliPath: string
@@ -97,16 +83,7 @@ function describePayload(opts: {
     formatJobLogHeader({
       jobId: String(meta.jobId || ''),
       providerId: 'console-command',
-      runnerId: typeof meta.runnerId === 'string' ? meta.runnerId : undefined,
-      connectionId: typeof meta.connectionId === 'string' ? meta.connectionId : undefined,
-      projectId: typeof meta.projectId === 'string' ? meta.projectId : undefined,
-      taskId: typeof meta.taskId === 'string' ? meta.taskId : undefined,
-      stepId:
-        typeof meta.stepId === 'string'
-          ? meta.stepId
-          : typeof meta.pipelineStepId === 'string'
-            ? meta.pipelineStepId
-            : undefined,
+      ...jobLogHeaderMeta(meta),
       workspace: opts.workspace,
       mode: 'console-command',
     }).trimEnd(),
@@ -120,73 +97,6 @@ function describePayload(opts: {
   }
   lines.push('', '=== Phản hồi của runner (stdout/stderr) ===', '')
   return lines.join('\n')
-}
-
-function describeResult(result: ExecuteResult): string {
-  return formatJobLogFooter({
-    ok: result.ok,
-    exitCode: result.exitCode,
-    durationMs: result.durationMs,
-    error: result.error,
-    artifactsFound: result.artifactsFound,
-  })
-}
-
-function runProcess(
-  cliPath: string,
-  args: string[],
-  options: {
-    cwd: string
-    env: NodeJS.ProcessEnv
-    timeoutMs: number
-    onLog?: (chunk: string) => void
-    onStart?: (info: { pid: number | null }) => void
-  },
-): Promise<ProcResult> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(cliPath, args, {
-      cwd: options.cwd,
-      env: options.env,
-      shell: process.platform === 'win32',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    })
-
-    options.onStart?.({ pid: child.pid ?? null })
-
-    let stdout = ''
-    let stderr = ''
-    const onLog = options.onLog
-
-    child.stdout?.on('data', (chunk) => {
-      const text = String(chunk)
-      stdout += text
-      onLog?.(text)
-    })
-    child.stderr?.on('data', (chunk) => {
-      const text = String(chunk)
-      stderr += text
-      onLog?.(text)
-    })
-
-    let killed = false
-    const timer =
-      options.timeoutMs > 0
-        ? setTimeout(() => {
-            killed = true
-            child.kill('SIGTERM')
-          }, options.timeoutMs)
-        : null
-
-    child.on('error', (err) => {
-      if (timer) clearTimeout(timer)
-      reject(err)
-    })
-
-    child.on('close', (code) => {
-      if (timer) clearTimeout(timer)
-      resolve({ exitCode: killed ? -1 : code, stdout, stderr, killed })
-    })
-  })
 }
 
 /**
@@ -240,14 +150,7 @@ export class ConsoleCommandProvider implements RunnerProvider {
     const { args } = buildConsoleInvocation({ flags, userPrompt: req.userPrompt || '' })
 
     const logPath = req.metadata?.logPath as string | undefined
-    const appendLog = (text: string) => {
-      if (!logPath) return
-      try {
-        appendTextFileSync(logPath, text)
-      } catch {
-        /* ignore */
-      }
-    }
+    const appendLog = createJobLogAppender(logPath)
 
     appendLog(
       describePayload({
@@ -267,10 +170,11 @@ export class ConsoleCommandProvider implements RunnerProvider {
     const timeoutMs = req.timeoutMs || runnerConfig.timeoutMs || 600_000
     let procResult: ProcResult
     try {
-      procResult = await runProcess(cliPath, args, {
+      procResult = await runCliProcess(cliPath, args, {
         cwd: req.workspace,
         env: { ...process.env },
         timeoutMs,
+        stdin: 'ignore',
         onLog: wrappedOnLog,
         onStart,
       })
@@ -282,17 +186,11 @@ export class ConsoleCommandProvider implements RunnerProvider {
         logPath,
         error: String(err.message || err),
       }
-      appendLog(describeResult(result))
+      appendLog(describeExecuteResult(result))
       return result
     }
 
-    const artifactsFound: string[] = []
-    if (req.produces?.length) {
-      for (const name of req.produces) {
-        const fp = joinPath(req.workspace, name)
-        if (existsSync(fp)) artifactsFound.push(name)
-      }
-    }
+    const artifactsFound = collectProducedArtifacts(req.workspace, req.produces)
 
     const ok = procResult.exitCode === 0 && !procResult.killed
     const result: ExecuteResult = {
@@ -301,11 +199,11 @@ export class ConsoleCommandProvider implements RunnerProvider {
       durationMs: Date.now() - started,
       logPath,
       artifactsFound,
-      error: ok ? undefined : formatFailure(procResult, timeoutMs),
+      error: ok ? undefined : formatProcessFailure(procResult, timeoutMs),
       timedOut: procResult.killed,
       stdout: procResult.stdout,
     }
-    appendLog(describeResult(result))
+    appendLog(describeExecuteResult(result))
     return result
   }
 }

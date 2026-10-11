@@ -3,6 +3,7 @@ import { isLogTypeEnabled } from '../../../backend/log/loggingPrefsIo.js'
 import type { UsageSnapshot } from '../../../shared/log/schema.js'
 import type { TokenUsage, UsageSource } from './providers/RunnerProvider.js'
 import type { JobRecord } from './types.js'
+import { loadJob, mergeJobUsage, stepIdOf } from './jobRecords.js'
 
 /**
  * Ghi usage của một job: gộp vào `JobRecord.usage` + append usage log. Một chỗ
@@ -51,9 +52,6 @@ export async function recordJobUsage(
     source: UsageSource
   },
 ): Promise<void> {
-  // Dynamic import avoids circular init with jobQueue (which imports this module).
-  const { loadJob, mergeJobUsage, stepIdOf } = await import('./jobQueue.js')
-
   const finishedAt = job.finishedAt || new Date().toISOString()
   const snapshot: UsageSnapshot = {
     inputTokens: input.tokens.inputTokens,

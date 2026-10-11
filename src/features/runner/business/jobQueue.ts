@@ -18,9 +18,9 @@ import { getCredential } from './credentials.js'
 import { resolveAgent } from './agentResolver.js'
 import { loadTaskSessionLedger, recordSessionUsage, resolveSessionPlan, mintSessionId, type SessionMode } from './sessionLedger.js'
 import { captureTokenUsageFromExecute } from './usageCapture.js'
+import { ensureJobsDir, jobsDir, loadJob, mergeJobUsage, saveJob, stepIdOf } from './jobRecords.js'
 import type { Connection, CredentialProfile, ExecuteResult, JobRecord, JobStatus, MutationResult } from './types.js'
 import type { RunTaskStepResult } from '../../monitor/business/tasks/runStep.js'
-import type { UsageSnapshot } from '../../../shared/log/schema.js'
 import { stepSummaryOf } from '../../../shared/lib/orchestrator.js'
 import {
   advanceStepOnJobSuccess,
@@ -133,7 +133,7 @@ async function tryDispatchOrchestratorDecision(job: JobRecord, stdout: string): 
     }
 
     // Dynamic import avoids a static runner→monitor cycle (monitor's business
-    // index re-exports from runner's) — same pattern as usageCapture.ts.
+    // index re-exports from runner's).
     const { runTaskStep } = await import('../../monitor/business/tasks/runStep.js')
     const res: RunTaskStepResult = await runTaskStep(devTeamRoot, projectId || null, taskId, {
       targetStepId: decision.stepId,
@@ -206,17 +206,6 @@ function withStepSummary(record: JobRecord, stdout: string | undefined): JobReco
   return summary ? { ...record, metadata: { ...record.metadata, stepSummary: summary } } : record
 }
 
-/**
- * The pipeline step a job belongs to. Pipeline run-step jobs tag
- * `pipelineStepId`; ad-hoc/quick-action jobs use `stepId`.
- */
-export function stepIdOf(job: JobRecord): string | undefined {
-  const meta = job.metadata || {}
-  if (typeof meta.stepId === 'string' && meta.stepId) return meta.stepId
-  if (typeof meta.pipelineStepId === 'string' && meta.pipelineStepId) return meta.pipelineStepId
-  return undefined
-}
-
 function credentialForConnection(conn: Connection): CredentialProfile | null {
   if (conn.kind === 'local-console') {
     return {
@@ -268,18 +257,6 @@ reapOrphanedRunningJobs()
 // còn nằm TRONG repo người dùng kèm bản sao lưu `.cursor/mcp.json` gốc của họ.
 cleanupOrphanedMcpDeliveries()
 startRecoverPoller()
-
-function jobsDir(): string {
-  return joinPath(registryHome(), 'jobs')
-}
-
-function jobFile(id: string): string {
-  return joinPath(jobsDir(), `${id}.json`)
-}
-
-function ensureJobsDir(): void {
-  mkdirSync(jobsDir(), { recursive: true })
-}
 
 // Approval flow (see JobRecord's sessionId/applyTarget/approvalArtifact/
 // parentJobId doc comments in types.ts).
@@ -434,26 +411,8 @@ function foldProposalIntoScratch(job: JobRecord, stdout: string): void {
   // else: whole-file job with no stdout — keep whatever the agent wrote.
 }
 
-export function loadJob(id: string): JobRecord | null {
-  try {
-    return JSON.parse(readTextFileSync(jobFile(id)))
-  } catch {
-    return null
-  }
-}
-
-function saveJob(job: JobRecord): JobRecord {
-  ensureJobsDir()
-  writeTextFileAtomicSync(jobFile(job.id), JSON.stringify(job, null, 2))
-  return job
-}
-
-/** Merge usage onto an existing job record (usage capture path). */
-export function mergeJobUsage(id: string, usage: UsageSnapshot): JobRecord | null {
-  const cur = loadJob(id)
-  if (!cur) return null
-  return saveJob({ ...cur, usage })
-}
+// Đọc/ghi JobRecord nằm ở `jobRecords.ts` — giữ export ở đây cho caller hiện có.
+export { loadJob, mergeJobUsage, stepIdOf }
 
 /**
  * Đánh dấu job orchestrator đã thi hành 1 quyết định qua `POST /api/orchestrator/decide`

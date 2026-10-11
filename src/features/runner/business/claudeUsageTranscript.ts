@@ -7,7 +7,7 @@ import {
   safeReadDir,
 } from '../../../backend/lib/fileHelper.js'
 import { isLogTypeEnabled } from '../../../backend/log/loggingPrefsIo.js'
-import { getUsageCursor, setUsageCursor } from './sessionLedger.js'
+import { getUsageCursor, setUsageCursor, type UsageCursor } from './sessionLedger.js'
 import { recordJobUsage } from './usageCapture.js'
 import type { JobRecord } from './types.js'
 
@@ -197,6 +197,57 @@ function metaString(job: JobRecord, key: string): string | null {
   return typeof v === 'string' && v ? v : null
 }
 
+/** Phiên đã gắn vào task (có `projectId` + `taskId`) mới có cursor trên task ledger. */
+type TaskSessionKey = { projectId: string; taskId: string; sessionId: string }
+
+function taskSessionKey(job: JobRecord, sessionId: string): TaskSessionKey | null {
+  const projectId = metaString(job, 'projectId')
+  const taskId = metaString(job, 'taskId')
+  return projectId && taskId ? { projectId, taskId, sessionId } : null
+}
+
+function readCursor(key: TaskSessionKey | null): UsageCursor {
+  const empty = { mainLines: 0, subagentFiles: [] }
+  if (!key) return empty
+  return getUsageCursor(key.projectId, key.taskId, key.sessionId) ?? empty
+}
+
+function writeCursor(key: TaskSessionKey | null, cursor: UsageCursor): void {
+  if (key) setUsageCursor(key.projectId, key.taskId, key.sessionId, cursor)
+}
+
+/** Usage của các file subagent MỚI (chưa có trong cursor) — trả cả danh sách file đã đi qua để tiến cursor. */
+async function readNewSubagentParts(
+  workspace: string,
+  sessionId: string,
+  knownFiles: string[],
+): Promise<{ parts: UsagePart[]; newFiles: string[] }> {
+  const parts: UsagePart[] = []
+  const newFiles: string[] = []
+  const subDir = subagentsDir(workspace, sessionId)
+  if (!subDir) return { parts, newFiles }
+  const names = await listNewSubagentFiles(subDir, knownFiles)
+  for (const name of names) {
+    newFiles.push(name)
+    const abs = resolveSubagentFile(subDir, name)
+    if (!abs) continue
+    const sub = await readSubagentUsage(abs)
+    if (sub && hasAnyTokens(sub.usage)) {
+      parts.push({ source: 'subagent', usage: sub.usage, model: sub.model })
+    }
+  }
+  return { parts, newFiles }
+}
+
+/** Model của phần cuối cùng có khai model. */
+function lastModelOf(parts: UsagePart[]): string | null {
+  let model: string | null = null
+  for (const p of parts) {
+    if (p.model) model = p.model
+  }
+  return model
+}
+
 /**
  * Capture Claude transcript token delta for a finished job — hook
  * `captureUsage` của `ClaudeCliProvider`, ghi `source: 'aggregate'`.
@@ -211,12 +262,8 @@ export async function captureClaudeTranscriptUsage(
   if (!isLogTypeEnabled('usage')) return
   if (!sessionId) return
 
-  const projectId = metaString(job, 'projectId')
-  const taskId = metaString(job, 'taskId')
-  const cursor =
-    projectId && taskId
-      ? getUsageCursor(projectId, taskId, sessionId) ?? { mainLines: 0, subagentFiles: [] }
-      : { mainLines: 0, subagentFiles: [] }
+  const key = taskSessionKey(job, sessionId)
+  const cursor = readCursor(key)
 
   const mainPath = sessionTranscriptPath(job.workspace, sessionId)
   const main = mainPath ? await readNewUsage(mainPath, cursor.mainLines) : null
@@ -226,37 +273,20 @@ export async function captureClaudeTranscriptUsage(
     parts.push({ source: 'main', usage: main.usage, model: main.model })
   }
 
-  const newSubFiles: string[] = []
-  const subDir = subagentsDir(job.workspace, sessionId)
-  if (subDir) {
-    const names = await listNewSubagentFiles(subDir, cursor.subagentFiles)
-    for (const name of names) {
-      newSubFiles.push(name)
-      const abs = resolveSubagentFile(subDir, name)
-      if (!abs) continue
-      const sub = await readSubagentUsage(abs)
-      if (sub && hasAnyTokens(sub.usage)) {
-        parts.push({ source: 'subagent', usage: sub.usage, model: sub.model })
-      }
-    }
-  }
+  const sub = await readNewSubagentParts(job.workspace, sessionId, cursor.subagentFiles)
+  parts.push(...sub.parts)
 
   const nextCursor = {
     mainLines: main?.totalLines ?? cursor.mainLines,
-    subagentFiles: [...cursor.subagentFiles, ...newSubFiles],
+    subagentFiles: [...cursor.subagentFiles, ...sub.newFiles],
   }
 
   if (parts.length === 0) {
-    if (projectId && taskId) setUsageCursor(projectId, taskId, sessionId, nextCursor)
+    writeCursor(key, nextCursor)
     return
   }
 
   const agg = sumTokenUsage(parts.map((p) => p.usage))
-  let model: string | null = null
-  for (const p of parts) {
-    if (p.model) model = p.model
-  }
-
   await recordJobUsage(job, {
     providerId,
     tokens: {
@@ -266,10 +296,10 @@ export async function captureClaudeTranscriptUsage(
       cacheWriteTokens: agg.cacheWriteTokens,
       totalTokens: totalTokensOf(agg),
     },
-    model,
+    model: lastModelOf(parts),
     sessionId,
     source: 'aggregate',
   })
 
-  if (projectId && taskId) setUsageCursor(projectId, taskId, sessionId, nextCursor)
+  writeCursor(key, nextCursor)
 }
