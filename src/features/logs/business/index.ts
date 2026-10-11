@@ -1,12 +1,10 @@
 import { AbstractBusiness } from '../../../backend/business/AbstractBusiness.js'
 import { readLogs } from './store.js'
 import { readJobLog, readJobLogDelta, readTaskJobLogDelta } from './jobLog.js'
-import { isLogTypeEnabled } from '../../../backend/log/loggingPrefsIo.js'
-import type { LogType } from '../../../shared/log/schema.js'
+import { isLogTypeEnabled, type LogType } from '../../../backend/log/index.js'
 
 export class LogsBusiness extends AbstractBusiness {
   listLogs(opts: { type?: LogType; project?: string; limit?: number }) {
-    if (opts.type && !isLogTypeEnabled(opts.type)) return Promise.resolve([])
     return readLogs(opts)
   }
 
@@ -48,10 +46,8 @@ export class LogsBusiness extends AbstractBusiness {
   }
 }
 
-/** Peers from runner (owned by runner feature). */
-export { loadJob, listJobs } from '../../runner/business/jobQueue.js'
-export type { JobRecord, JobStatus } from '../../runner/business/types.js'
+/** Peers from runner (owned by runner feature) — qua barrel runner. */
+export { loadJob, listJobs, type JobRecord, type JobStatus } from '../../runner/business/index.js'
 
 export { readLogs }
-export { emitAudit, appendRequestLog } from '../../../backend/log/store.js'
 export { readJobLog, readJobLogDelta, readTaskJobLogDelta, resolveTaskJobId, sanitiseJobId } from './jobLog.js'
