@@ -28,7 +28,7 @@
 - **Runtime & build** — [Bun](https://bun.sh) (dev server, test, script), [Vite](https://vitejs.dev) cho SPA và dev middleware.
 - **Frontend** — [Vue 3](https://vuejs.org) `<script setup>`, DI/IoC bằng `provide/inject` thuần + `ModeRegistry` (mỗi mode tự đăng ký), `vue-i18n` (vi/en, glob theo feature), [Vue Flow](https://vueflow.dev) cho pipeline canvas, Toast UI Editor + Mermaid cho markdown & sơ đồ, SCSS token tập trung.
 - **Backend** — [Hono](https://hono.dev) trên **hai transport** (Vite middleware khi dev, `src/backend/standalone.ts` khi chạy Node/Bun), route tự nạp từ `src/features/*/api.ts`, [Zod](https://zod.dev) validate biên I/O, không database — filesystem là nguồn sự thật.
-- **Tích hợp AI** — Anthropic SDK cho wizard sinh agent bằng ngôn ngữ tự nhiên; MCP server stdio (`bun run mcp`) cho Claude Code, có mode vận hành `readonly` / `full`.
+- **Tích hợp AI** — MCP server stdio (`bun run mcp`) cho Claude Code, có mode vận hành `readonly` / `full`.
 - **Chất lượng** — TypeScript (`vue-tsc`), ESLint, Prettier, Commitlint, `bun test` (domain/API), Vitest + coverage (frontend), Playwright (e2e).
 - **Đóng gói** — Docker Compose + Dockerfile kèm `install.sh` (xem [`docker/`](docker/)).
 
@@ -36,7 +36,7 @@
 
 - **Monitor** — theo dõi task đang chạy tới đâu: danh sách task, pipeline view theo phase, HITL gate chờ duyệt, timeline, panel artifact sửa tại chỗ, hỏi đáp Q&A với runner.
 - **Pipeline editor** — thiết kế luồng làm việc: kéo thả bước, gắn agent / rule / skill cho từng bước, bật auto-review và HITL, lưu thành profile.
-- **Agent editor** — soạn agent riêng: sửa từng section prompt, template bước workflow, wizard sinh bản nháp từ mô tả tiếng Việt (cần `ANTHROPIC_API_KEY`).
+- **Agent editor** — soạn agent riêng: sửa từng section prompt, template bước workflow.
 - **Automations** — đặt luật chạy tự động: trigger theo lịch (một lần / lặp / cron) hoặc theo sự kiện, chuỗi nhiều bước `runTask`, chọn project đích cho từng bước.
 - **Knowledge** — kho tri thức agent đọc khi làm việc: ghi chú theo scope project / system, chọn driver lưu trữ, tra cứu và sửa ngay trên UI.
 - **Runner** — chỗ công việc chạy thật: khai báo connection, quản lý credential (vault mã hoá bằng `DASHBOARD_SECRET_KEY`), theo dõi hàng đợi job và log stdout; job đang chạy hiện ở panel nổi, xong thì báo qua chuông thông báo.
