@@ -8,7 +8,8 @@ import type { RegistryContext } from '../../../../src/backend/http/types.js'
 // Characterization cho #447 (Tfb77cf90-P8): fallback `<projectRoot>/plugins/<name>`
 // của `GET /api/catalog-agent` và `GET /api/skill-content` khi id `repo:` không
 // resolve được qua marketplace.json. Fallback này dời từ controller vào
-// `RepoPluginSource` — hành vi route phải giữ nguyên văn.
+// `RepoPluginSource` — hành vi route phải giữ nguyên văn, trừ khe traversal ở
+// fallback của route agent đã vá ở #513.
 
 let outerBase: string
 let projectRoot: string
@@ -112,14 +113,24 @@ describe('GET /api/catalog-agent — fallback plugins/', () => {
     expect((await res.json()).error).toBe('unknown project')
   })
 
-  // ⚠️ BẢO MẬT — hành vi HIỆN TẠI, giữ nguyên trong #447 (không regression):
-  // fallback plugins/ của route agent KHÔNG sanitise pluginName, nên traversal
-  // trong phần source đọc được file `.md` ngoài `plugins/`. Sẽ fix ở issue riêng;
-  // khi fix, test này phải đổi thành "không trả 200".
-  test('⚠️ characterization: repo:../../../outside:secret thoát khỏi plugins/ (khe traversal có sẵn)', async () => {
+  // Chặn traversal (#513): pluginName và name của fallback plugins/ qua whitelist
+  // ký tự + `resolvePathUnder(<projectRoot>/plugins)`; không hợp lệ → 404 như không tìm thấy.
+  test('traversal trong pluginName bị chặn ở route agent → 404', async () => {
     const res = await q('/api/catalog-agent', 'repo:../../../outside:secret')
+    expect(res.status).toBe(404)
+    expect(await res.json()).toEqual({ error: 'agent file not found' })
+  })
+
+  test('traversal trong name bị chặn ở route agent → 404', async () => {
+    const res = await q('/api/catalog-agent', 'repo:builtin:../../../../../outside/agents/secret')
+    expect(res.status).toBe(404)
+    expect(await res.json()).toEqual({ error: 'agent file not found' })
+  })
+
+  test('id hợp lệ sau khi chặn traversal vẫn trả nội dung agent', async () => {
+    const res = await q('/api/catalog-agent', 'repo:builtin:helper')
     expect(res.status).toBe(200)
-    expect((await res.json()).content).toContain('OUTSIDE AGENT')
+    expect((await res.json()).content).toContain('## Vai trò')
   })
 })
 

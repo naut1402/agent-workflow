@@ -73,6 +73,14 @@ describe('PipelineEditorBusiness.getCatalogAgent', () => {
     expect(r.path).toBe(path.join(projectRoot, 'plugins', 'p', 'agents', 'a.md'))
   })
 
+  test('repo: fallback plugins/ — pluginName/name không qua whitelist → 404', async () => {
+    await write(path.join(projectRoot, 'plugins', 'p', 'agents', 'a.md'), '---\ndescription: builtin\n---\n')
+    const biz = new PipelineEditorBusiness(root)
+    const notFound = { status: 404, error: 'agent file not found' }
+    expect(await biz.getCatalogAgent('repo:../p:a')).toEqual(notFound)
+    expect(await biz.getCatalogAgent('repo:p:../agents/a')).toEqual(notFound)
+  })
+
   test('không file nào → 404 agent file not found', async () => {
     expect(await new PipelineEditorBusiness(root).getCatalogAgent('user:ghost')).toEqual({
       status: 404,
