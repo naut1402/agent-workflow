@@ -1,4 +1,41 @@
-import { computed, ref, type ComputedRef } from 'vue'
+import { computed, getCurrentScope, onScopeDispose, shallowRef, type ComputedRef } from 'vue'
+import { isAbortError } from '../http/client'
+
+export type ApiActionFn<T> = (signal: AbortSignal) => Promise<T>
+
+// xem docs/agent-rules/ui-design-guideline.md §3.4
+function useActionSlot<K>() {
+  const active = shallowRef<K | null>(null)
+  let controller: AbortController | null = null
+
+  function abort(): void {
+    controller?.abort()
+    controller = null
+    active.value = null
+  }
+
+  async function run<T>(key: K, fn: ApiActionFn<T>): Promise<T | undefined> {
+    if (active.value !== null) return undefined
+    const own = new AbortController()
+    controller = own
+    active.value = key
+    try {
+      return await fn(own.signal)
+    } catch (err) {
+      if (own.signal.aborted && isAbortError(err)) return undefined
+      throw err
+    } finally {
+      if (controller === own) {
+        controller = null
+        active.value = null
+      }
+    }
+  }
+
+  if (getCurrentScope()) onScopeDispose(abort)
+
+  return { active, run, abort }
+}
 
 /**
  * Cờ `pending` cho một action gọi API do NGƯỜI DÙNG bấm.
@@ -24,22 +61,17 @@ import { computed, ref, type ComputedRef } from 'vue'
  */
 export function useApiAction(): {
   pending: ComputedRef<boolean>
-  run: <T>(fn: () => Promise<T>) => Promise<T | undefined>
+  run: <T>(fn: ApiActionFn<T>) => Promise<T | undefined>
+  abort: () => void
 } {
-  const running = ref(false)
-  const pending = computed(() => running.value)
+  const slot = useActionSlot<true>()
+  const pending = computed(() => slot.active.value !== null)
 
-  async function run<T>(fn: () => Promise<T>): Promise<T | undefined> {
-    if (running.value) return undefined
-    running.value = true
-    try {
-      return await fn()
-    } finally {
-      running.value = false
-    }
+  function run<T>(fn: ApiActionFn<T>): Promise<T | undefined> {
+    return slot.run(true, fn)
   }
 
-  return { pending, run }
+  return { pending, run, abort: slot.abort }
 }
 
 /**
@@ -58,21 +90,12 @@ export function useApiAction(): {
 export function useKeyedApiAction(): {
   pendingKey: ComputedRef<string | null>
   pending: ComputedRef<boolean>
-  run: <T>(key: string, fn: () => Promise<T>) => Promise<T | undefined>
+  run: <T>(key: string, fn: ApiActionFn<T>) => Promise<T | undefined>
+  abort: () => void
 } {
-  const runningKey = ref<string | null>(null)
-  const pendingKey = computed(() => runningKey.value)
-  const pending = computed(() => runningKey.value !== null)
+  const slot = useActionSlot<string>()
+  const pendingKey = computed(() => slot.active.value)
+  const pending = computed(() => slot.active.value !== null)
 
-  async function run<T>(key: string, fn: () => Promise<T>): Promise<T | undefined> {
-    if (runningKey.value !== null) return undefined
-    runningKey.value = key
-    try {
-      return await fn()
-    } finally {
-      runningKey.value = null
-    }
-  }
-
-  return { pendingKey, pending, run }
+  return { pendingKey, pending, run: slot.run, abort: slot.abort }
 }
