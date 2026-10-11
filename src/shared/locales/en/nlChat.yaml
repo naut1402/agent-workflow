@@ -56,7 +56,6 @@ builder:
   statusThinking: Agent is thinking… {seconds}s
   checkingAgents: Checking the list of valid agents...
   unknownAgents: 'Agents not found in the catalog: {agents}'
-  invalidDraftJson: The draft JSON is invalid — please fix it before confirming.
   draftBadge: Draft {entity}
   entity:
     task: Task

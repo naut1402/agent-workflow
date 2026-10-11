@@ -56,7 +56,6 @@ builder:
   statusThinking: Agent đang suy nghĩ… {seconds}s
   checkingAgents: Đang kiểm tra danh sách agent hợp lệ...
   unknownAgents: 'Agent không tồn tại trong catalog: {agents}'
-  invalidDraftJson: Draft JSON không hợp lệ — vui lòng sửa lại trước khi xác nhận.
   draftBadge: Draft {entity}
   entity:
     task: Task
