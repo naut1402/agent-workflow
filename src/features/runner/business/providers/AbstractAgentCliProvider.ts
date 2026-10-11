@@ -1,10 +1,8 @@
-import { appendTextFileSync, existsSync, joinPath } from '../../../../backend/lib/fileHelper.js'
-import { spawn } from '../../../../backend/lib/processHelper.js'
 import { resolveSecretRef } from '../credentials.js'
 import { prepareSessionInvocation, type SessionCaptureMode, type SessionPrepareResult } from '../sessionLedger.js'
 import type { CredentialProfile, ResolvedAgent } from '../types.js'
 import { SecretMasker, SelfMcpServer } from '../../../mcp/business/index.js'
-import { formatJobLogFooter, formatJobLogHeader } from '../jobLogFormat.js'
+import { formatJobLogHeader } from '../jobLogFormat.js'
 import type { McpConfigHandle } from '../mcpDelivery/FileMcpDelivery.js'
 import type { McpJobDelivery } from '../mcpDelivery/McpJobDelivery.js'
 import { NoMcpDelivery } from '../mcpDelivery/NoMcpDelivery.js'
@@ -18,6 +16,8 @@ import {
   type TokenUsage,
   type TranscriptFormat,
 } from './RunnerProvider.js'
+import { formatProcessFailure, runCliProcess, type ProcResult } from './cliProcess.js'
+import { agentLabelOf, collectProducedArtifacts, createJobLogAppender, describeExecuteResult, jobLogHeaderMeta } from './providerJobReport.js'
 
 /**
  * Agent CLI family — Claude / Cursor / Codex (and future AI CLIs).
@@ -45,13 +45,6 @@ export function isAgentCliProvider(provider: RunnerProvider | null | undefined):
   if (!provider) return false
   const candidate = provider as Partial<AgentCliProvider>
   return typeof candidate.agentCapabilities === 'function' && candidate.family === 'agent-cli'
-}
-
-interface ProcResult {
-  exitCode: number | null
-  stdout: string
-  stderr: string
-  killed: boolean
 }
 
 /** cwd for a real CLI child process is the task workspace (`req.workspace`), not the repo
@@ -94,17 +87,10 @@ function buildChildEnv(credential: CredentialProfile, metadata?: Record<string, 
   return env
 }
 
-function formatFailure(procResult: ProcResult, timeoutMs: number): string {
-  if (procResult.killed) return `process timed out after ${timeoutMs}ms`
-  const fromStreams = [procResult.stderr, procResult.stdout].filter(Boolean).join('\n').trim()
-  if (fromStreams) return fromStreams.slice(0, 1000)
-  return `exit code ${procResult.exitCode ?? 'unknown'}`
-}
+const PROMPT_PLACEHOLDER = '<prompt — xem "--- Prompt ---" bên dưới>'
+const PROMPT_VIA_STDIN_NOTE = '(prompt gửi qua stdin — xem "--- Prompt ---" bên dưới)'
 
-/** Payload header written to the job log before the process starts, so the raw
- * log (as shown in LogsPanel) explains what was actually sent to the runner
- * instead of just the interleaved stdout/stderr. */
-function describePayload(opts: {
+interface PayloadDescription {
   resolvedAgent: ResolvedAgent
   workspace: string
   cliPath: string
@@ -117,147 +103,77 @@ function describePayload(opts: {
   resumeSessionId?: string
   prompt: string
   metadata?: Record<string, unknown>
-}): string {
-  const cli = [opts.cliPath]
-  let promptNote = ''
-  if (opts.promptViaStdin) {
-    // Argv already holds flags only; prompt is below under "--- Prompt ---".
-    cli.push(...opts.argv)
-    promptNote = '(prompt gửi qua stdin — xem "--- Prompt ---" bên dưới)'
-  } else {
-    // Keep the (potentially huge) prompt out of the CLI summary line.
-    cli.push(...opts.flags, '<prompt — xem "--- Prompt ---" bên dưới>')
-  }
+}
+
+/** Dòng `CLI:` của payload — prompt (có thể rất dài) không bao giờ nằm trong dòng này. */
+function describeCliLine(opts: PayloadDescription): string {
+  // Argv already holds flags only when the prompt goes via stdin; it is below under "--- Prompt ---".
+  const cli = opts.promptViaStdin
+    ? [opts.cliPath, ...opts.argv]
+    : [opts.cliPath, ...opts.flags, PROMPT_PLACEHOLDER]
+  return `CLI: ${cli.join(' ')}`
+}
+
+/** Dòng `Selection:` khi job chạy trên vùng chọn của artifact, hoặc `null`. */
+function describeSelection(metadata: Record<string, unknown> | undefined): string | null {
+  if (!metadata?.hasSelection) return null
+  const startLine = metadata.selectionStartLine
+  const endLine = metadata.selectionEndLine
+  const range = startLine != null ? ` — dòng ${startLine}${endLine && endLine !== startLine ? `-${endLine}` : ''}` : ''
+  return `Selection: ${metadata.selectionChars ?? '?'} ký tự${range}`
+}
+
+/** Payload header written to the job log before the process starts, so the raw
+ * log (as shown in LogsPanel) explains what was actually sent to the runner
+ * instead of just the interleaved stdout/stderr. */
+function describePayload(opts: PayloadDescription): string {
   const agent = opts.resolvedAgent
-  const agentLabel = agent.ref
-    ? `${agent.ref}${agent.name ? ` (${agent.name})` : ''}`
-    : `${agent.name || 'ad-hoc'} — không gắn agent, chạy prompt trực tiếp`
   const meta = opts.metadata || {}
   const lines = [
     formatJobLogHeader({
       jobId: String(meta.jobId || meta.logJobId || ''),
       providerId: typeof meta.providerId === 'string' ? meta.providerId : undefined,
-      runnerId: typeof meta.runnerId === 'string' ? meta.runnerId : undefined,
-      connectionId: typeof meta.connectionId === 'string' ? meta.connectionId : undefined,
-      projectId: typeof meta.projectId === 'string' ? meta.projectId : undefined,
-      taskId: typeof meta.taskId === 'string' ? meta.taskId : undefined,
-      stepId:
-        typeof meta.stepId === 'string'
-          ? meta.stepId
-          : typeof meta.pipelineStepId === 'string'
-            ? meta.pipelineStepId
-            : undefined,
+      ...jobLogHeaderMeta(meta),
       sessionId: opts.sessionId,
       resumeSessionId: opts.resumeSessionId,
       workspace: opts.workspace,
       mode: 'agent-cli',
     }).trimEnd(),
     '=== Payload gửi cho runner ===',
-    `Agent: ${agentLabel}${agent.model ? ` — model: ${agent.model}` : ''}`,
+    `Agent: ${agentLabelOf(agent)}${agent.model ? ` — model: ${agent.model}` : ''}`,
     `Workspace: ${opts.workspace}`,
-    `CLI: ${cli.join(' ')}`,
+    describeCliLine(opts),
   ]
-  if (promptNote) lines.push(promptNote)
-  if (opts.metadata?.hasSelection) {
-    const startLine = opts.metadata.selectionStartLine
-    const endLine = opts.metadata.selectionEndLine
-    const range = startLine != null ? ` — dòng ${startLine}${endLine && endLine !== startLine ? `-${endLine}` : ''}` : ''
-    lines.push(`Selection: ${opts.metadata.selectionChars ?? '?'} ký tự${range}`)
-  }
+  if (opts.promptViaStdin) lines.push(PROMPT_VIA_STDIN_NOTE)
+  const selection = describeSelection(opts.metadata)
+  if (selection) lines.push(selection)
   lines.push('--- Prompt ---', opts.prompt, '', '=== Phản hồi của runner (stdout/stderr) ===', '')
   return lines.join('\n')
 }
 
-/** Result footer appended after the process exits — the "what happened" summary
- * that used to be dropped once ExecuteResult was returned. */
-function describeResult(result: ExecuteResult): string {
-  return formatJobLogFooter({
-    ok: result.ok,
-    exitCode: result.exitCode,
-    durationMs: result.durationMs,
-    sessionId: result.sessionId,
-    error: result.error,
-    artifactsFound: result.artifactsFound,
-    tokenUsage: result.tokenUsage,
-  })
+/** Log job của một lần chạy: ghi (đã mask) và đóng kết quả lỗi kèm footer. */
+interface AgentCliJobLog {
+  logPath: string | undefined
+  append: (text: string) => void
+  mask: (text: string) => string
+  /** Dựng `ExecuteResult` lỗi (không exit code), ghi footer rồi trả về. */
+  fail: (error: string) => ExecuteResult
 }
 
-interface RunProcessOptions {
-  cwd: string
-  env: NodeJS.ProcessEnv
-  timeoutMs: number
+/** Mọi thứ `execute` đã chuẩn bị, chuyển cho bước spawn. */
+interface AgentCliRun {
+  req: ExecuteRequest
+  runnerConfig: Record<string, any>
+  credential: CredentialProfile
+  cliPath: string
+  flags: string[]
+  prompt: string
+  sessionPlan: SessionPrepareResult
+  mcpHandle: McpConfigHandle | null
+  log: AgentCliJobLog
+  started: number
   onLog?: (chunk: string) => void
   onStart?: (info: { pid: number | null }) => void
-  /** When set, written to the child's stdin (then stdin is closed) instead of
-   * being passed as an argv element. Required for the claude headless prompt:
-   * on Windows we must spawn with `shell: true` (to run the `claude.cmd` shim,
-   * see CVE-2024-27980), but Node does NOT quote argv elements under
-   * `shell: true` on Windows — it space-joins them for cmd.exe, so a
-   * multi-line/whitespace prompt in argv gets split and `claude -p` only
-   * receives the first token. Piping the prompt via stdin sidesteps quoting
-   * entirely (`cat prompt | claude -p`). */
-  stdinInput?: string
-}
-
-function runProcess(cliPath: string, args: string[], options: RunProcessOptions): Promise<ProcResult> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(cliPath, args, {
-      cwd: options.cwd,
-      env: options.env,
-      // win32: shell:true runs the .cmd shim; child.pid is cmd.exe — cancel must
-      // use taskkill /T to kill the whole tree (see jobQueue cancelJob).
-      shell: process.platform === 'win32',
-      stdio: ['pipe', 'pipe', 'pipe'],
-    })
-
-    options.onStart?.({ pid: child.pid ?? null })
-
-    if (options.stdinInput != null && child.stdin) {
-      // Guard against EPIPE / write-after-end (e.g. the CLI exits before
-      // draining stdin) so a broken pipe never leaves the Promise hanging or
-      // crashes the process with an unhandled 'error'.
-      child.stdin.on('error', () => {
-        /* ignore broken pipe — close/error handlers below settle the Promise */
-      })
-      child.stdin.end(options.stdinInput)
-    } else {
-      child.stdin?.end()
-    }
-
-    let stdout = ''
-    let stderr = ''
-    const onLog = options.onLog
-
-    child.stdout?.on('data', (chunk) => {
-      const text = String(chunk)
-      stdout += text
-      onLog?.(text)
-    })
-    child.stderr?.on('data', (chunk) => {
-      const text = String(chunk)
-      stderr += text
-      onLog?.(text)
-    })
-
-    let killed = false
-    const timer =
-      options.timeoutMs > 0
-        ? setTimeout(() => {
-            killed = true
-            child.kill('SIGTERM')
-          }, options.timeoutMs)
-        : null
-
-    child.on('error', (err) => {
-      if (timer) clearTimeout(timer)
-      reject(err)
-    })
-
-    child.on('close', (code) => {
-      if (timer) clearTimeout(timer)
-      resolve({ exitCode: killed ? -1 : code, stdout, stderr, killed })
-    })
-  })
 }
 
 /** Đầu vào `buildInvocation` — mọi thứ template đã chuẩn bị trước khi spawn. */
@@ -406,13 +322,16 @@ export abstract class AbstractAgentCliProvider implements AgentCliProvider {
     // xong, mà mọi dòng log đều phải đi qua cùng một bộ lọc.
     const maskLog = (text: string) =>
       mcpHandle?.masker.values.length ? mcpHandle.masker.mask(text) : text
-    const appendLog = (text: string) => {
-      if (!logPath) return
-      try {
-        appendTextFileSync(logPath, maskLog(text))
-      } catch {
-        /* ignore */
-      }
+    const appendLog = createJobLogAppender(logPath, maskLog)
+    const log: AgentCliJobLog = {
+      logPath,
+      append: appendLog,
+      mask: maskLog,
+      fail: (error) => {
+        const result: ExecuteResult = { ok: false, exitCode: null, durationMs: Date.now() - started, logPath, error }
+        appendLog(describeExecuteResult(result))
+        return result
+      },
     }
 
     // try/finally phải ôm TOÀN BỘ phần còn lại, kể cả lời gọi sinh file và nhánh
@@ -436,135 +355,139 @@ export abstract class AbstractAgentCliProvider implements AgentCliProvider {
       } catch (err: any) {
         // Chạy tiếp mà thiếu tool là kiểu hỏng tệ nhất: job fail vì lý do
         // không liên quan và không ai truy được về đây.
-        const result: ExecuteResult = {
-          ok: false,
-          exitCode: null,
-          durationMs: Date.now() - started,
-          logPath,
-          error: `không sinh được file cấu hình MCP: ${String(err?.message ?? err)}`,
-        }
-        appendLog(describeResult(result))
-        return result
+        return log.fail(`không sinh được file cấu hình MCP: ${String(err?.message ?? err)}`)
       }
 
-      const { args, stdinInput } = this.buildInvocation({ flags, prompt, runnerConfig, sessionPlan, mcpHandle })
-
-      appendLog(
-        describePayload({
-          resolvedAgent: req.resolvedAgent,
-          workspace: req.workspace,
-          cliPath,
-          flags,
-          argv: args,
-          promptViaStdin: stdinInput != null,
-          sessionId: sessionPlan.sessionId,
-          resumeSessionId: sessionPlan.resumeSessionId,
-          prompt,
-          metadata: req.metadata,
-        }),
-      )
-
-      // Chỉ id server + đường dẫn: nội dung file chứa env/header đã giải.
-      // Warnings đã ra log qua `onWarning` ở trên, không lặp lại ở đây.
-      if (mcpHandle) {
-        appendLog(
-          `[runner] MCP: ${mcpHandle.count} server (${mcpHandle.names.join(', ')}) → ${mcpHandle.path}\n`,
-        )
-        const notice = this.mcpNotice(mcpHandle)
-        if (notice) appendLog(notice)
-      }
-
-      // MCP server (hoặc chính CLI) in token ra stderr là chuyện thường —
-      // `401 Unauthorized: Bearer sk-…`. File config được bảo vệ 0600 mà log job
-      // thì không, nên lọc ở đúng một chỗ trước khi chunk đi bất cứ đâu.
-      //
-      // Bộ lọc phải CÓ TRẠNG THÁI: `maskLog` là split/join từng chunk, nên một
-      // secret bị tiến trình con xuất làm hai chunk lọt qua cả hai lần gọi.
-      // Đổi lại, log trễ `max(len(secret)) - 1` ký tự ⇒ `flushStream()` là bắt
-      // buộc ở CẢ nhánh thành công lẫn nhánh lỗi, nếu không là nuốt đuôi log.
-      const streamMasker = (mcpHandle?.masker ?? SecretMasker.NONE).stream()
-      const emitLog = (text: string) => {
-        if (!text) return
-        onLog?.(text)
-        appendLog(text)
-      }
-      const wrappedOnLog = (chunk: string) => emitLog(streamMasker.push(chunk))
-      // Gọi NGAY sau khi `runProcess` trả về / ném, TRƯỚC mọi `describeResult` —
-      // nếu không thì dòng tổng kết chen lên trước phần đuôi của log stream.
-      const flushStream = () => emitLog(streamMasker.flush())
-
-      const wrappedOnStart = (info: { pid: number | null }) => {
-        onStart?.(info)
-        // So the UI delta stream is not stuck on an empty "=== Phản hồi ==="
-        // section while the CLI is still thinking / using tools.
-        appendLog(`[runner] process started pid=${info.pid ?? 'null'} — chờ stdout/stderr…\n`)
-      }
-
-      const timeoutMs = req.timeoutMs || runnerConfig.timeoutMs || 600_000
-      let procResult: ProcResult
-      try {
-        procResult = await runProcess(cliPath, args, {
-          cwd: req.workspace,
-          env: buildChildEnv(credential, req.metadata),
-          timeoutMs,
-          onLog: wrappedOnLog,
-          onStart: wrappedOnStart,
-          stdinInput,
-        })
-      } catch (err: any) {
-        flushStream()
-        const result: ExecuteResult = {
-          ok: false,
-          exitCode: null,
-          durationMs: Date.now() - started,
-          logPath,
-          error: maskLog(String(err.message || err)),
-        }
-        appendLog(describeResult(result))
-        return result
-      }
-      flushStream()
-
-      const artifactsFound: string[] = []
-      if (req.produces?.length) {
-        for (const name of req.produces) {
-          const fp = joinPath(req.workspace, name)
-          if (existsSync(fp)) artifactsFound.push(name)
-        }
-      }
-
-      const ok = procResult.exitCode === 0 && !procResult.killed
-      const output = this.parseOutput(procResult.stdout)
-      const stdout = output.stdout
-      const capturedSessionId: string | null | undefined =
-        output.sessionId || (sessionPlan.presetSessionId ?? undefined)
-
-      const result: ExecuteResult = {
-        ok,
-        exitCode: procResult.exitCode,
-        durationMs: Date.now() - started,
-        logPath,
-        artifactsFound,
-        // `formatFailure` dựng error từ stderr THÔ, mà error chảy vào
-        // `jobs/<id>.json` (không 0600) và payload `job.failed` → events.jsonl
-        // → SSE. `redactPayload` chỉ lọc theo tên khoá nên khoá `error` lọt sạch.
-        error: ok ? undefined : maskLog(formatFailure(procResult, timeoutMs)),
-        timedOut: procResult.killed,
-        // stdout THÔ: là payload chức năng (proposal ghép vào scratch, dòng
-        // ORCHESTRATOR_DECISION), mask mù sẽ cắt giữa artifact.
-        stdout,
-        // …còn bản ĐÃ MASK đi kèm cho biên persist/API (`JobRecord.stdout`,
-        // `GET /api/jobs`). Hai đường tách hẳn nhau: đường chức năng đọc `stdout`,
-        // đường ghi đĩa đọc `maskedStdout ?? stdout` (`jobQueue.persistStdout`).
-        // 🚫 Không mask thẳng `stdout` — xem design §3.4.
-        ...(mcpHandle?.masker.values.length ? { maskedStdout: maskLog(stdout) } : {}),
-        sessionId: capturedSessionId,
-        tokenUsage: output.tokenUsage,
-      }
-      appendLog(describeResult(result))
-      return result
+      return await this.runInvocation({
+        req,
+        runnerConfig,
+        credential,
+        cliPath,
+        flags,
+        prompt,
+        sessionPlan,
+        mcpHandle,
+        log,
+        started,
+        onLog,
+        onStart,
+      })
     } finally {
       mcpHandle?.dispose()
+    }
+  }
+
+  /** Dòng log MCP — chỉ id server + đường dẫn: nội dung file chứa env/header đã giải. */
+  private logMcpHandle(mcpHandle: McpConfigHandle | null, appendLog: (text: string) => void): void {
+    // Warnings đã ra log qua `onWarning` của `prepare`, không lặp lại ở đây.
+    if (!mcpHandle) return
+    appendLog(`[runner] MCP: ${mcpHandle.count} server (${mcpHandle.names.join(', ')}) → ${mcpHandle.path}\n`)
+    const notice = this.mcpNotice(mcpHandle)
+    if (notice) appendLog(notice)
+  }
+
+  /** argv → log payload → spawn → kết quả. Chạy trong try/finally dọn MCP của `execute`. */
+  private async runInvocation(run: AgentCliRun): Promise<ExecuteResult> {
+    const { req, runnerConfig, cliPath, flags, prompt, sessionPlan, mcpHandle, log } = run
+    const { args, stdinInput } = this.buildInvocation({ flags, prompt, runnerConfig, sessionPlan, mcpHandle })
+
+    log.append(
+      describePayload({
+        resolvedAgent: req.resolvedAgent,
+        workspace: req.workspace,
+        cliPath,
+        flags,
+        argv: args,
+        promptViaStdin: stdinInput != null,
+        sessionId: sessionPlan.sessionId,
+        resumeSessionId: sessionPlan.resumeSessionId,
+        prompt,
+        metadata: req.metadata,
+      }),
+    )
+    this.logMcpHandle(mcpHandle, log.append)
+
+    // MCP server (hoặc chính CLI) in token ra stderr là chuyện thường —
+    // `401 Unauthorized: Bearer sk-…`. File config được bảo vệ 0600 mà log job
+    // thì không, nên lọc ở đúng một chỗ trước khi chunk đi bất cứ đâu.
+    //
+    // Bộ lọc phải CÓ TRẠNG THÁI: `maskLog` là split/join từng chunk, nên một
+    // secret bị tiến trình con xuất làm hai chunk lọt qua cả hai lần gọi.
+    // Đổi lại, log trễ `max(len(secret)) - 1` ký tự ⇒ `flushStream()` là bắt
+    // buộc ở CẢ nhánh thành công lẫn nhánh lỗi, nếu không là nuốt đuôi log.
+    const streamMasker = (mcpHandle?.masker ?? SecretMasker.NONE).stream()
+    const emitLog = (text: string) => {
+      if (!text) return
+      run.onLog?.(text)
+      log.append(text)
+    }
+    const wrappedOnLog = (chunk: string) => emitLog(streamMasker.push(chunk))
+    // Gọi NGAY sau khi `runCliProcess` trả về / ném, TRƯỚC mọi footer kết quả —
+    // nếu không thì dòng tổng kết chen lên trước phần đuôi của log stream.
+    const flushStream = () => emitLog(streamMasker.flush())
+
+    const wrappedOnStart = (info: { pid: number | null }) => {
+      run.onStart?.(info)
+      // So the UI delta stream is not stuck on an empty "=== Phản hồi ==="
+      // section while the CLI is still thinking / using tools.
+      log.append(`[runner] process started pid=${info.pid ?? 'null'} — chờ stdout/stderr…\n`)
+    }
+
+    const timeoutMs = req.timeoutMs || runnerConfig.timeoutMs || 600_000
+    let procResult: ProcResult
+    try {
+      procResult = await runCliProcess(cliPath, args, {
+        cwd: req.workspace,
+        env: buildChildEnv(run.credential, req.metadata),
+        timeoutMs,
+        stdin: 'pipe',
+        onLog: wrappedOnLog,
+        onStart: wrappedOnStart,
+        stdinInput,
+      })
+    } catch (err: any) {
+      flushStream()
+      return log.fail(log.mask(String(err.message || err)))
+    }
+    flushStream()
+
+    const result = this.buildResult(run, procResult, timeoutMs)
+    log.append(describeExecuteResult(result))
+    return result
+  }
+
+  /** `ExecuteResult` của lần chạy đã kết thúc (thành công hay exit code ≠ 0). */
+  private buildResult(run: AgentCliRun, procResult: ProcResult, timeoutMs: number): ExecuteResult {
+    const { req, sessionPlan, mcpHandle, log } = run
+    const artifactsFound = collectProducedArtifacts(req.workspace, req.produces)
+
+    const ok = procResult.exitCode === 0 && !procResult.killed
+    const output = this.parseOutput(procResult.stdout)
+    const stdout = output.stdout
+    const capturedSessionId: string | null | undefined =
+      output.sessionId || (sessionPlan.presetSessionId ?? undefined)
+
+    return {
+      ok,
+      exitCode: procResult.exitCode,
+      durationMs: Date.now() - run.started,
+      logPath: log.logPath,
+      artifactsFound,
+      // `formatProcessFailure` dựng error từ stderr THÔ, mà error chảy vào
+      // `jobs/<id>.json` (không 0600) và payload `job.failed` → events.jsonl
+      // → SSE. `redactPayload` chỉ lọc theo tên khoá nên khoá `error` lọt sạch.
+      error: ok ? undefined : log.mask(formatProcessFailure(procResult, timeoutMs)),
+      timedOut: procResult.killed,
+      // stdout THÔ: là payload chức năng (proposal ghép vào scratch, dòng
+      // ORCHESTRATOR_DECISION), mask mù sẽ cắt giữa artifact.
+      stdout,
+      // …còn bản ĐÃ MASK đi kèm cho biên persist/API (`JobRecord.stdout`,
+      // `GET /api/jobs`). Hai đường tách hẳn nhau: đường chức năng đọc `stdout`,
+      // đường ghi đĩa đọc `maskedStdout ?? stdout` (`jobQueue.persistStdout`).
+      // 🚫 Không mask thẳng `stdout` — xem design §3.4.
+      ...(mcpHandle?.masker.values.length ? { maskedStdout: log.mask(stdout) } : {}),
+      sessionId: capturedSessionId,
+      tokenUsage: output.tokenUsage,
     }
   }
 }

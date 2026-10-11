@@ -1,6 +1,6 @@
 import OpenAI from 'openai'
+import { AbstractCompatibleApiProvider } from './AbstractCompatibleApiProvider.js'
 import {
-  AgenticApiProvider,
   AgenticRunError,
   EMPTY_REPLY_ERROR_MESSAGE,
   EMPTY_REPLY_NUDGE_TEXT,
@@ -11,7 +11,6 @@ import {
 } from './AgenticApiProvider.js'
 import * as workspaceTools from './agenticWorkspaceTools.js'
 import type { TokenUsage } from './RunnerProvider.js'
-import type { McpJobDelivery } from '../mcpDelivery/McpJobDelivery.js'
 import type { McpToolBridge } from '../mcpDelivery/ToolBridgeMcpDelivery.js'
 
 /** Chặn vòng lặp vô hạn khi model liên tục gọi tool — mirror AnthropicCompatibleProvider. */
@@ -191,41 +190,11 @@ function buildTools(extraTools: workspaceTools.ExtraTool[], webSearchConfigured:
  * tool-calling turn after the first. Driving the SDK directly keeps the wire
  * format exactly to spec (and per-call clients avoid shared global state).
  */
-export class OpenAiCompatibleProvider extends AgenticApiProvider {
-  readonly providerId: string
-  private readonly defaultBaseURL: string
-
-  /**
-   * @param ui nhãn + gợi ý UI của endpoint này — có thì provider vào catalog
-   *   (`providerRegistry.ts` truyền; test dựng tay có thể bỏ).
-   */
-  constructor(
-    providerId: string,
-    defaultBaseURL: string,
-    mcpDelivery?: McpJobDelivery<McpToolBridge>,
-    ui?: { label: string; modelHint?: string; secretEnvHint?: string },
-  ) {
-    super(mcpDelivery)
-    this.providerId = providerId
-    this.defaultBaseURL = defaultBaseURL
-    if (ui) {
-      this.catalog = {
-        kind: 'ai-provider',
-        label: ui.label,
-        modelListing: 'api',
-        defaultBaseURL,
-        ...(ui.modelHint ? { modelHint: ui.modelHint } : {}),
-        ...(ui.secretEnvHint ? { secretEnvHint: ui.secretEnvHint } : {}),
-      }
-    }
-  }
+export class OpenAiCompatibleProvider extends AbstractCompatibleApiProvider {
 
   async listModels(apiKey: string, baseURL: string): Promise<string[]> {
     const client = new OpenAI({ baseURL: baseURL || this.defaultBaseURL, apiKey })
-    const page = await client.models.list()
-    const ids: string[] = []
-    for await (const m of page) ids.push(m.id)
-    return ids.sort()
+    return this.sortedModelIds(await client.models.list())
   }
 
   /** Hook một lượt (`complete()`): một request chat, không tool. */
@@ -262,14 +231,14 @@ export class OpenAiCompatibleProvider extends AgenticApiProvider {
     const model = String(ctx.runnerConfig.model || '')
     if (!model) throw new Error('model is required — set it on the runner connection (ConnectionDialog)')
 
-    const timeoutMs = Number(ctx.req.timeoutMs) || Number(ctx.runnerConfig.timeoutMs) || 600_000
+    const timeoutMs = this.requestTimeoutMs(ctx)
     const client = new OpenAI({ baseURL: ctx.runnerConfig.baseURL || this.defaultBaseURL, apiKey: ctx.apiKey, timeout: timeoutMs })
 
-    const extraTools = workspaceTools.resolveExtraTools(ctx.runnerConfig)
-    const baseTools = buildTools(extraTools, workspaceTools.isWebSearchConfigured())
-    // `mcpBridge === null` ⇒ `bridgeTools` rỗng ⇒ `tools` và preamble
-    // byte-identical với bản trước khi có bridge.
-    const bridgeTools = ctx.mcpBridge?.tools ?? []
+    const {
+      baseTools,
+      bridgeTools,
+      system: systemContent,
+    } = this.prepareToolset(ctx, buildTools, (t) => t.function.name)
     const tools: OpenAI.Chat.Completions.ChatCompletionFunctionTool[] = [
       ...baseTools,
       ...bridgeTools.map((t) => ({
@@ -281,14 +250,6 @@ export class OpenAiCompatibleProvider extends AgenticApiProvider {
         },
       })),
     ]
-    const systemContent = [
-      workspaceTools.buildToolUsagePreamble(baseTools.map((t) => t.function.name), bridgeTools),
-      workspaceTools.buildProjectContextPreamble(ctx.req),
-      ctx.req.resolvedAgent.systemPrompt || '',
-    ]
-      .filter(Boolean)
-      .join('\n\n')
-    ctx.handlers.onSystemPrompt(systemContent)
 
     // `messages` excludes the system prompt — it is re-prepended on every turn
     // so the persisted rawMessages stay resume-ready without duplicating it.
