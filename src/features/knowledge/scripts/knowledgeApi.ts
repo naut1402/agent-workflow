@@ -86,7 +86,13 @@ export async function fetchKnowledgeTags(projectId?: string) {
 
 export async function uploadKnowledgeFile(
   file: File,
-  { scope = 'project', tags = [], title, projectId }: { scope?: string; tags?: string[]; title?: string; projectId?: string } = {},
+  {
+    scope = 'project',
+    tags = [],
+    title,
+    projectId,
+    signal,
+  }: { scope?: string; tags?: string[]; title?: string; projectId?: string; signal?: AbortSignal } = {},
 ) {
   const fd = new FormData()
   fd.append('file', file)
@@ -97,6 +103,7 @@ export async function uploadKnowledgeFile(
     query: { project: projectId },
     rawBody: fd,
     skipJsonContentType: true,
+    signal,
   })
 }
 

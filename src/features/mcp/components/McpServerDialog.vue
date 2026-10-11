@@ -106,7 +106,7 @@ const authScheme = ref('')
 const headerRows = ref<KeyValueRow[]>([])
 
 const { pending: saving, run: runSave } = useApiAction()
-const testing = ref(false)
+const { pending: testing, run: runProbe } = useApiAction()
 const error = ref('')
 const probe = ref<McpProbeResponse | null>(null)
 /** Sửa cấu hình sau khi kiểm tra OK thì kết quả cũ hết hiệu lực. */
@@ -313,20 +313,19 @@ function buildDraft(): McpServerConfig | null {
 }
 
 async function runTest(listTools: boolean) {
-  error.value = ''
-  const draft = buildDraft()
-  if (!draft) return
-  testing.value = true
-  try {
-    probe.value = await testMcpServer(draft, listTools)
-    apiWarnings.value = probe.value.warnings ?? []
-    testedOk.value = probe.value.ok
-  } catch (e: any) {
-    error.value = String(e.message || e)
-    testedOk.value = false
-  } finally {
-    testing.value = false
-  }
+  await runProbe(async () => {
+    error.value = ''
+    const draft = buildDraft()
+    if (!draft) return
+    try {
+      probe.value = await testMcpServer(draft, listTools)
+      apiWarnings.value = probe.value.warnings ?? []
+      testedOk.value = probe.value.ok
+    } catch (e: any) {
+      error.value = String(e.message || e)
+      testedOk.value = false
+    }
+  })
 }
 
 async function save() {
@@ -374,7 +373,7 @@ onMounted(applyPrefill)
   <CDialog
     class="mcp-dialog"
     :title="isEdit ? t('mcp.dialog.editTitle') : t('mcp.dialog.title')"
-    :loading="saving"
+    :loading="saving || testing"
     width="min(620px, 94vw)"
     @close="emit('close')"
   >
@@ -555,8 +554,8 @@ onMounted(applyPrefill)
 
     <template #footer>
       <div class="modal-actions">
-        <button type="button" class="btn-ghost btn-sm" :disabled="saving" @click="emit('close')">{{ t('mcp.dialog.cancel') }}</button>
-        <button type="button" class="btn-primary btn-sm" :disabled="saving" @click="save">
+        <button type="button" class="btn-ghost btn-sm" :disabled="saving || testing" @click="emit('close')">{{ t('mcp.dialog.cancel') }}</button>
+        <button type="button" class="btn-primary btn-sm" :disabled="saving || testing" @click="save">
           {{ saving ? t('mcp.dialog.saving') : t('mcp.dialog.save') }}
         </button>
       </div>
