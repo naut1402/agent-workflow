@@ -22,8 +22,9 @@
     "src/features/*/controller.ts",
     "src/features/*/controllers/*.ts",
     // Frontend: `import.meta.glob(..., { eager: true })` ở `frontend/main.ts`
-    // (mode registry).
-    "src/features/*/registerMode.ts"
+    // (mode registry, style theo feature).
+    "src/features/*/registerMode.ts",
+    "src/features/*/styles/index.scss"
   ],
 
   // ── 2. Gói chỉ dòng test dùng / chỉ dòng test resolve được ───────────────
