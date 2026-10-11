@@ -499,11 +499,15 @@ onMounted(async () => {
 </template>
 
 <style scoped lang="scss">
-.knowledge-left {
+// Hai cột trái/phải cùng là cột flex lấp đầy chiều cao; chỉ cột trái chặn tràn.
+.knowledge-left,
+.knowledge-main {
   display: flex;
   flex-direction: column;
   height: 100%;
   min-height: 0;
+}
+.knowledge-left {
   overflow: hidden;
 }
 // Thu về 0 chứ không 48px mặc định: dải đó không chứa nút nào, giữ lại là một
@@ -517,24 +521,20 @@ onMounted(async () => {
   font-size: 12px;
   flex-shrink: 0;
 }
-.knowledge-main {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-height: 0;
-}
 // Root của component con nhận luôn scope id của cha, nên không cần `:deep`.
-.knowledge-main > .c-md-view {
+// Viewer và empty state loại trừ nhau (v-if/v-else), cùng là lá lấp phần còn lại.
+.knowledge-main > .c-md-view,
+.knowledge-main-empty {
   flex: 1;
   min-height: 0;
+}
+.knowledge-main > .c-md-view {
   height: auto;
 }
 .knowledge-main-empty {
   display: flex;
   align-items: center;
   justify-content: center;
-  flex: 1;
-  min-height: 0;
   padding: 24px;
   text-align: center;
   font-size: 13px;
