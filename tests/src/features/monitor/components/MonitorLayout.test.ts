@@ -1,6 +1,7 @@
 import { mountWithI18n as mount } from '../../../helpers/i18n'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DOMWrapper, flushPromises } from '@vue/test-utils'
+import { nextTick } from 'vue'
 import MonitorLayout from '@/features/monitor/components/MonitorLayout.vue'
 import { STORAGE_KEY, useAppSettings } from '@/frontend/composables/useAppSettings'
 import { localeMessages } from '../../../helpers/localeYaml'
@@ -918,6 +919,103 @@ describe('MonitorLayout — chuỗi worktree mới có ở cả hai locale', () 
       expect((enMonitor.layout as any)[key]).toContain('already on that branch')
     },
   )
+})
+
+/**
+ * [Tfe960c47] Nút "lên đầu trang" của trang task — nhóm §9 (G) của `test-spec.md`.
+ *
+ * Vùng cuộn của Monitor là `.monitor-content` (tiêu đề + pipeline + artifact nằm
+ * CHUNG một scroller), khác hẳn `.c-md-body` của `CMarkdownView`. Neo phải nằm
+ * trong đúng vùng đó, nếu không nút sẽ đưa nhầm bề mặt về đầu.
+ */
+describe('MonitorLayout — nút lên đầu trang (TC-G02, TC-G12, TC-G13)', () => {
+  /** jsdom không có layout ⇒ ngưỡng rơi về sàn 200px của composable. */
+  async function scrollContent(w: ReturnType<typeof mount>, top: number) {
+    const el = w.find('.monitor-content').element as HTMLElement
+    el.scrollTop = top
+    el.dispatchEvent(new Event('scroll'))
+    await nextTick()
+    return el
+  }
+
+  it('TC-G12: có ĐÚNG MỘT `CScrollToTop`, neo nằm trong `.monitor-content`', () => {
+    seedAppSettings()
+    const w = mount(MonitorLayout, { props: { tasks } })
+
+    const anchors = w.findAll('.c-scroll-top')
+    expect(anchors).toHaveLength(1)
+    expect(w.find('.monitor-content').element.contains(anchors[0].element)).toBe(true)
+  })
+
+  it('TC-G02: cuộn `.monitor-content` quá ngưỡng ⇒ nút hiện; click đưa CHÍNH NÓ về đầu', async () => {
+    seedAppSettings()
+    const w = mount(MonitorLayout, { props: { tasks } })
+    expect(w.find('.c-scroll-top__btn').exists()).toBe(false)
+
+    const el = await scrollContent(w, 900)
+    expect(w.find('.c-scroll-top__btn').exists()).toBe(true)
+
+    await w.find('.c-scroll-top__btn').trigger('click')
+    expect(el.scrollTop).toBe(0)
+  })
+
+  it('TC-G03: nút 🚫 không đụng `window` — chỉ scroller được truyền vào', async () => {
+    seedAppSettings()
+    const scrollSpy = vi.fn()
+    vi.stubGlobal('scrollTo', scrollSpy)
+    const w = mount(MonitorLayout, { props: { tasks } })
+
+    await scrollContent(w, 900)
+    await w.find('.c-scroll-top__btn').trigger('click')
+
+    expect(scrollSpy).not.toHaveBeenCalled()
+  })
+
+  it('TC-G13: chưa chọn task ⇒ vẫn có neo, 🚫 không có nút mồ côi, không ném lỗi', () => {
+    seedAppSettings()
+    const w = mount(MonitorLayout, { props: { tasks: [], selected: null } })
+
+    expect(w.find('.monitor-content').exists()).toBe(true)
+    expect(w.find('.c-scroll-top').exists()).toBe(true)
+    expect(w.find('.c-scroll-top__btn').exists()).toBe(false)
+  })
+
+  /**
+   * E16: `.monitor-content` là CÙNG một element khi đổi task / đổi artifact, nên
+   * watcher trên `scroller` không bắn. `contentKey` ghép từ `task_id` + tên
+   * artifact là đường dây duy nhất bắt nó đo lại ngưỡng.
+   */
+  it('E16: đổi task ⇒ đo lại ngưỡng, trang ngắn thì nút tự ẩn', async () => {
+    seedAppSettings()
+    const w = mountLayout({ tasks, selected: tasks[0] })
+
+    const el = await scrollContent(w, 900)
+    expect(w.find('.c-scroll-top__btn').exists()).toBe(true)
+
+    el.scrollTop = 0 // trang mới ngắn hơn: trình duyệt kẹp về 0, không bắn `scroll`
+    await w.setProps({ selected: { ...tasks[0], task_id: 'KHAC' } })
+    await flushPromises()
+
+    expect(w.find('.c-scroll-top__btn').exists()).toBe(false)
+  })
+
+  it('E16b: đổi artifact đang mở cũng làm đo lại ngưỡng', async () => {
+    seedAppSettings()
+    const w = mountLayout({
+      tasks,
+      selected: tasks[0],
+      openArtifact: { taskId: tasks[0].task_id, name: 'investigate.md' },
+    })
+
+    const el = await scrollContent(w, 900)
+    expect(w.find('.c-scroll-top__btn').exists()).toBe(true)
+
+    el.scrollTop = 0
+    await w.setProps({ openArtifact: { taskId: tasks[0].task_id, name: 'design.md' } })
+    await flushPromises()
+
+    expect(w.find('.c-scroll-top__btn').exists()).toBe(false)
+  })
 })
 
 // ---------------------------------------------------------------------------

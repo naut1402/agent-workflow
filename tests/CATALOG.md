@@ -76,13 +76,13 @@ Quy ước: [`docs/agent-rules/testing.md`](../docs/agent-rules/testing.md) §3�
 | `tests/src/features/statistics/components` | vitest | `features/statistics/components`, `features/statistics/lib` | 2 | `npx vitest run tests/src/features/statistics/components` |
 | `tests/src/features/statistics/lib` | vitest | `features/statistics/lib` | 2 | `npx vitest run tests/src/features/statistics/lib` |
 | `tests/src/frontend` | vitest | `frontend/shell`, `features/logs/components`, `features/monitor/components` | 2 | `npx vitest run tests/src/frontend/*.test.ts` |
-| `tests/src/frontend/composables` | vitest | `frontend/composables`, `frontend/plugins`, `features/logs/scripts` | 9 | `npx vitest run tests/src/frontend/composables` |
+| `tests/src/frontend/composables` | vitest | `frontend/composables`, `frontend/plugins`, `features/logs/scripts` | 11 | `npx vitest run tests/src/frontend/composables` |
 | `tests/src/frontend/configs` | vitest | `frontend/configs` | 1 | `npx vitest run tests/src/frontend/configs` |
 | `tests/src/frontend/container` | vitest | `frontend/container` | 1 | `npx vitest run tests/src/frontend/container` |
 | `tests/src/frontend/lib` | vitest | `frontend/lib`, `backend/configs`, `features/monitor/composables` | 10 | `npx vitest run tests/src/frontend/lib` |
 | `tests/src/frontend/plugins` | vitest | `frontend/composables`, `frontend/plugins`, `shared/lib` | 3 | `npx vitest run tests/src/frontend/plugins` |
 | `tests/src/frontend/shell` | vitest | `frontend/shell` | 3 | `npx vitest run tests/src/frontend/shell` |
-| `tests/src/frontend/ui` | vitest | `frontend/ui`, `features/knowledge/components`, `features/runner/components` | 9 | `npx vitest run tests/src/frontend/ui` |
+| `tests/src/frontend/ui` | vitest | `frontend/ui`, `features/knowledge/components`, `features/runner/components` | 11 | `npx vitest run tests/src/frontend/ui` |
 | `tests/src/server` | bun | `features/settings/business`, `backend/lib`, `backend/registry.ts` | 3 | `bun test tests/src/server/*.test.ts` |
 | `tests/src/server/agents` | bun | `features/agent-editor/business` | 5 | `bun test tests/src/server/agents` |
 | `tests/src/server/artifactActions` | bun | `features/monitor/business`, `features/monitor/schemas` | 1 | `bun test tests/src/server/artifactActions` |

@@ -1,8 +1,10 @@
 import { mountWithI18n as mount } from '../../helpers/i18n'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { flushPromises } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import CMarkdownView from '@/frontend/ui/CMarkdownView.vue'
 import { STORAGE_KEY, useAppSettings } from '@/frontend/composables/useAppSettings'
+import { parseMarkdown, renderMermaid } from '@/frontend/lib/markdownLib'
 
 /**
  * Viewer markdown dùng chung — nâng từ `AgentMarkdownView` khi knowledge cũng
@@ -12,12 +14,17 @@ import { STORAGE_KEY, useAppSettings } from '@/frontend/composables/useAppSettin
  * `withFrontmatter` là opt-in, và khoá reset là `docKey` chứ không phải `title`.
  */
 
-// mermaid không chạy được trong jsdom; parseMarkdown giữ nguyên bản thật để còn
-// chấm được việc frontmatter ra khối code và markdown thật sự được render.
-vi.mock('@/frontend/lib/markdownLib', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/frontend/lib/markdownLib')>()),
-  renderMermaid: vi.fn(async () => {}),
-}))
+// mermaid không chạy được trong jsdom; parseMarkdown giữ nguyên HÀNH VI thật để
+// còn chấm được việc frontmatter ra khối code và markdown thật sự được render —
+// [Tfe960c47] chỉ bọc thêm `vi.fn` để đếm được số lần parse (review.md §4 ③).
+vi.mock('@/frontend/lib/markdownLib', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/frontend/lib/markdownLib')>()
+  return {
+    ...actual,
+    parseMarkdown: vi.fn(actual.parseMarkdown),
+    renderMermaid: vi.fn(async () => {}),
+  }
+})
 
 const CONTENT = `---
 name: reviewer
@@ -422,5 +429,424 @@ describe('CMarkdownView — chế độ xem toàn văn (TC-30)', () => {
       await w.find('[aria-label="Xem theo block"]').trigger('click')
       expect(openStates(w)).toEqual([expected, expected, expected])
     }
+  })
+})
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * [Tfe960c47] Nhóm §8 + §7 (mermaid) của `test-spec.md`: tầng mục con
+ * (`###`…`######`) và nút "lên đầu trang" ở viewer dùng chung — tức cả ba loại
+ * tài liệu `agent` · `knowledge` · `rule` cùng lúc.
+ * ───────────────────────────────────────────────────────────────────────────*/
+
+/** Tài liệu có đủ hai tầng: 2 block `##`, block đầu có `###` lồng `####`. */
+const DOC_NESTED = `## Block A
+
+Dẫn nhập của A.
+
+### A.1
+
+Nội dung A.1
+
+#### A.1.1
+
+Nội dung sâu hơn
+
+### A.2
+
+Nội dung A.2
+
+## Block B
+
+Không có mục con.
+`
+
+/** Accordion TẮT + mở tất cả ⇒ cả hai tầng mở sẵn. Đây là nền của phần lớn ca dưới. */
+const seedBothExpanded = () =>
+  seedSectionPrefs({ artifactSectionAccordion: false, artifactSectionDefault: 'expanded' })
+
+/** Accordion TẮT + đóng tất cả ⇒ cả hai tầng đóng sẵn. */
+const seedBothCollapsed = () =>
+  seedSectionPrefs({ artifactSectionAccordion: false, artifactSectionDefault: 'collapsed' })
+
+const subStates = (w: ReturnType<typeof mount>) =>
+  w.findAll('details.block-sub').map((d) => (d.element as HTMLDetailsElement).open)
+
+/**
+ * Bấm `<summary>` của một mục con đúng như trình duyệt.
+ *
+ * ⚠️ 🚫 KHÔNG dùng `trigger('toggle')` ở tầng này: `trigger` của test-utils bắn
+ * sự kiện CÓ bubble, mà `toggle` thật thì không — cú vọng lên `.block-item` cha
+ * sẽ chạy nhầm `onBlockToggle` và đóng cả block. Đổi `open` rồi để chính jsdom
+ * bắn sự kiện (macrotask, đã đo trên jsdom@29.1.1) mới là mô phỏng đúng.
+ */
+async function toggleSub(w: ReturnType<typeof mount>, path: string, open: boolean) {
+  const el = w.find(`[data-node-path="${path}"]`).element as HTMLDetailsElement
+  el.open = open
+  await new Promise<void>((resolve) => setTimeout(resolve, 0))
+  await nextTick()
+}
+
+/** `scheduleMermaid` là `await nextTick()` rồi mới gọi — cần một nhịp để chấm. */
+const flushMermaid = () => flushPromises()
+
+describe('CMarkdownView — gập mục con (TC-F01, TC-E01…E03)', () => {
+  it('TC-F01: cả ba loại tài liệu (agent / knowledge / rule) đều gập được mục con và đều có neo về-đầu', () => {
+    seedBothExpanded()
+    // `withFrontmatter` là khác biệt DUY NHẤT giữa agent (đọc nguyên file .md)
+    // và knowledge/rule (nguồn đã bóc front-matter) — cả hai nhánh phải giống nhau.
+    for (const withFrontmatter of [true, false]) {
+      const w = mount(CMarkdownView, {
+        props: { title: 'doc', content: DOC_NESTED, withFrontmatter },
+      })
+      expect(w.findAll('details.block-sub').length).toBe(3)
+      expect(w.find('.c-scroll-top').exists()).toBe(true)
+    }
+  })
+
+  it('mục con là `<details>` lồng đúng tầng, mang path ổn định', () => {
+    seedBothExpanded()
+    const w = mountView(DOC_NESTED, 'doc')
+    const paths = w.findAll('details.block-sub').map((d) => d.attributes('data-node-path'))
+
+    expect(paths).toEqual(['0/0', '0/0/0', '0/1'])
+    const a1 = w.find('[data-node-path="0/0"]').element
+    expect(a1.contains(w.find('[data-node-path="0/0/0"]').element)).toBe(true)
+  })
+
+  it('TC-B04 qua UI: gập một mục con không đụng block cha lẫn mục anh em', async () => {
+    seedBothExpanded()
+    const w = mountView(DOC_NESTED, 'doc')
+    expect(subStates(w)).toEqual([true, true, true])
+
+    await toggleSub(w, '0/0', false)
+
+    expect(subStates(w)).toEqual([false, true, true])
+    expect(openStates(w)[0]).toBe(true)
+  })
+
+  it('TC-H08: tài liệu KHÔNG có mục con nhìn y hệt trước task — không `<details>` lạ nào', () => {
+    seedBothExpanded()
+    const w = mountView('## A\n\na\n\n## B\n\nb', 'phang')
+
+    expect(w.findAll('details.block-sub')).toHaveLength(0)
+    expect(w.findAll('.block-item')).toHaveLength(2)
+    expect(w.text()).toContain('a')
+    expect(w.text()).toContain('b')
+  })
+})
+
+describe('CMarkdownView — seed hai tầng theo preference (TC-F03, TC-B01…B03)', () => {
+  it('TC-B01/TC-F03: mặc định "mở tất cả" ⇒ mục con mở sẵn, không đổi hành vi đọc hôm nay', () => {
+    seedBothExpanded()
+    expect(subStates(mountView(DOC_NESTED, 'doc'))).toEqual([true, true, true])
+  })
+
+  it('TC-B02: mặc định "đóng tất cả" ⇒ mục con đóng sẵn', () => {
+    seedBothCollapsed()
+    expect(subStates(mountView(DOC_NESTED, 'doc'))).toEqual([false, false, false])
+  })
+
+  /**
+   * TC-B03: accordion BẬT (mặc định) chỉ ép tầng khối về `collapsed`. Tầng mục
+   * con đọc giá trị LƯU (`readArtifactSectionDefault`), nên mở một block ra vẫn
+   * thấy đủ nội dung chứ không phải một dãy tiêu đề rỗng.
+   */
+  it('TC-B03: accordion bật ⇒ block đóng hết nhưng mục con vẫn theo giá trị đã lưu', () => {
+    seedSectionPrefs() // sạch: accordion bật, artifactSectionDefault vắng ⇒ 'expanded'
+    const w = mountView(DOC_NESTED, 'doc')
+
+    expect(openStates(w)).toEqual([false, false])
+    expect(subStates(w)).toEqual([true, true, true])
+  })
+})
+
+describe('CMarkdownView — mở/thu tất cả phủ cả hai tầng (TC-F05)', () => {
+  it('TC-F05: "thu gọn tất cả" rồi "mở tất cả" áp cho CẢ block lẫn mục con', async () => {
+    seedBothExpanded()
+    const w = mountView(DOC_NESTED, 'doc')
+
+    await w.find('[aria-label="Thu gọn tất cả"]').trigger('click')
+    expect(openStates(w).every((o) => !o)).toBe(true)
+    expect(subStates(w).every((o) => !o)).toBe(true)
+
+    await w.find('[aria-label="Mở tất cả"]').trigger('click')
+    expect(openStates(w).every(Boolean)).toBe(true)
+    expect(subStates(w).every(Boolean)).toBe(true)
+  })
+})
+
+describe('CMarkdownView — đổi tài liệu & đổi nội dung (TC-F04, TC-B11, TC-B12)', () => {
+  it('TC-F04: đổi docKey ⇒ CẢ HAI tầng seed lại theo preference', async () => {
+    seedBothExpanded()
+    const w = mount(CMarkdownView, {
+      props: { title: 'X', docKey: 'p/x', content: DOC_NESTED },
+    })
+    await toggleSub(w, '0/0', false)
+    expect(subStates(w)).toEqual([false, true, true])
+
+    await w.setProps({ docKey: 'p/y', content: '## C\n\nc\n\n### C.1\n\nc1\n' })
+    await nextTick()
+
+    expect(subStates(w)).toEqual([true])
+  })
+
+  it('TC-B11: cùng tài liệu, mục con biến mất ⇒ lựa chọn của người dùng còn nguyên', async () => {
+    seedBothExpanded()
+    const w = mount(CMarkdownView, {
+      props: { title: 'X', docKey: 'p/x', content: DOC_NESTED },
+    })
+    await toggleSub(w, '0/1', false)
+
+    // Xoá `### A.2` — `docKey` giữ nguyên nên đi nhánh `prune`, không phải `seed`.
+    await w.setProps({ content: DOC_NESTED.replace(/### A\.2[\s\S]*?(?=## Block B)/, '') })
+    await nextTick()
+
+    expect(w.findAll('details.block-sub').map((d) => d.attributes('data-node-path'))).toEqual([
+      '0/0',
+      '0/0/0',
+    ])
+    expect(subStates(w)).toEqual([true, true])
+  })
+
+  it('TC-B12: mục con MỚI xuất hiện nhận mặc định "mở", không tự biến mất', async () => {
+    seedBothExpanded()
+    const w = mount(CMarkdownView, {
+      props: { title: 'X', docKey: 'p/x', content: DOC_NESTED },
+    })
+
+    await w.setProps({ content: DOC_NESTED.replace('## Block B', '### A.3\n\nmới\n\n## Block B') })
+    await nextTick()
+
+    const a3 = w.find('[data-node-path="0/2"]')
+    expect(a3.exists()).toBe(true)
+    expect((a3.element as HTMLDetailsElement).open).toBe(true)
+    expect(a3.text()).toContain('mới')
+  })
+})
+
+describe('CMarkdownView — chế độ toàn văn ↔ block (TC-F06)', () => {
+  it('TC-F06: chuyển sang toàn văn rồi quay lại GIỮ NGUYÊN trạng thái gập mục con', async () => {
+    seedBothExpanded()
+    const w = mountView(DOC_NESTED, 'doc')
+    await toggleSub(w, '0/0', false)
+    expect(subStates(w)).toEqual([false, true, true])
+
+    await w.find('[aria-label="Xem toàn văn"]').trigger('click')
+    expect(w.findAll('details.block-sub')).toHaveLength(0)
+
+    await w.find('[aria-label="Xem theo block"]').trigger('click')
+    expect(subStates(w)).toEqual([false, true, true])
+  })
+
+  it('toàn văn KHÔNG mất nội dung mục con — mọi đoạn đều còn', async () => {
+    seedBothExpanded()
+    const w = mountView(DOC_NESTED, 'doc')
+    await w.find('[aria-label="Xem toàn văn"]').trigger('click')
+
+    const text = w.find('.c-md-body').text()
+    for (const s of ['Dẫn nhập của A.', 'Nội dung A.1', 'Nội dung sâu hơn', 'Nội dung A.2']) {
+      expect(text).toContain(s)
+    }
+  })
+})
+
+describe('CMarkdownView — tài liệu dài (TC-F07)', () => {
+  it('TC-F07: ~2000 dòng với nhiều mục con — render xong, gập được, không ném lỗi', () => {
+    seedBothExpanded()
+    const long =
+      '## Dài\n\n' +
+      Array.from({ length: 300 }, (_, i) => `### Mục ${i}\n\ndòng 1 của ${i}\n\ndòng 2 của ${i}\n`).join('\n')
+
+    const w = mountView(long, 'long')
+    expect(w.findAll('details.block-sub')).toHaveLength(300)
+    expect(subStates(w).every(Boolean)).toBe(true)
+  })
+})
+
+/**
+ * [review.md §4 ③] Chốt hồi quy cho [must] #1 và [should] #1.
+ *
+ * `parseMarkdown` nằm ở computed ⇒ gập/mở một mục con KHÔNG parse lại gì
+ * (delta = 0, trước khi sửa là +4); `renderMermaid` gọi đúng 1 lần khi mở tài
+ * liệu (trước khi sửa là 4).
+ */
+describe('CMarkdownView — số lần parse / renderMermaid (review §4 ③)', () => {
+  const parseSpy = vi.mocked(parseMarkdown)
+  const mermaidSpy = vi.mocked(renderMermaid)
+
+  it('mở MỘT mục con ⇒ delta số lần parse = 0', async () => {
+    seedBothExpanded()
+    const w = mountView(DOC_NESTED, 'doc')
+    await flushMermaid()
+
+    parseSpy.mockClear()
+    await toggleSub(w, '0/0', false)
+    await toggleSub(w, '0/0', true)
+    await flushMermaid()
+
+    expect(parseSpy).toHaveBeenCalledTimes(0)
+  })
+
+  it('gập/mở một BLOCK cũng không parse lại — hai tầng cùng một hợp đồng', async () => {
+    seedBothExpanded()
+    const w = mountView(DOC_NESTED, 'doc')
+    await flushMermaid()
+
+    parseSpy.mockClear()
+    const item = w.findAll('.block-item')[0]
+    ;(item.element as HTMLDetailsElement).open = false
+    await item.trigger('toggle')
+    await flushMermaid()
+
+    expect(parseSpy).toHaveBeenCalledTimes(0)
+  })
+
+  it('mở tài liệu ⇒ `renderMermaid` gọi ĐÚNG 1 lần, không một lần mỗi block', async () => {
+    seedBothExpanded()
+    mermaidSpy.mockClear()
+    mountView(DOC_NESTED, 'doc')
+    await flushMermaid()
+
+    expect(mermaidSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('nội dung đổi ⇒ parse lại (computed không được "đông cứng")', async () => {
+    seedBothExpanded()
+    const w = mount(CMarkdownView, { props: { title: 'X', docKey: 'p/x', content: DOC_NESTED } })
+    await flushMermaid()
+
+    parseSpy.mockClear()
+    await w.setProps({ content: '## Mới\n\nnội dung mới\n' })
+    await nextTick()
+
+    expect(parseSpy.mock.calls.length).toBeGreaterThan(0)
+    expect(w.text()).toContain('nội dung mới')
+  })
+})
+
+/**
+ * TC-E11…E13: mermaid chỉ vẽ được khi phần tử đang HIỆN, nên `renderMermaid`
+ * phải chạy sau mỗi lần có thứ gì đó vừa mở — và chỉ khi đó.
+ */
+describe('CMarkdownView — mermaid theo trạng thái gập (TC-E11…E13)', () => {
+  const mermaidSpy = vi.mocked(renderMermaid)
+  const WITH_MERMAID = '## A\n\n### Sơ đồ\n\n```mermaid\ngraph TD; A-->B;\n```\n'
+
+  it('TC-E12: mọi thứ còn đóng ⇒ 🚫 không gọi `renderMermaid`', async () => {
+    seedBothCollapsed()
+    mermaidSpy.mockClear()
+    mountView(WITH_MERMAID, 'doc')
+    await flushMermaid()
+
+    expect(mermaidSpy).not.toHaveBeenCalled()
+  })
+
+  it('TC-E11: mở mục con chứa mermaid ⇒ `renderMermaid` chạy, và chạy trên gốc viewer', async () => {
+    seedBothCollapsed()
+    const w = mountView(WITH_MERMAID, 'doc')
+    await flushMermaid()
+    mermaidSpy.mockClear()
+
+    await toggleSub(w, '0/0', true)
+    await flushMermaid()
+
+    expect(mermaidSpy).toHaveBeenCalledTimes(1)
+    expect(mermaidSpy.mock.calls[0][0]).toBe(w.find('.c-md-body').element)
+  })
+
+  it('TC-E13: đóng rồi mở lại ⇒ vẽ lại, không để sơ đồ rỗng', async () => {
+    seedBothCollapsed()
+    const w = mountView(WITH_MERMAID, 'doc')
+    await flushMermaid()
+
+    await toggleSub(w, '0/0', true)
+    await flushMermaid()
+    mermaidSpy.mockClear()
+
+    await toggleSub(w, '0/0', false)
+    await flushMermaid()
+    expect(mermaidSpy).not.toHaveBeenCalled() // đóng thì không cần vẽ
+
+    await toggleSub(w, '0/0', true)
+    await flushMermaid()
+    expect(mermaidSpy).toHaveBeenCalledTimes(1)
+  })
+})
+
+/**
+ * §5/§6 nhìn từ viewer: nút về-đầu phải neo vào CHÍNH `.c-md-body`, không phải
+ * `window` — đó là điều kiện để hai bề mặt cuộn (viewer và trang task) không lẫn.
+ */
+describe('CMarkdownView — nút lên đầu trang (TC-F02, TC-G03)', () => {
+  /** jsdom không có layout ⇒ khai `clientHeight` tay, ngưỡng rơi về sàn 200px. */
+  function scrollBody(w: ReturnType<typeof mount>, top: number) {
+    const body = w.find('.c-md-body').element as HTMLElement
+    body.scrollTop = top
+    body.dispatchEvent(new Event('scroll'))
+    return body
+  }
+
+  it('TC-F02: cuộn `.c-md-body` quá ngưỡng ⇒ nút hiện; click đưa chính nó về đầu', async () => {
+    seedBothExpanded()
+    const w = mountView(DOC_NESTED, 'doc')
+    expect(w.find('.c-scroll-top__btn').exists()).toBe(false)
+
+    const body = scrollBody(w, 900)
+    await nextTick()
+    expect(w.find('.c-scroll-top__btn').exists()).toBe(true)
+
+    await w.find('.c-scroll-top__btn').trigger('click')
+    expect(body.scrollTop).toBe(0)
+  })
+
+  it('TC-F02b: neo nằm TRONG vùng cuộn, không treo ngoài toolbar', () => {
+    seedBothExpanded()
+    const w = mountView(DOC_NESTED, 'doc')
+    const body = w.find('.c-md-body').element
+    expect(body.contains(w.find('.c-scroll-top').element)).toBe(true)
+    expect(w.find('.c-md-toolbar').element.contains(w.find('.c-scroll-top').element)).toBe(false)
+  })
+
+  it('TC-F04b: đổi tài liệu sang bản ngắn ⇒ nút tự ẩn (đường dây contentKey, E16)', async () => {
+    seedBothExpanded()
+    const w = mount(CMarkdownView, { props: { title: 'X', docKey: 'p/x', content: DOC_NESTED } })
+    const body = scrollBody(w, 900)
+    await nextTick()
+    expect(w.find('.c-scroll-top__btn').exists()).toBe(true)
+
+    body.scrollTop = 0 // tài liệu ngắn đi: trình duyệt kẹp về 0, không bắn `scroll`
+    await w.setProps({ docKey: 'p/y', content: '## Ngắn\n\nmột dòng' })
+    await flushPromises()
+
+    expect(w.find('.c-scroll-top__btn').exists()).toBe(false)
+  })
+
+  it('TC-G13: tài liệu rỗng ⇒ vẫn có neo, không nút mồ côi, không ném lỗi', () => {
+    seedBothExpanded()
+    const w = mount(CMarkdownView, { props: { title: 'empty', content: '' } })
+
+    expect(w.find('.c-scroll-top').exists()).toBe(true)
+    expect(w.find('.c-scroll-top__btn').exists()).toBe(false)
+  })
+})
+
+describe('CMarkdownView — sanitise mục con (TC-E06, TC-I04)', () => {
+  it('TC-E06: `<script>` trong một mục con vẫn bị loại', () => {
+    seedBothExpanded()
+    const w = mountView('## A\n\n### Xấu\n\n<script>alert(1)</script>\n\nvẫn đọc được\n', 'evil')
+
+    expect(w.html()).not.toContain('<script')
+    expect(w.text()).toContain('vẫn đọc được')
+  })
+
+  it('TC-I04: nhãn nút về-đầu lấy từ i18n, 🚫 không hardcode trong template', async () => {
+    seedBothExpanded()
+    const w = mountView(DOC_NESTED, 'doc')
+    const body = w.find('.c-md-body').element as HTMLElement
+    body.scrollTop = 900
+    body.dispatchEvent(new Event('scroll'))
+    await nextTick()
+
+    expect(w.find('.c-scroll-top__btn').attributes('aria-label')).toBe('Lên đầu trang')
   })
 })
