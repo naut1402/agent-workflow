@@ -1,33 +1,22 @@
-import {
-  getConnection,
-  getRunner,
-  listJobs,
-  loadTaskSessionLedger,
-  parseCursorJsonOutput,
-  providerFamilyOf,
-  stepIdOf,
-} from './index.js'
+import { getConnection, getRunner, listJobs, loadTaskSessionLedger, stepIdOf } from './index.js'
 import type { JobRecord, SessionEntry, TaskSessionLedger } from './index.js'
 import { readTextFileSync } from '../../../backend/lib/fileHelper.js'
 import { DECISION_SENTINEL, ORCHESTRATOR_STEP_ID } from '../../../shared/lib/orchestrator.js'
-import { readSessionTranscript, type TranscriptTurn } from './sessionTranscript.js'
-import { readCursorSessionTranscript, stripCursorUserWrapper } from './cursorSessionTranscript.js'
-import { readApiAgentTranscript } from './apiAgentTranscript.js'
+import {
+  clipTurnText,
+  type TranscriptProviderLabel,
+  type TranscriptReadResult,
+  type TranscriptTurn,
+} from './transcripts/TranscriptReader.js'
+import { cleanAgentReply, transcriptReaderFor } from './transcripts/transcriptReaders.js'
 
 const RESPONSE_HEADER = '=== Phản hồi của runner (stdout/stderr) ==='
 const RESULT_HEADER = '=== Kết quả ==='
-const MAX_FALLBACK_CHARS = 4000
-
-function clipFallback(text: string): { text: string; truncated?: boolean } {
-  const t = text.trim()
-  if (t.length <= MAX_FALLBACK_CHARS) return { text: t }
-  return { text: t.slice(0, MAX_FALLBACK_CHARS), truncated: true }
-}
 
 /** Agent reply for a finished job when the CLI transcript file is missing. */
 function agentOutputFromJob(job: JobRecord): string {
   if (typeof job.stdout === 'string' && job.stdout.trim()) {
-    return stripCursorUserWrapper(extractAgentText(job.stdout))
+    return cleanAgentReply(job.stdout)
   }
 
   let log = ''
@@ -47,7 +36,7 @@ function agentOutputFromJob(job: JobRecord): string {
     .filter((line) => !line.startsWith('[runner] '))
     .join('\n')
     .trim()
-  return stripCursorUserWrapper(extractAgentText(stripped))
+  return cleanAgentReply(stripped)
 }
 
 /** Job của node điều phối mang thêm dòng sentinel máy đọc — cắt trước khi hiển thị. */
@@ -64,28 +53,19 @@ function stripDecisionLine(text: string): string {
   return text.split('\n').filter((line) => !isDecisionLine(line)).join('\n').trim()
 }
 
-/** Prefer Cursor/agent JSON `result` field when stdout is still raw JSON. */
-function extractAgentText(raw: string): string {
-  const trimmed = raw.trim()
-  if (!trimmed) return ''
-  const parsed = parseCursorJsonOutput(trimmed)
-  if (typeof parsed.result === 'string' && parsed.result.trim()) return parsed.result.trim()
-  return trimmed
-}
-
 /** Build user/assistant turns from a single finished job (indices start at `startIndex`). */
 function synthesizeTurnsFromJob(job: JobRecord, startIndex = 0): TranscriptTurn[] {
   const turns: TranscriptTurn[] = []
   const prompt = typeof job.userPrompt === 'string' ? job.userPrompt.trim() : ''
   if (prompt) {
-    turns.push({ index: startIndex + turns.length, role: 'user', ...clipFallback(prompt) })
+    turns.push({ index: startIndex + turns.length, role: 'user', ...clipTurnText(prompt) })
   }
   const out = chatTextOfJob(job)
   if (out) {
     turns.push({
       index: startIndex + turns.length,
       role: 'assistant',
-      ...clipFallback(out),
+      ...clipTurnText(out),
       at: job.finishedAt || job.startedAt || undefined,
     })
   }
@@ -120,11 +100,11 @@ function transcriptCoversLatestJob(turns: TranscriptTurn[], latest: JobRecord | 
   const out = chatTextOfJob(latest)
   if (!prompt && !out) return true
   const texts = turns.map((t) => t.text.trim())
-  if (prompt && texts.some((t) => t === clipFallback(prompt).text || t.includes(prompt.slice(0, 80)))) {
+  if (prompt && texts.some((t) => t === clipTurnText(prompt).text || t.includes(prompt.slice(0, 80)))) {
     return true
   }
   if (out) {
-    const clip = clipFallback(out).text
+    const clip = clipTurnText(out).text
     if (texts.some((t) => t === clip || t.includes(clip.slice(0, 80)))) return true
   }
   return false
@@ -141,10 +121,6 @@ function transcriptCoversLatestJob(turns: TranscriptTurn[], latest: JobRecord | 
  */
 
 export type TaskChatBlockedReason = 'noCompletedJob'
-
-// `providerFamilyOf(id) === 'ai-api'` (runner registry.ts) is the source of truth for
-// `AgenticApiProvider` ids — no separate list to keep in sync here.
-export type TranscriptProviderHint = 'claude-code-cli' | 'cursor-cli' | 'unknown' | (string & {})
 
 export interface TaskChatRunningJob {
   jobId: string
@@ -173,7 +149,7 @@ export interface TaskChatState {
    */
   transcriptMissingReason?: string
   /** Which transcript backend was used. */
-  transcriptProvider?: TranscriptProviderHint
+  transcriptProvider?: TranscriptProviderLabel
   turns: TranscriptTurn[]
   /** Total turns in the transcript — pass back as `fromIndex` to poll. */
   total: number
@@ -199,40 +175,6 @@ function providerIdOfJob(job: JobRecord | undefined): string | null {
   if (!runner) return null
   const conn = getConnection(runner.connectionId)
   return conn?.providerId || null
-}
-
-function resolveTranscriptProvider(
-  providerId: string | null | undefined,
-  entry?: SessionEntry,
-): TranscriptProviderHint {
-  const id = providerId || entry?.providerId || ''
-  if (id === 'cursor-cli') return 'cursor-cli'
-  if (id === 'claude-code-cli') return 'claude-code-cli'
-  if (providerFamilyOf(id) === 'ai-api') return id
-  if (id === 'codex-cli') return 'unknown'
-  return id ? 'unknown' : 'claude-code-cli'
-}
-
-function readTranscriptForProvider(
-  hint: TranscriptProviderHint,
-  sessionId: string,
-  workspace: string | undefined,
-  opts: { fromIndex?: number; includeToolActivity?: boolean },
-): { turns: TranscriptTurn[]; total: number; file: string | null; matchedProvider: TranscriptProviderHint } {
-  if (hint === 'cursor-cli') {
-    const r = readCursorSessionTranscript(sessionId, workspace, opts)
-    return { ...r, matchedProvider: 'cursor-cli' }
-  }
-  if (providerFamilyOf(hint) === 'ai-api') {
-    const r = readApiAgentTranscript(hint, sessionId, opts)
-    return { ...r, matchedProvider: hint }
-  }
-  // Claude (default) + unknown → try Claude path first, then Cursor fallback
-  const claude = readSessionTranscript(sessionId, workspace, opts)
-  if (claude.file) return { ...claude, matchedProvider: 'claude-code-cli' }
-  const cursor = readCursorSessionTranscript(sessionId, workspace, opts)
-  if (cursor.file) return { ...cursor, matchedProvider: 'cursor-cli' }
-  return { ...claude, matchedProvider: hint }
 }
 
 /** True when `sessionId` was actively dismissed for `stepId` (closed/stale) with no open replacement. */
@@ -410,13 +352,13 @@ export function getTaskChatState(
   if (!runningJob && !hasFinished) blockedReason = 'noCompletedJob'
 
   const resolved = resolveChatSession(projectId, taskId, opts.stepId)
-  const hint = resolveTranscriptProvider(resolved.providerId, resolved.entry)
-  const transcript = resolved.sessionId
-    ? readTranscriptForProvider(hint, resolved.sessionId, resolved.workspace, {
+  const reader = transcriptReaderFor(resolved.providerId || resolved.entry?.providerId)
+  const transcript: TranscriptReadResult = resolved.sessionId
+    ? reader.read(resolved.sessionId, resolved.workspace, {
         fromIndex: opts.fromIndex,
         includeToolActivity: opts.includeToolActivity,
       })
-    : { turns: [], total: 0, file: null, matchedProvider: hint as TranscriptProviderHint }
+    : { turns: [], total: 0, file: null, provider: reader.label }
 
   // Node điều phối không mượn runner của step nào: rơi về job step gần nhất là
   // panel hiện tên runner của một step khác.
@@ -463,15 +405,7 @@ export function getTaskChatState(
   // (useTaskChat.ts) is unaffected.
   turns = turns.filter((t) => !(t.index === 0 && t.role === 'user'))
 
-  if (resolved.sessionId && !transcriptFound) {
-    if (transcript.matchedProvider === 'cursor-cli' || hint === 'cursor-cli') {
-      transcriptMissingReason =
-        'Không tìm thấy transcript Cursor cho session này (kiểm tra ~/.cursor/projects/*/agent-transcripts). Có thể CLI chưa ghi file hoặc session_id chưa capture.'
-    } else {
-      transcriptMissingReason =
-        'Không tìm thấy transcript trên disk cho session id này. Session có thể thuộc provider khác hoặc cwd không khớp.'
-    }
-  }
+  if (resolved.sessionId && !transcriptFound) transcriptMissingReason = reader.missingReason()
 
   return {
     taskId,
@@ -479,7 +413,7 @@ export function getTaskChatState(
     sessionId: resolved.sessionId,
     transcriptFound,
     ...(transcriptMissingReason ? { transcriptMissingReason } : {}),
-    transcriptProvider: transcript.matchedProvider,
+    transcriptProvider: transcript.provider,
     turns,
     total,
     running: runningJob

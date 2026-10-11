@@ -2,7 +2,7 @@ import { AbstractController } from '../../backend/http/AbstractController.js'
 import { on } from '../../backend/events/index.js'
 import { sseResponse } from '../../backend/http/sseHelper.js'
 import * as logsBusiness from './business/index.js'
-import type { LogType } from '../../shared/log/schema.js'
+import { LOG_TYPES, type LogType } from '../../shared/log/schema.js'
 
 /** Event vòng đời job nào đẩy sớm snapshot log, thay vì đợi tick interval. */
 const JOB_STREAM_EVENTS = new Set([
@@ -23,8 +23,7 @@ export class LogsController extends AbstractController {
 
   async listLogs() {
     const typeQ = this.c.req.query('type')
-    const type =
-      typeQ === 'request' || typeQ === 'audit' || typeQ === 'events' || typeQ === 'usage' ? (typeQ as LogType) : undefined
+    const type = typeQ && (LOG_TYPES as readonly string[]).includes(typeQ) ? (typeQ as LogType) : undefined
     const project = this.c.req.query('project') || undefined
     const rawLimit = Number(this.c.req.query('limit'))
     const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(1, rawLimit), 1000) : 200

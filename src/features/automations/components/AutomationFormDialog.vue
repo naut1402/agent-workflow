@@ -8,7 +8,7 @@ import Icon from '../../../frontend/ui/Icon.vue'
 import { varsSkeletonForStep } from '../lib/vars'
 import type { AutomationListItem } from '../scripts/automationsApi'
 import type { AutomationFormOptions } from '../scripts/automationsApi'
-import type { CreateAutomationRequest, UpdateAutomationRequest } from '../schemas/automation'
+import type { AutomationActionKind, CreateAutomationRequest, UpdateAutomationRequest } from '../schemas/automation'
 
 const props = defineProps<{
   visible: boolean
@@ -36,7 +36,7 @@ type TriggerKind = 'timer' | 'event'
 type RepeatMode = 'once' | 'interval' | 'cron'
 type IntervalUnit = 'minute' | 'hour' | 'day'
 type ActionMode = 'create' | 'existing'
-type ActionKind = 'runTask' | 'httpRequest' | 'runCommand'
+type ActionKind = AutomationActionKind
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
 
 interface TriggerRow {

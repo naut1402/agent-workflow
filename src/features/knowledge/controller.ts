@@ -8,6 +8,9 @@ import {
   getKnowledgeDriver,
   KnowledgeDbError,
   listCollections,
+  listKnowledge,
+  listKnowledgeTags,
+  listKnowledgeWithTags,
   loadKnowledgeBundle,
   renameTag,
   updateCollection,
@@ -76,8 +79,8 @@ export class KnowledgeController extends AbstractController {
       collection,
       tags: tags ? tags.split(',').filter(Boolean) : undefined,
     }
-    if (include === 'tags') return this.ok(await d.driver.listWithTags(params))
-    return this.ok({ entries: await d.driver.list(params) })
+    if (include === 'tags') return this.ok(await listKnowledgeWithTags(d.driver, d.root, params))
+    return this.ok({ entries: await listKnowledge(d.driver, d.root, params) })
   }
 
   async createEntry() {
@@ -129,7 +132,7 @@ export class KnowledgeController extends AbstractController {
     const d = await this.driverFor()
     if ('error' in d) return d.error
     return this.knowledgeDbOp(async () =>
-      this.ok({ tags: await decorateTagFacets(d.root, await d.driver.listTags()) }),
+      this.ok({ tags: await decorateTagFacets(d.root, await listKnowledgeTags(d.driver)) }),
     )
   }
 

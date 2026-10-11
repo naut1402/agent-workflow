@@ -10,6 +10,7 @@ import CDialog from '../../../frontend/ui/CDialog.vue'
 import CSelect from '../../../frontend/ui/CSelect.vue'
 import Icon from '../../../frontend/ui/Icon.vue'
 import type { ConnectionOption, ProviderEntry, ProviderConfigOption, RunnerDraft } from '../types'
+import { acceptsAgentOf, supportsAllowedToolsOf } from '../lib/providerCatalog'
 
 const props = defineProps<{
   runner: RunnerDraft | null
@@ -89,10 +90,11 @@ const timeoutModel = computed({
 
 const selectedProviderId = computed(() => selectedConnection.value?.providerId || '')
 
-/** Claude Code CLI is the only local provider that understands --allowedTools. */
-const showsAllowedTools = computed(() => selectedProviderId.value === 'claude-code-cli')
+/** Chỉ provider khai `supportsAllowedTools` (catalog) mới hiểu --allowedTools. */
+const showsAllowedTools = computed(() => supportsAllowedToolsOf(selectedProviderId.value, props.providers))
 
-const isConsoleCommand = computed(() => selectedProviderId.value === 'console-command')
+/** Provider không chạy agent (lệnh console) — prompt là argv của lệnh. */
+const isConsoleCommand = computed(() => !acceptsAgentOf(selectedProviderId.value, props.providers))
 
 watch(
   () => props.runner,
@@ -119,7 +121,7 @@ function buildSavePayload(): RunnerDraft {
   const config: RunnerDraft['config'] = {
     timeoutMs: draft.value.config?.timeoutMs ?? 600000,
   }
-  // Only persist allowedTools for Claude Code CLI — other providers ignore / reject it.
+  // Only persist allowedTools for providers that declare support — others ignore / reject it.
   if (showsAllowedTools.value && draft.value.config?.allowedTools) {
     config.allowedTools = draft.value.config.allowedTools
   }
@@ -263,7 +265,7 @@ function closeConnectionDialog() {
     width="min(520px, 94vw)"
     @close="emit('close')"
   >
-    <div v-if="error" class="err-banner">{{ error }}</div>
+    <div v-if="error" class="err-banner banner-danger">{{ error }}</div>
     <div v-if="message" class="ok-banner">{{ message }}</div>
 
     <div class="field">
@@ -433,14 +435,6 @@ function closeConnectionDialog() {
   padding-top: 1rem;
 }
 .spacer { flex: 1; }
-.err-banner {
-  background: rgba(248, 81, 73, 0.12);
-  border: 1px solid var(--danger);
-  color: var(--danger);
-  padding: 0.5rem;
-  border-radius: 6px;
-  margin-bottom: 0.75rem;
-}
 .ok-banner {
   background: rgba(63, 185, 80, 0.12);
   border: 1px solid var(--done);

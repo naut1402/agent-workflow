@@ -7,23 +7,19 @@
  * chặn event-trigger chạy chồng. Thất bại nằm trong run record, không ném lỗi lên caller.
  */
 
-import { joinPath, mkdirSync, randomBytes, randomUUID, readTextFileSync, readdirSync } from '../../../backend/lib/fileHelper.js'
+import { joinPath, randomUUID, readTextFileSync, readdirSync } from '../../../backend/lib/fileHelper.js'
 import { emit } from '../../../backend/events/index.js'
-import { get as getProject } from '../../../backend/registry.js'
-import { submitJob, loadJob, resolveStepRunnerId } from '../../runner/business/index.js'
-import type { JobRecord } from '../../runner/business/index.js'
-import { createTask, fetchUrlSafe, resolveOrchestration, runTaskStep } from '../../monitor/business/index.js'
-import { dispatchOrchestrator } from '../../orchestrator/business/index.js'
+import { loadJob } from './peers.js'
+import type { JobRecord } from './peers.js'
 import type {
   AutomationAction,
-  AutomationRuleRecord,
   AutomationRun,
   AutomationRunOutcome,
   AutomationStepResult,
-  HttpRequestAction,
-  RunCommandAction,
-  RunTaskAction,
 } from '../schemas/automation.js'
+import type { AutomationRunnerInput } from './AutomationRunner.js'
+import { actionExecutorFor } from './actions/actionExecutors.js'
+import { capText, STEP_STDOUT_CAP } from './actions/AutomationActionExecutor.js'
 import { firedOnceTriggersAtRun } from './matcher.js'
 import { disableIfAllOnceTriggersSpent, syncTriggerRegistry } from './rules.js'
 import {
@@ -33,19 +29,6 @@ import {
 } from './runLedger.js'
 import { substituteVarsInRecord, type AutomationVarsContext, type TriggerContext } from '../lib/vars.js'
 
-export type AutomationRunSource = 'manual' | 'schedule' | 'event'
-
-export interface RunAutomationInput {
-  root: string
-  projectId: string | null
-  rule: AutomationRuleRecord
-  source: AutomationRunSource
-  /** Trigger khớp (schedule/event) — dựng context biến + đánh dấu fired. */
-  triggerId?: string
-  /** Payload event gốc khi source=event. */
-  event?: { type: string; payload: Record<string, unknown> }
-}
-
 /** Timeout chờ mỗi bước job xong — mặc định 30 phút, override bằng env. */
 export function stepTimeoutMs(): number {
   const raw = Number(process.env.AUTOMATION_STEP_TIMEOUT_MS || '')
@@ -54,84 +37,15 @@ export function stepTimeoutMs(): number {
 }
 
 const POLL_INTERVAL_MS = 1_500
-const STDOUT_CAP = 64_000
 const ARTIFACT_EACH_CAP = 32_000
 const ARTIFACT_TOTAL_CAP = 128_000
-const INPUT_FIELD_CAP = 4_000
-
-/** Tóm tắt input đã resolve biến của action — lưu vào step để xác nhận lại sau khi chạy. */
-function buildStepInput(action: AutomationAction): Record<string, unknown> {
-  if (action.kind === 'httpRequest') {
-    return {
-      method: action.method,
-      url: action.url,
-      ...(action.headers ? { headers: action.headers } : {}),
-      ...(action.body ? { body: cap(action.body, INPUT_FIELD_CAP) } : {}),
-    }
-  }
-  if (action.kind === 'runCommand') {
-    return {
-      runnerId: action.runnerId,
-      ...(action.params ? { params: cap(action.params, INPUT_FIELD_CAP) } : {}),
-    }
-  }
-  return action.mode === 'create'
-    ? {
-        mode: 'create',
-        prompt: cap(action.prompt ?? '', INPUT_FIELD_CAP),
-        ...(action.profileName ? { profileName: action.profileName } : {}),
-        ...(action.runnerId ? { runnerId: action.runnerId } : {}),
-        ...(action.projectId ? { projectId: action.projectId } : {}),
-      }
-    : {
-        mode: 'existing',
-        taskId: action.taskId,
-        ...(action.runnerId ? { runnerId: action.runnerId } : {}),
-        ...(action.projectId ? { projectId: action.projectId } : {}),
-      }
-}
-
-interface ActionTarget {
-  root: string
-  projectId: string | null
-}
-
-/**
- * Project mà một action `runTask` thực sự chạy trên đó.
- * - Không set / rỗng → project sở hữu rule (hành vi trước khi có field này).
- * - Trùng project của rule → cũng dùng thẳng `input`: rule có thể chạy với
- *   `projectId` không nằm trong registry (test, `DEV_TEAM_ROOT` seed), không
- *   được biến trường hợp đó thành lỗi.
- * - Id lạ / registry đọc hỏng (`loadRegistry` nuốt lỗi trả rỗng) → lỗi tường
- *   minh, KHÔNG fallback: chạy nhầm project là thứ field này phải chặn.
- */
-function resolveActionTarget(
-  input: RunAutomationInput,
-  action: RunTaskAction,
-): ActionTarget | { error: string } {
-  const id = (action.projectId ?? '').trim()
-  if (!id || id === input.projectId) return { root: input.root, projectId: input.projectId }
-
-  const project = getProject(id)
-  if (!project) return { error: `unknown target project: ${id}` }
-  return { root: project.path, projectId: project.id }
-}
-
-/** Task id do automation sinh — tuân TASK_ID_PATTERN, dễ nhận diện nguồn. */
-function mintAutomationTaskId(): string {
-  return `auto-${randomBytes(4).toString('hex')}`
-}
-
-function cap(text: string, max: number): string {
-  return text.length > max ? `${text.slice(0, max)}\n…[truncated]` : text
-}
 
 /** stdout của job: ưu tiên `job.stdout` (persist cho agent-CLI), fallback log file. */
 function stdoutOf(job: JobRecord): string {
-  if (typeof job.stdout === 'string' && job.stdout.trim()) return cap(job.stdout, STDOUT_CAP)
+  if (typeof job.stdout === 'string' && job.stdout.trim()) return capText(job.stdout, STEP_STDOUT_CAP)
   if (!job.logPath) return ''
   try {
-    return cap(readTextFileSync(job.logPath), STDOUT_CAP)
+    return capText(readTextFileSync(job.logPath), STEP_STDOUT_CAP)
   } catch {
     return ''
   }
@@ -151,7 +65,7 @@ function artifactsOf(root: string, taskId: string): Record<string, string> {
   for (const f of files) {
     if (total >= ARTIFACT_TOTAL_CAP) break
     try {
-      const content = cap(readTextFileSync(joinPath(dir, f)), ARTIFACT_EACH_CAP)
+      const content = capText(readTextFileSync(joinPath(dir, f)), ARTIFACT_EACH_CAP)
       total += content.length
       out[f.replace(/\.md$/, '')] = content
     } catch {
@@ -173,168 +87,7 @@ export async function waitJobTerminal(jobId: string, timeoutMs: number): Promise
   }
 }
 
-interface StepExecution {
-  taskId?: string
-  jobId?: string
-  /** Data root mà bước này thực sự chạy trên đó — đọc artifacts theo đúng project đích. */
-  root?: string
-  /** Có giá trị khi action không tạo job — kết quả chạy đồng bộ (httpRequest). */
-  stdout?: string
-  skipped?: boolean
-  error?: string
-}
-
-async function executeCreateAction(
-  input: RunAutomationInput,
-  action: RunTaskAction,
-  runId: string,
-): Promise<StepExecution> {
-  if (action.mode !== 'create' || !action.prompt) {
-    return { error: 'action misconfigured: prompt required for mode=create' }
-  }
-
-  // Resolve trước khi tạo bất cứ thứ gì — project đích hỏng thì không để lại task rác.
-  const target = resolveActionTarget(input, action)
-  if ('error' in target) return { error: target.error }
-
-  // Mint + retry: id gần như không trùng, nhưng 409 thì thử lại vài lần thay vì fail cả run.
-  let created: Awaited<ReturnType<typeof createTask>> | null = null
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const result = await createTask(target.root, {
-      taskId: mintAutomationTaskId(),
-      source: 'prompt',
-      prompt: action.prompt,
-      profileName: action.profileName ?? undefined,
-    })
-    if ('error' in result) {
-      if (result.status === 409 && attempt < 2) continue
-      return { error: result.error }
-    }
-    created = result
-    break
-  }
-  if (!created || 'error' in created) {
-    return { error: 'failed to create task' }
-  }
-
-  const agentRef = created.firstStep?.agent
-  if (typeof agentRef !== 'string' || !agentRef) {
-    return { taskId: created.taskId, root: target.root, error: 'pipeline has no first-step agent' }
-  }
-
-  // Pipeline có node điều phối ⇒ giao cho nó (như nhánh "Chạy ngay" của createTask);
-  // không có jobId để chờ, tiến độ theo dõi qua event `orchestrator.*`.
-  const orchestration = await resolveOrchestration(target.root, created.taskId)
-  if (orchestration.active) {
-    await dispatchOrchestrator(target.root, target.projectId, created.taskId, 'task_created')
-    return { taskId: created.taskId, root: target.root }
-  }
-
-  const job = submitJob({
-    // Action khai runner tường minh thì thắng pin của step đầu.
-    runnerId: action.runnerId ?? resolveStepRunnerId(created.firstStep).runnerId,
-    agentRef,
-    workspace: joinPath(target.root, 'tasks', created.taskId),
-    userPrompt: created.requestContent,
-    metadata: {
-      projectRoot: joinPath(target.root, '..'),
-      devTeamRoot: target.root,
-      projectId: target.projectId || undefined,
-      taskId: created.taskId,
-      pipelineStepId: created.firstStep.id,
-      createTaskRun: true,
-      // Rule vẫn thuộc project gốc — đây là đường truy vết ngược job → rule.
-      automationId: input.rule.id,
-      automationRunId: runId,
-    },
-  })
-  return { taskId: created.taskId, jobId: job.id, root: target.root }
-}
-
-async function executeExistingAction(
-  input: RunAutomationInput,
-  action: RunTaskAction,
-): Promise<StepExecution> {
-  if (action.mode !== 'existing' || !action.taskId) {
-    return { error: 'action misconfigured: taskId required for mode=existing' }
-  }
-  const target = resolveActionTarget(input, action)
-  if ('error' in target) return { error: target.error }
-
-  const result = await runTaskStep(target.root, target.projectId, action.taskId, {
-    runnerId: action.runnerId ?? null,
-    origin: 'automation',
-  })
-  if ('error' in result) {
-    // 409 = task đang có job chạy — không phải lỗi cấu hình, ghi skipped.
-    if (result.status === 409) {
-      return { taskId: action.taskId, root: target.root, skipped: true, error: 'task busy — step already running' }
-    }
-    // 403 = task do orchestrator điều phối — ghi `skipped` (không `failed`) để không
-    // biến automation đang chạy tốt thành đỏ hàng loạt; phát tín hiệu để orchestrator tự quyết.
-    if (result.status === 403) {
-      emit('orchestrator.start_requested', {
-        taskId: action.taskId,
-        projectId: target.projectId || undefined,
-        devTeamRoot: target.root,
-        automationId: input.rule.id,
-      })
-      return {
-        taskId: action.taskId,
-        root: target.root,
-        skipped: true,
-        error: 'task is orchestrated — start requested via orchestrator',
-      }
-    }
-    return { taskId: action.taskId, root: target.root, error: result.error }
-  }
-  return { taskId: action.taskId, jobId: result.job.id, root: target.root }
-}
-
-async function executeHttpRequestAction(action: HttpRequestAction): Promise<StepExecution> {
-  try {
-    const text = await fetchUrlSafe(action.url, {
-      method: action.method,
-      headers: action.headers,
-      body: action.body,
-    })
-    return { stdout: cap(text, STDOUT_CAP) }
-  } catch (err: any) {
-    return { error: String(err?.message ?? err) }
-  }
-}
-
-async function executeRunCommandAction(
-  input: RunAutomationInput,
-  action: RunCommandAction,
-  runId: string,
-): Promise<StepExecution> {
-  const workspace = joinPath(
-    input.root,
-    'automations',
-    input.rule.id,
-    'runs',
-    runId,
-    `cmd-${randomBytes(3).toString('hex')}`,
-  )
-  mkdirSync(workspace, { recursive: true })
-  const job = submitJob({
-    runnerId: action.runnerId,
-    agentRef: '',
-    workspace,
-    userPrompt: action.params ?? '',
-    metadata: {
-      projectRoot: joinPath(input.root, '..'),
-      devTeamRoot: input.root,
-      projectId: input.projectId || undefined,
-      automationId: input.rule.id,
-      automationRunId: runId,
-    },
-  })
-  return { jobId: job.id }
-}
-
-function triggerContextOf(input: RunAutomationInput): TriggerContext {
+function triggerContextOf(input: AutomationRunnerInput): TriggerContext {
   if (input.source === 'event' && input.event) {
     return { kind: 'event', type: input.event.type, payload: input.event.payload }
   }
@@ -354,7 +107,7 @@ function triggerContextOf(input: RunAutomationInput): TriggerContext {
 }
 
 async function executeSequence(
-  input: RunAutomationInput,
+  input: AutomationRunnerInput,
   run: AutomationRun,
   stateBase: { lastRunAt: string },
 ): Promise<void> {
@@ -366,16 +119,11 @@ async function executeSequence(
   try {
     for (let i = 0; i < input.rule.actions.length; i++) {
       const rawAction = input.rule.actions[i]
+      const executor = actionExecutorFor(rawAction.kind)
       // Thay biến trong các trường input của action trước khi thực thi (theo kind).
-      const substFields =
-        rawAction.kind === 'httpRequest'
-          ? ['name', 'description', 'url', 'body']
-          : rawAction.kind === 'runCommand'
-            ? ['name', 'description', 'runnerId', 'params']
-            : ['name', 'description', 'prompt', 'taskId', 'profileName', 'runnerId']
       const action = substituteVarsInRecord(
         rawAction as unknown as Record<string, unknown>,
-        substFields,
+        [...executor.substFields],
         ctx,
       ) as unknown as AutomationAction
 
@@ -383,18 +131,11 @@ async function executeSequence(
         index: i + 1,
         status: 'running',
         ...(action.name ? { name: action.name } : {}),
-        input: buildStepInput(action),
+        input: executor.buildInput(action),
       }
       run.steps.push(step)
 
-      const executed =
-        action.kind === 'httpRequest'
-          ? await executeHttpRequestAction(action)
-          : action.kind === 'runCommand'
-            ? await executeRunCommandAction(input, action, run.runId)
-            : action.mode === 'create'
-              ? await executeCreateAction(input, action, run.runId)
-              : await executeExistingAction(input, action)
+      const executed = await executor.execute(action, { input, runId: run.runId })
 
       if (executed.taskId) step.taskId = executed.taskId
       if (executed.jobId) step.jobId = executed.jobId
@@ -477,7 +218,7 @@ async function executeSequence(
  * chạy nền chuỗi action. Trả về run record đang `running` — kết quả cuối
  * nằm trong history (UI poll) và event `automation.run_succeeded|run_failed`.
  */
-export function runAutomation(input: RunAutomationInput): AutomationRun {
+export function runAutomation(input: AutomationRunnerInput): AutomationRun {
   const { projectId, rule, source } = input
   const startedAt = new Date().toISOString()
   const runId = randomUUID()

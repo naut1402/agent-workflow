@@ -1,7 +1,8 @@
 import crypto from 'node:crypto'
 import { getOAuthConfig, buildAuthorizeUrl, exchangeCode, refreshAccessToken } from './oauthProviders.js'
 import { storeSecret, readSecret } from './secretVault.js'
-import { upsertCredential } from './credentials.js'
+import { resolveSecretRef, upsertCredential } from './credentials.js'
+import type { CredentialProfile } from './types.js'
 
 /**
  * Orchestrates the browser OAuth connect flow started from `ConnectionDialog.vue`
@@ -166,6 +167,32 @@ export async function ensureFreshOAuthToken(
   } catch (err: any) {
     return { ok: false, error: `oauth refresh failed — connect again (${String(err?.message ?? err)})` }
   }
+}
+
+/**
+ * Giải API key thật cho một provider API từ credential của Connection — env,
+ * secret trong vault, hoặc OAuth (tự refresh). Dùng chung cho `execute()` và
+ * `complete()` của `AgenticApiProvider`; thông điệp lỗi giữ nguyên văn như khi
+ * còn nằm trong `execute()`.
+ */
+export async function resolveProviderApiKey(
+  credential: CredentialProfile,
+  providerId: string,
+): Promise<{ ok: true; value: string } | { ok: false; error: string }> {
+  const auth = resolveSecretRef(credential)
+  if (auth.type === 'oauth') {
+    return ensureFreshOAuthToken(credential.secretRef.slice('oauth:'.length), providerId)
+  }
+  if ((auth.type === 'env' || auth.type === 'stored') && auth.value) {
+    return { ok: true, value: auth.value }
+  }
+  let detail: string
+  if (auth.type === 'env') detail = `biến môi trường "${auth.key}" chưa được đặt`
+  else if (auth.type === 'stored') detail = process.env.DASHBOARD_SECRET_KEY
+    ? 'secret trong vault không tìm thấy hoặc bị lỗi giải mã'
+    : 'DASHBOARD_SECRET_KEY chưa được đặt — không thể đọc secret từ vault'
+  else detail = `secretRef "${credential.secretRef}" không hỗ trợ cho API provider`
+  return { ok: false, error: `missing API key — ${detail}` }
 }
 
 /** Test-only: clears in-memory pending state between test files. */

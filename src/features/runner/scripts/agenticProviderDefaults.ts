@@ -2,8 +2,12 @@
 // on ConnectionDialog.vue — placeholders shown next to the model/baseURL/secretRef
 // fields when creating a credential for one of them. Pure data (no Vue import)
 // so it is trivially unit-testable.
+//
+// Nguồn chính giờ là catalog BE (`providers[].defaultBaseURL / modelHint /
+// secretEnvHint`); bảng dưới chỉ là dự phòng khi catalog thiếu trường — đọc qua
+// `lib/providerCatalog.ts`, 🚫 import thẳng từ component.
 
-/** Placeholder base URL shown on the field — the real default lives in registry.ts. */
+/** Placeholder base URL shown on the field — the real default lives in providerRegistry.ts (`ProviderDescriptor.defaultBaseURL`). */
 export const DEFAULT_BASE_URLS: Record<string, string> = {
   'openai-api': 'https://api.openai.com/v1',
   'gemini-api': 'https://generativelanguage.googleapis.com/v1beta/openai',
