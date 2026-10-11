@@ -61,6 +61,25 @@ function mintAutomationTaskId(): string {
   return `auto-${randomBytes(4).toString('hex')}`
 }
 
+type CreateTaskResult = Awaited<ReturnType<typeof createTask>>
+
+/**
+ * Tạo task từ prompt với id tự mint. Mint + retry: id gần như không trùng, nhưng
+ * 409 thì thử lại vài lần thay vì fail cả run; lỗi khác trả thẳng `error`.
+ */
+async function createAutomationTask(
+  root: string,
+  prompt: string,
+  profileName: string | undefined,
+): Promise<Exclude<CreateTaskResult, { error: string }> | { error: string }> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const result = await createTask(root, { taskId: mintAutomationTaskId(), source: 'prompt', prompt, profileName })
+    if (!('error' in result)) return result
+    if (result.status !== 409 || attempt >= 2) return { error: result.error }
+  }
+  return { error: 'failed to create task' }
+}
+
 export class RunTaskExecutor implements AutomationActionExecutor<'runTask'> {
   readonly kind = 'runTask' as const
   // `projectId` cố ý không thay biến — `{`/`}` trượt regex của schema.
@@ -101,25 +120,8 @@ export class RunTaskExecutor implements AutomationActionExecutor<'runTask'> {
     const target = resolveActionTarget(input, action)
     if ('error' in target) return { error: target.error }
 
-    // Mint + retry: id gần như không trùng, nhưng 409 thì thử lại vài lần thay vì fail cả run.
-    let created: Awaited<ReturnType<typeof createTask>> | null = null
-    for (let attempt = 0; attempt < 3; attempt++) {
-      const result = await createTask(target.root, {
-        taskId: mintAutomationTaskId(),
-        source: 'prompt',
-        prompt: action.prompt,
-        profileName: action.profileName ?? undefined,
-      })
-      if ('error' in result) {
-        if (result.status === 409 && attempt < 2) continue
-        return { error: result.error }
-      }
-      created = result
-      break
-    }
-    if (!created || 'error' in created) {
-      return { error: 'failed to create task' }
-    }
+    const created = await createAutomationTask(target.root, action.prompt, action.profileName ?? undefined)
+    if ('error' in created) return { error: created.error }
 
     const agentRef = created.firstStep?.agent
     if (typeof agentRef !== 'string' || !agentRef) {
