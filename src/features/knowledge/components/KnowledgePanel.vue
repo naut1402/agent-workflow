@@ -14,6 +14,7 @@ import {
   type KnowledgeEntryMeta,
   type KnowledgeTagFacetView,
 } from '../scripts/KnowledgePanelApi'
+import { MAX_BUNDLE_IDS } from '../schemas/knowledge'
 import CScreenLayout from '../../../frontend/ui/CScreenLayout.vue'
 import CMarkdownView from '../../../frontend/ui/CMarkdownView.vue'
 import KnowledgeSideMenu from './KnowledgeSideMenu.vue'
@@ -268,15 +269,15 @@ function toMarkdownSection(item: any): string {
   ].join('\n')
 }
 
-/** Gộp entry đang lọc thành một file. Chia lô 50 — đúng trần `MAX_BUNDLE_IDS`. */
+/** Gộp entry đang lọc thành một file, chia lô theo trần `MAX_BUNDLE_IDS` của route bundle. */
 async function downloadFiltered() {
   const ids = filteredEntries.value.map((e) => e.id)
   if (!ids.length) return
   error.value = ''
   try {
     const items: any[] = []
-    for (let i = 0; i < ids.length; i += 50) {
-      const { bundle } = await fetchKnowledgeBundle(ids.slice(i, i + 50), props.projectId)
+    for (let i = 0; i < ids.length; i += MAX_BUNDLE_IDS) {
+      const { bundle } = await fetchKnowledgeBundle(ids.slice(i, i + MAX_BUNDLE_IDS), props.projectId)
       items.push(...bundle)
     }
     saveBlob(items.map(toMarkdownSection).join('\n\n'), `knowledge-${scope.value}-${stamp()}.md`)

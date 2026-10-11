@@ -4,7 +4,7 @@ import { z } from 'zod'
  * Zod là nguồn chân lý cho bề mặt HTTP của knowledge — controller parse mọi
  * query/body qua đây, driver không tin request nữa.
  *
- * `KNOWLEDGE_SCOPES` là nguồn duy nhất của danh sách scope: `fileDriver` tra
+ * `KNOWLEDGE_SCOPES` là nguồn duy nhất của danh sách scope: `FileKnowledgeDriver` tra
  * bảng `scope → base` theo đúng thứ tự này, nên thêm scope là sửa một chỗ.
  * Scope nằm trong id (`<scope>/<slug>`) nên chỉ được *thêm* giá trị mới,
  * đổi giá trị cũ là đổi id của mọi entry đang tồn tại.
@@ -13,9 +13,34 @@ export const KNOWLEDGE_SCOPES = ['project', 'system', 'global'] as const
 
 export type KnowledgeScope = (typeof KNOWLEDGE_SCOPES)[number]
 
-/** Khớp `taskCreate.ts` — cùng trần số lượng knowledge cho một lượt. */
+/**
+ * Trần số lượng knowledge cho một lượt — nguồn duy nhất: route bundle, tool MCP
+ * `get_knowledge_bundle`, `knowledgeInputs` của `monitor/schemas/taskCreate.ts`
+ * và cỡ lô tải về của `KnowledgePanel` đều import hằng này.
+ */
 export const MAX_BUNDLE_IDS = 50
 export const MAX_BUNDLE_BYTES = 1024 * 1024
+
+/**
+ * Một phần tử của bundle (`loadKnowledgeBundle`, `GET /api/knowledge/bundle`,
+ * tool MCP `get_knowledge_bundle`). Id hỏng không làm vỡ cả bundle: nó thành
+ * `{ id, error }`. Phân biệt bằng `'error' in item`.
+ *
+ * `path` chỉ có khi driver lưu bằng file — consumer đọc được đĩa chèn nó vào
+ * prompt, consumer không có fs dùng `content`.
+ */
+export const KnowledgeBundleItem = z.union([
+  z.object({
+    id: z.string(),
+    title: z.string(),
+    tags: z.array(z.string()),
+    content: z.string(),
+    path: z.string().optional(),
+  }),
+  z.object({ id: z.string(), error: z.string() }),
+])
+
+export type KnowledgeBundleItem = z.infer<typeof KnowledgeBundleItem>
 
 export const KnowledgeListQuery = z.object({
   id: z.string().min(1).max(200).optional(),
