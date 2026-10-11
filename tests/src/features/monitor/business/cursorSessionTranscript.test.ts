@@ -2,10 +2,12 @@ import { describe, expect, test } from 'bun:test'
 import { mkdirSync, writeTextFileSync, joinPath } from '../../../../../src/backend/lib/fileHelper.js'
 import os from 'node:os'
 import {
+  CursorTranscriptReader,
   findCursorTranscriptFile,
-  readCursorTranscript,
   stripCursorUserWrapper,
-} from '../../../../../src/features/monitor/business/cursorSessionTranscript.js'
+} from '../../../../../src/features/monitor/business/transcripts/CursorTranscriptReader.js'
+
+const readCursorTranscript = (file: string) => new CursorTranscriptReader().readFile(file)
 
 describe('cursorSessionTranscript', () => {
   test('finds and parses cursor agent-transcripts jsonl', () => {

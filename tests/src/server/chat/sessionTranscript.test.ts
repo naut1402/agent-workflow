@@ -2,12 +2,16 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import type { ReadTranscriptOptions } from '../../../../src/features/monitor/business/transcripts/TranscriptReader'
 import {
+  ClaudeTranscriptReader,
   encodeWorkspacePath,
   findTranscriptFile,
-  readTranscript,
-  readSessionTranscript,
-} from '../../../../src/features/monitor/business/sessionTranscript'
+} from '../../../../src/features/monitor/business/transcripts/ClaudeTranscriptReader'
+
+const claude = new ClaudeTranscriptReader()
+const readTranscript = (file: string, opts?: ReadTranscriptOptions) => claude.readFile(file, opts)
+const readSessionTranscript = (sessionId: string) => claude.read(sessionId)
 
 // The CLI keeps its own conversation transcript at
 // <CLAUDE_CONFIG_DIR>/projects/<encoded cwd>/<sessionId>.jsonl and appends to it
