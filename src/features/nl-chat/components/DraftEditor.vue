@@ -57,6 +57,11 @@ watch(
     // So sánh qua `toRaw`: object đi vòng qua prop có thể về đây dưới dạng proxy
     // reactive, lúc đó `===` với bản thô luôn sai và watcher ghi đè nhầm.
     if (d && toRaw(d) === lastJsonEmit) return
+    // Nhận một draft KHÔNG phải tiếng vọng ⇒ quên dấu cũ đi. `undoDraftUpdate()`
+    // khôi phục bằng CHÍNH tham chiếu đã chụp, nên bản người dùng từng gõ ở ô JSON
+    // có thể quay lại lần thứ hai; giữ dấu cũ là lần đó bị coi nhầm là tiếng vọng
+    // và ô JSON kẹt ở bản của agent trong khi form + `confirm()` dùng bản khác.
+    lastJsonEmit = null
     jsonText.value = d ? JSON.stringify(d, null, 2) : ''
     jsonParseError.value = null
   },

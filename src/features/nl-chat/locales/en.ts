@@ -57,7 +57,7 @@ export default {
     undo: 'Undo',
     dismiss: 'Dismiss',
     attachTooLong:
-      'The draft is too long to attach — describe the fields to change in your message.',
+      "The draft is too long to attach — your manual edits won't reach the assistant this turn; describe the fields to change in your message.",
     composerPlaceholder: 'Ask for a draft change...',
     conversationTitle: 'Conversation ({count})',
     conversationCollapse: 'Collapse conversation',
