@@ -10,6 +10,7 @@ import {
 import { canNavigateToModeKey, navigateToModeKey } from '@/frontend/shell/keys'
 import { fetchArtifact, fetchArtifactActions, runArtifactAction, saveArtifact } from '../../../../../src/features/monitor/scripts/ArtifactPanelApi'
 import { fetchJob, fetchRunners } from '../../../../../src/features/runner/scripts/runnerApi'
+import { parseMarkdown, renderMermaid } from '@/frontend/lib/markdownLib'
 
 const MD_TWO_H2 = `# Title
 
@@ -93,11 +94,14 @@ vi.mock('@/features/runner/scripts/runnerApi', () => ({
 
 // Keeps `[text](href)` and `**bold**` as real elements — the click-delegation
 // tests below need an <a> (and a child node inside one) in the rendered output.
+// [Tfe960c47] `vi.fn` bọc ngoài đúng hàm cũ — hành vi không đổi, chỉ để đếm
+// được số lần parse (review.md §4 ③: gập/mở một mục con ⇒ delta = 0).
 vi.mock('@/frontend/lib/markdownLib', () => ({
-  parseMarkdown: (s: string) =>
+  parseMarkdown: vi.fn((s: string) =>
     `<p>${s
       .replace(/\[([^\]]*)\]\(([^)]*)\)/g, '<a href="$2">$1</a>')
       .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')}</p>`,
+  ),
   renderMermaid: vi.fn(async () => {}),
 }))
 
@@ -1284,5 +1288,228 @@ describe('ArtifactPanel — chế độ xem toàn văn (TC-30)', () => {
         w.findAll('.block-item').map((d) => (d.element as HTMLDetailsElement).open),
       ).toEqual([expected, expected, expected])
     }
+  })
+})
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * [Tfe960c47] Nhóm §9 của `test-spec.md` — bề mặt RỦI RO NHẤT của task.
+ *
+ * Panel này gánh inline edit theo **chỉ số block**, selection toolbar theo
+ * **khoảng dòng** và poll `task`. Tầng mục con chen vào giữa cây DOM của cả ba,
+ * nên mọi ca dưới đây là hợp đồng với người dùng đang SỬA tài liệu.
+ * ───────────────────────────────────────────────────────────────────────────*/
+describe('ArtifactPanel — tầng mục con (TC-G01, TC-G05…G11)', () => {
+  const MD_SUB = `## Block A
+Dẫn nhập của A.
+
+### A.1
+Nội dung A.1
+
+#### A.1.1
+Nội dung sâu hơn
+
+### A.2
+Nội dung A.2
+
+## Block B
+Không có mục con.
+`
+
+  const subTask = { task_id: 'T1', artifacts: { 'design.md': { exists: true, mtime: 1 } } }
+
+  const parseSpy = vi.mocked(parseMarkdown)
+
+  async function mountSub(content = MD_SUB) {
+    vi.mocked(fetchArtifact).mockImplementation(async () => ({ content, mtime: 1 }))
+    const w = mount(ArtifactPanel, {
+      props: { task: subTask, openArtifact: { taskId: 'T1', name: 'design.md' }, projectId: null },
+      global: { stubs: { MarkdownTextEditor: MarkdownTextEditorStub } },
+    })
+    await flushPromises()
+    return w
+  }
+
+  /**
+   * Bấm `<summary>` của mục con. 🚫 Không dùng `trigger('toggle')`: sự kiện của
+   * test-utils CÓ bubble còn `toggle` thật thì không, nên cú vọng lên
+   * `.block-item` cha sẽ chạy nhầm `onBlockToggle`. jsdom@29.1.1 bắn `toggle`
+   * ở macrotask sau khi `open` đổi — đó mới là mô phỏng đúng.
+   */
+  async function toggleSub(w: any, path: string, open: boolean) {
+    const el = w.find(`[data-node-path="${path}"]`).element as HTMLDetailsElement
+    el.open = open
+    await new Promise<void>((resolve) => setTimeout(resolve, 0))
+    await flushPromises()
+  }
+
+  const subStates = (w: any) =>
+    w.findAll('details.block-sub').map((d: any) => (d.element as HTMLDetailsElement).open)
+
+  /** Nạp lại CÙNG tài liệu qua một nhịp poll `mtime` — đi nhánh `prune`, không `seed`. */
+  async function pollReload(w: any, next: { content: string; mtime: number }) {
+    vi.mocked(fetchArtifact).mockResolvedValue(next)
+    await w.setProps({
+      task: { ...subTask, artifacts: { 'design.md': { exists: true, mtime: next.mtime } } },
+    })
+    await flushPromises()
+  }
+
+  beforeEach(() => {
+    seedSettings('block', SECTION_LEGACY)
+  })
+
+  it('TC-G01: artifact có `###` ⇒ mục con là `<details>` gập được, lồng đúng tầng', async () => {
+    const w = await mountSub()
+    const paths = w.findAll('details.block-sub').map((d) => d.attributes('data-node-path'))
+
+    expect(paths).toEqual(['0/0', '0/0/0', '0/1'])
+    expect(w.find('[data-node-path="0/0"]').element.contains(
+      w.find('[data-node-path="0/0/0"]').element,
+    )).toBe(true)
+  })
+
+  it('TC-G01b: gập một mục con không đóng block cha, không đụng mục anh em', async () => {
+    const w = await mountSub()
+    expect(subStates(w)).toEqual([true, true, true])
+
+    await toggleSub(w, '0/0', false)
+
+    expect(subStates(w)).toEqual([false, true, true])
+    expect(w.findAll('.block-item').map((d) => (d.element as HTMLDetailsElement).open)).toEqual([
+      true,
+      true,
+    ])
+  })
+
+  it('TC-G05: double-click THÂN mục con ⇒ mở editor của block `##` chứa nó, nguyên văn CẢ block', async () => {
+    const w = await mountSub()
+
+    await w.find('[data-node-path="0/0"] .block-sub__body').trigger('dblclick')
+    await flushPromises()
+
+    const draft = w.get('.mock-md-editor').element as HTMLTextAreaElement
+    // Nguyên văn block 0 — gồm cả hai mục con, không chỉ phần dẫn nhập.
+    expect(draft.value).toContain('## Block A')
+    expect(draft.value).toContain('### A.1')
+    expect(draft.value).toContain('#### A.1.1')
+    expect(draft.value).toContain('### A.2')
+    expect(draft.value).not.toContain('## Block B')
+  })
+
+  it('TC-G06: double-click TIÊU ĐỀ mục con ⇒ 🚫 không mở editor, chỉ gập/mở', async () => {
+    const w = await mountSub()
+
+    await w.find('[data-node-path="0/0"] > summary').trigger('dblclick')
+    await flushPromises()
+
+    expect(w.find('.mock-md-editor').exists()).toBe(false)
+  })
+
+  it('TC-G07: sửa block thứ i của tài liệu CÓ mục con ⇒ ghi đúng block i, block khác giống hệt', async () => {
+    vi.mocked(saveArtifact).mockImplementation(async (_t, _n, content) => ({ content, mtime: 9 }))
+    const w = await mountSub()
+
+    await w.findAll('.block-content.md-editable')[1].trigger('dblclick')
+    await flushPromises()
+    await w.get('.mock-md-editor').setValue('## Block B\nĐã sửa B.')
+    await w.get('.mock-md-editor').trigger('blur')
+    await flushPromises()
+
+    const saved = vi.mocked(saveArtifact).mock.calls.at(-1)![2]
+    // Block 0 (cùng toàn bộ mục con) không bị đụng tới.
+    expect(saved).toContain('### A.1')
+    expect(saved).toContain('#### A.1.1')
+    expect(saved).toContain('### A.2')
+    expect(saved).toContain('Đã sửa B.')
+    expect(saved).not.toContain('Không có mục con.')
+  })
+
+  it('TC-G09: trạng thái gập mục con sống qua một nhịp poll trả CÙNG nội dung', async () => {
+    const w = await mountSub()
+    await toggleSub(w, '0/0', false)
+    expect(subStates(w)).toEqual([false, true, true])
+
+    await pollReload(w, { content: MD_SUB, mtime: 2 })
+
+    expect(subStates(w)).toEqual([false, true, true])
+  })
+
+  it('TC-G10: poll trả nội dung ĐỔI ⇒ giữ lựa chọn cũ, mục con mới nhận mặc định', async () => {
+    const w = await mountSub()
+    await toggleSub(w, '0/0', false)
+
+    await pollReload(w, {
+      content: MD_SUB.replace('## Block B', '### A.3\nMục mới\n\n## Block B'),
+      mtime: 2,
+    })
+
+    expect(w.findAll('details.block-sub').map((d) => d.attributes('data-node-path'))).toEqual([
+      '0/0',
+      '0/0/0',
+      '0/1',
+      '0/2',
+    ])
+    expect(subStates(w)).toEqual([false, true, true, true])
+    expect(w.find('[data-node-path="0/2"]').text()).toContain('Mục mới')
+  })
+
+  it('TC-G11: mermaid trong artifact vẫn chạy khi mở mục con', async () => {
+    const w = await mountSub(MD_SUB)
+    vi.mocked(renderMermaid).mockClear()
+
+    await toggleSub(w, '0/0', false)
+    await toggleSub(w, '0/0', true)
+
+    expect(vi.mocked(renderMermaid)).toHaveBeenCalled()
+  })
+
+  /**
+   * [review.md §4 ②] Chế độ toàn văn 🚫 KHÔNG có `<details>` nên cũng không có
+   * tầng mục con ⇒ phải render NGUYÊN `block.source`, không phải `block.intro`.
+   * Thiếu ca này thì lần refactor sau rất dễ "dọn" `fullBlocks` về `block.html`
+   * và làm mất sạch phần `###` trở xuống mà không test nào kêu.
+   */
+  it('TC-G-full: chế độ toàn văn giữ ĐỦ nội dung mọi mục con (fullBlocks)', async () => {
+    seedSettings('full', SECTION_LEGACY)
+    const w = await mountSub()
+
+    expect(w.find('.block-list').exists()).toBe(false)
+    const text = w.text()
+    for (const s of ['Dẫn nhập của A.', 'Nội dung A.1', 'Nội dung sâu hơn', 'Nội dung A.2']) {
+      expect(text).toContain(s)
+    }
+  })
+
+  it('TC-G-full-b: block KHÔNG có mục con dùng lại đúng HTML đã dựng, không parse thêm', async () => {
+    seedSettings('full', SECTION_LEGACY)
+    const w = await mountSub('## Chỉ một\nkhông có mục con nào\n')
+
+    expect(w.text()).toContain('không có mục con nào')
+    expect(w.findAll('details.block-sub')).toHaveLength(0)
+  })
+
+  /**
+   * [review.md §4 ③] Chốt hồi quy cho [must] #1: `parseMarkdown` chạy ở computed
+   * (`renderNodes`), không ở render function của `CMarkdownNodes`. Gập/mở một
+   * mục con ⇒ delta = 0 (trước khi sửa là +4).
+   */
+  it('TC-G-parse: gập/mở một mục con ⇒ delta số lần parse = 0', async () => {
+    const w = await mountSub()
+    parseSpy.mockClear()
+
+    await toggleSub(w, '0/0', false)
+    await toggleSub(w, '0/0', true)
+
+    expect(parseSpy).toHaveBeenCalledTimes(0)
+  })
+
+  it('TC-G-parse-b: nội dung đổi thì VẪN parse lại — computed không "đông cứng"', async () => {
+    const w = await mountSub()
+    parseSpy.mockClear()
+
+    await pollReload(w, { content: '## Mới\nnội dung mới\n', mtime: 2 })
+
+    expect(parseSpy.mock.calls.length).toBeGreaterThan(0)
+    expect(w.text()).toContain('nội dung mới')
   })
 })

@@ -322,3 +322,30 @@ describe('TC-D07: overlay KHÔNG tham gia parity (G-C9)', () => {
     }
   })
 })
+
+/**
+ * [Tfe960c47] TC-I01 · TC-I02: khoá nhãn nút "lên đầu trang".
+ *
+ * Parity (TC-D01) chỉ bắt LỆCH giữa hai locale — xoá khoá ở CẢ HAI thì nó vẫn
+ * xanh. Ca này chốt sự tồn tại, vì `CScrollToTop` là bề mặt duy nhất đọc nó và
+ * mất khoá thì nút chỉ còn `aria-label` rỗng (nút không tên với screen reader).
+ */
+describe('TC-I01 · TC-I02: khoá nhãn nút lên đầu trang', () => {
+  const KEY = 'common.scrollTop.label'
+
+  it('có ở MỌI locale, và là chuỗi khác rỗng', () => {
+    for (const locale of LOCALES) {
+      const keys = allKeys(locale)
+      expect(`${locale}:${keys.includes(KEY)}`).toBe(`${locale}:true`)
+    }
+  })
+
+  it('mỗi locale dịch riêng, không bê nguyên chuỗi của locale khác', () => {
+    const values = LOCALES.map((l) => {
+      const scrollTop = bundleOf(l).common?.scrollTop as Record<string, unknown>
+      return scrollTop?.label
+    })
+    expect(values).toEqual(['Back to top', 'Lên đầu trang']) // thư mục locale sắp xếp: en, vi
+    expect(new Set(values).size).toBe(values.length)
+  })
+})
