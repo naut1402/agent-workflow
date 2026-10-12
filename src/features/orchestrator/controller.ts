@@ -24,13 +24,15 @@ function currentOrchestratorJobId(ref: TaskRef): string | null {
 }
 
 /**
- * Job step mà agent điều phối muốn đọc output: đang sống, nếu không thì vừa
- * xong gần nhất (G4a). Job điều phối của chính nó bị loại. Nhánh fallback vẫn
- * so `devTeamRoot` — không lộ output chéo task trùng tên giữa 2 project (G3).
+ * Job step mà agent điều phối muốn đọc output: đang sống (ưu tiên `running` —
+ * job `queued` mới hơn chưa có log), nếu không thì vừa xong gần nhất (G4a). Job
+ * điều phối của chính nó bị loại. Nhánh fallback vẫn so `devTeamRoot` — không
+ * lộ output chéo task trùng tên giữa 2 project (G3).
  */
 function stepJobOfTask(ref: TaskRef): JobRecord | null {
-  const live = liveJobsOfTask(ref.root, ref.taskId).find((j) => !isOrchestratorJob(j))
-  if (live) return live
+  const live = liveJobsOfTask(ref.root, ref.taskId).filter((j) => !isOrchestratorJob(j))
+  const pick = live.find((j) => j.status === 'running') ?? live[0]
+  if (pick) return pick
   return (
     listJobs(200).find(
       (j) => j.metadata?.taskId === ref.taskId && j.metadata?.devTeamRoot === ref.root && !isOrchestratorJob(j),

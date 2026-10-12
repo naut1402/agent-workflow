@@ -1271,6 +1271,10 @@ function needsStepFinishedTurn(root: string, taskId: string, last: JobRecord, ph
   // Handler `job.finished` của step còn đang chạy — lượt của nó sắp được mở.
   if (inFlight.has(keyOf(root, taskId))) return false
   const finishedAt = last.finishedAt ?? ''
+  // Step vừa xong: handler `job.finished` có thể còn ở khe trước `inFlight.add`
+  // (đang `await resolveOrchestration`). Lưới này chỉ cần cho trường hợp restart
+  // — đợi thêm một chu kỳ sweep để không mở lượt thứ hai cho cùng một step.
+  if (Date.now() - Date.parse(finishedAt) < SWEEP_INTERVAL_MS) return false
   return !listJobs(200).some(
     (j) => isOrchestratorJob(j) && jobBelongsToTask(j, root, taskId) && (j.createdAt ?? '') > finishedAt,
   )
