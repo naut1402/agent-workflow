@@ -48,7 +48,7 @@ Quy ước: [`docs/agent-rules/testing.md`](../docs/agent-rules/testing.md) §3�
 | `tests/src/features/monitor/lib` | vitest | `features/monitor/lib` | 5 | `npx vitest run tests/src/features/monitor/lib` |
 | `tests/src/features/monitor/schemas` | vitest | `features/monitor/schemas` | 2 | `npx vitest run tests/src/features/monitor/schemas` |
 | `tests/src/features/nl-chat/components` | vitest | `features/nl-chat/components`, `features/nl-chat/composables`, `features/nl-chat/lib` | 9 | `npx vitest run tests/src/features/nl-chat/components` |
-| `tests/src/features/nl-chat/composables` | vitest | `features/nl-chat/composables`, `frontend/lib` | 3 | `npx vitest run tests/src/features/nl-chat/composables` |
+| `tests/src/features/nl-chat/composables` | vitest | `features/nl-chat/composables`, `frontend/lib`, `frontend/plugins` | 4 | `npx vitest run tests/src/features/nl-chat/composables` |
 | `tests/src/features/nl-chat/lib` | vitest | `features/nl-chat/lib`, `features/nl-chat/schemas` | 5 | `npx vitest run tests/src/features/nl-chat/lib` |
 | `tests/src/features/notifications/components` | vitest | `features/notifications/components`, `features/notifications/lib` | 3 | `npx vitest run tests/src/features/notifications/components` |
 | `tests/src/features/notifications/composables` | vitest | `features/notifications/lib`, `features/notifications/composables`, `frontend/composables` | 1 | `npx vitest run tests/src/features/notifications/composables` |
@@ -92,16 +92,16 @@ Quy ước: [`docs/agent-rules/testing.md`](../docs/agent-rules/testing.md) §3�
 | `tests/src/server/chat` | bun | `features/runner/business`, `features/monitor/business`, `features/nl-chat/business` | 10 | `bun test tests/src/server/chat` |
 | `tests/src/server/features` | bun | `backend/apiServer.ts`, `backend/events`, `backend/http` | 1 | `bun test tests/src/server/features` |
 | `tests/src/server/github` | bun | `features/monitor/business`, `backend/apiServer.ts`, `backend/registry.ts` | 2 | `bun test tests/src/server/github` |
-| `tests/src/server/http` | bun | `backend/http`, `backend/apiServer.ts`, `features/runner/business` | 45 | `bun test tests/src/server/http` |
+| `tests/src/server/http` | bun | `backend/http`, `backend/apiServer.ts`, `features/runner/business` | 46 | `bun test tests/src/server/http` |
 | `tests/src/server/i18n` | bun | `shared/lib`, `backend/apiServer.ts`, `backend/registry.ts` | 3 | `bun test tests/src/server/i18n` |
 | `tests/src/server/knowledge` | bun | `backend/apiServer.ts`, `backend/db`, `backend/events` | 1 | `bun test tests/src/server/knowledge` |
 | `tests/src/server/lib` | bun | `backend/lib` | 1 | `bun test tests/src/server/lib` |
-| `tests/src/server/orchestrator` | bun | `features/orchestrator/business`, `features/runner/business`, `backend/events` | 12 | `bun test tests/src/server/orchestrator` |
+| `tests/src/server/orchestrator` | bun | `features/orchestrator/business`, `features/runner/business`, `backend/events` | 15 | `bun test tests/src/server/orchestrator` |
 | `tests/src/server/pipeline` | bun | `features/pipeline-editor/business`, `shared/lib` | 2 | `bun test tests/src/server/pipeline` |
 | `tests/src/server/rules` | bun | `features/pipeline-editor/business` | 1 | `bun test tests/src/server/rules` |
 | `tests/src/server/runners` | bun | `features/runner/business`, `backend/events`, `backend/registry.ts` | 29 | `bun test tests/src/server/runners` |
 | `tests/src/server/settings` | bun | `features/settings/business` | 2 | `bun test tests/src/server/settings` |
-| `tests/src/server/tasks` | bun | `features/monitor/business`, `features/runner/business`, `backend/events` | 4 | `bun test tests/src/server/tasks` |
+| `tests/src/server/tasks` | bun | `features/monitor/business`, `features/runner/business`, `backend/events` | 5 | `bun test tests/src/server/tasks` |
 | `tests/src/shared/lib` | bun | `frontend/http`, `shared/lib` | 1 | `bun test tests/src/shared/lib` |
 | `tests/src/shared/log` | vitest | `shared/log` | 1 | `npx vitest run tests/src/shared/log` |
 | `tests/src/shared/type` | vitest | `shared/type` | 1 | `npx vitest run tests/src/shared/type` |
