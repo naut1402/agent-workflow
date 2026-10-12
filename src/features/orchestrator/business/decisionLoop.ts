@@ -919,19 +919,28 @@ export async function handleEvent(event: DashboardEvent): Promise<void> {
   // hàm đó thu hồi MỌI token của task, chạy trước thì token vừa mint cho job mới
   // cũng mất. Job bị `cancelJob` chỉ phát `job.cancelled` (không vào đây) — việc
   // treo khi đó do `sweepStuckTasks` nhặt ở chu kỳ kế.
+  //
+  // Slot lượt hoãn được chụp TRƯỚC khi đọc kết quả: quyết định `summary` trên
+  // pipeline đã completed gọi `forgetTask`, xoá luôn slot (vd lượt
+  // `pipeline_completed` hoãn trong lúc job này chạy) trước khi drain kịp chạy lại.
   if (isOrchestratorJob(job)) {
+    if (event.type !== 'job.failed' && event.type !== 'job.finished') return
+    const key = keyOf(ref.root, ref.taskId)
+    const held = deferredTurns.get(key)
     if (event.type === 'job.failed') {
       const trigger = job?.metadata?.orchestratorTrigger as DecisionTrigger | undefined
       await recoverFromBadTurn(ref, trigger, 'orchestrator_job_failed')
-      revokeOrchestratorTokensFor(ref)
-      await drainOrchestratorBacklog(ref)
-      return
-    }
-    if (event.type === 'job.finished') {
+    } else {
       await consumeAgentDecision(ref, job as JobRecord)
-      revokeOrchestratorTokensFor(ref)
-      await drainOrchestratorBacklog(ref)
     }
+    revokeOrchestratorTokensFor(ref)
+    // Chỉ trả lại khi slot đang trống (lượt mới hơn ghi vào trong lúc chờ thì giữ
+    // lượt đó) và chưa có job điều phối nào sống (sweep có thể đã drain chạy lại
+    // chính lượt này). Task bị halt thì drain bỏ slot (`dropOrchestratorBacklog`), không rò.
+    if (held && !deferredTurns.has(key) && !hasActiveOrchestratorJob(ref.root, ref.taskId)) {
+      deferredTurns.set(key, held)
+    }
+    await drainOrchestratorBacklog(ref)
     return
   }
 
