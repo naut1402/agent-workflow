@@ -5,6 +5,7 @@ import { useAppSettings } from '../../../frontend/composables/useAppSettings'
 import { openSseStream, type SseStream } from '../../../frontend/lib/sseClient'
 import { ensureDashboardTransport, isSseEnabled } from '../../../frontend/lib/dashboardTransport'
 import { t } from '../../../frontend/plugins/i18n'
+import { ORCHESTRATOR_STEP_ID } from '../../../shared/lib/orchestrator'
 
 /**
  * Chat with the runner of a task's pipeline step: replays the CLI session's own
@@ -56,6 +57,8 @@ const BLOCKED_TEXT_KEY: Record<TaskChatBlockedReason, string> = {
 const STEP_BUSY_TEXT_KEY = 'nlChat.taskChat.stepBusy'
 /** Shown while the target step's job is running, in the (default) queue mode — before anything has been sent. */
 const QUEUED_TEXT_KEY = 'nlChat.taskChat.queued'
+/** The orchestrator node's panel while its own turn is running — messages queue for the node, not a step. */
+const QUEUED_ORCHESTRATOR_TEXT_KEY = 'nlChat.taskChat.queuedOrchestrator'
 
 export function useTaskChat(opts: UseTaskChatOptions) {
   const { settings } = useAppSettings()
@@ -95,9 +98,11 @@ export function useTaskChat(opts: UseTaskChatOptions) {
    */
   let generation = 0
 
+  const isOrchestratorPanel = () => opts.getStepId() === ORCHESTRATOR_STEP_ID
+
   const blockedText = computed(() => {
     if (blockedReason.value) return t(BLOCKED_TEXT_KEY[blockedReason.value])
-    if (queued.value) return t(QUEUED_TEXT_KEY)
+    if (queued.value) return t(isOrchestratorPanel() ? QUEUED_ORCHESTRATOR_TEXT_KEY : QUEUED_TEXT_KEY)
     return null
   })
 
@@ -299,7 +304,9 @@ export function useTaskChat(opts: UseTaskChatOptions) {
       pendingItems.value.push({ text: message, at: new Date().toISOString() })
       await refresh(true)
     } catch (e: any) {
-      error.value = e?.status === 409 ? t(STEP_BUSY_TEXT_KEY) : String(e?.message || e)
+      // The orchestrator panel queues instead of answering 409 when busy — a 409
+      // there is "orchestrator is not active", so show the server's message.
+      error.value = e?.status === 409 && !isOrchestratorPanel() ? t(STEP_BUSY_TEXT_KEY) : String(e?.message || e)
     } finally {
       sending.value = false
     }

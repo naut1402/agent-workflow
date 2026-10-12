@@ -15,7 +15,12 @@ import { dirname, joinPath, readDir, readTextFile, stat } from '../../../backend
 import { emit, on, type DashboardEvent } from '../../../backend/events/index.js'
 import { loadRegistry } from '../../../backend/registry.js'
 import { readState } from '../../monitor/business/tasks/index.js'
-import { advanceStepOnJobSuccess } from '../../monitor/business/tasks/state.js'
+import {
+  advanceStepOnJobSuccess,
+  hasPendingOrchestratorChat,
+  queueOrchestratorChat,
+  takeOrchestratorChat,
+} from '../../monitor/business/tasks/state.js'
 import {
   resolveOrchestration,
   stateFileOf,
@@ -77,11 +82,61 @@ const inFlight = new Set<string>()
 const observations = new Map<string, string[]>()
 const failureAsks = new Map<string, number>()
 const turnsAtPhase = new Map<string, number>()
+
+/** Trả về khi nút điều phối đang có job sống — caller dùng để hoãn / xếp hàng. */
+const ORCHESTRATOR_BUSY = 'orchestrator busy'
+
+/**
+ * Lượt quyết định bị từ chối vì đang có job điều phối khác (D2) — 1 slot/task,
+ * chạy lại khi job đó kết thúc (`drainOrchestratorBacklog`). In-memory như
+ * `failureAsks`: restart thì mất, lưới an toàn ở `sweepStuckTasks`.
+ */
+interface DeferredTurn {
+  ref: TaskRef
+  /** Không bao giờ là `chat` — chat có hàng chờ bền riêng (`pending_orchestrator_chat`). */
+  trigger: DecisionTrigger
+  currentPhase: string
+  extra: TurnInput
+}
+const deferredTurns = new Map<string, DeferredTurn>()
+
+/**
+ * Mức ưu tiên giữ slot — cao hơn thắng; CÙNG mức thì lượt mới nhất thắng (lượt
+ * mới mang phase / kết quả step mới hơn, và lượt chạy lại luôn đọc lại state).
+ */
+const DEFER_RANK: Partial<Record<DecisionTrigger, number>> = {
+  job_failed: 3,
+  step_finished: 3,
+  pipeline_completed: 3,
+  gate_approved: 2,
+  gate_rejected: 2,
+  manual_start: 1,
+}
+
+/** Khoá lượt theo task: "guard bận → submit / hoãn / xếp hàng" và drain chạy tuần tự. */
+const turnChains = new Map<string, Promise<unknown>>()
 let loopStarted = false
 let sweepTimer: ReturnType<typeof setInterval> | null = null
 
 function keyOf(root: string, taskId: string): string {
   return `${root}::${taskId}`
+}
+
+/**
+ * Khoá lượt của một task (cùng pattern với `withStateFileLock`, thêm bước dọn
+ * để map không phình). 🚫 Không gọi lồng: hàm chạy trong khoá phải dùng
+ * `askAgentAssumingLock`, không gọi `askAgent` / `chatWithOrchestrator` /
+ * `drainOrchestratorBacklog` — chờ chính khoá mình là deadlock.
+ */
+function withTurnLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const prev = turnChains.get(key) ?? Promise.resolve()
+  const run = prev.catch(() => {}).then(fn)
+  const tail = run.catch(() => {})
+  turnChains.set(key, tail)
+  void tail.then(() => {
+    if (turnChains.get(key) === tail) turnChains.delete(key)
+  })
+  return run
 }
 
 function recordObservation(root: string, taskId: string, event: DashboardEvent): void {
@@ -105,6 +160,8 @@ function recordObservation(root: string, taskId: string, event: DashboardEvent):
 function forgetTask(root: string, taskId: string): void {
   const key = keyOf(root, taskId)
   observations.delete(key)
+  // Khoá lượt tự dọn; hàng chờ chat trên đĩa bỏ ở lần drain kế nếu nút đã tắt.
+  deferredTurns.delete(key)
   for (const map of [failureAsks, turnsAtPhase]) {
     for (const k of [...map.keys()]) {
       if (k.startsWith(`${key}::`)) map.delete(k)
@@ -445,11 +502,39 @@ export interface TurnInput {
 export type TurnResult = { job: JobRecord } | { error: string; status: number }
 
 /**
- * Một lượt hỏi agent. Không chặn ở đây: quyết định đọc lại ở `job.finished` của
- * chính job này (vòng lặp tự nhận lại), nên một lượt suy nghĩ dài không giữ
- * khoá `inFlight` của task.
+ * Một lượt hỏi agent; bị từ chối vì nút điều phối đang bận thì giữ làm lượt hoãn
+ * (trừ `chat`) — lượt đó chạy lại khi job điều phối hiện tại kết thúc.
  */
 async function askAgent(
+  ref: TaskRef,
+  orch: Orchestration,
+  trigger: DecisionTrigger,
+  currentPhase: string,
+  extra: TurnInput = {},
+): Promise<TurnResult> {
+  return withTurnLock(keyOf(ref.root, ref.taskId), async () => {
+    const res = await askAgentAssumingLock(ref, orch, trigger, currentPhase, extra)
+    if ('error' in res && res.error === ORCHESTRATOR_BUSY) deferTurn({ ref, trigger, currentPhase, extra })
+    return res
+  })
+}
+
+/** Giữ lượt bị từ chối vì bận vào slot của task, theo `DEFER_RANK`. */
+function deferTurn(turn: DeferredTurn): void {
+  const rank = DEFER_RANK[turn.trigger]
+  if (rank === undefined) return // `chat` (và trigger lạ) không vào slot
+  const key = keyOf(turn.ref.root, turn.ref.taskId)
+  const held = deferredTurns.get(key)
+  if (held && (DEFER_RANK[held.trigger] ?? 0) > rank) return // mức thấp không đè mức cao
+  deferredTurns.set(key, turn)
+}
+
+/**
+ * Thân một lượt hỏi agent — caller PHẢI đang giữ `withTurnLock` của task. Không
+ * chặn ở đây: quyết định đọc lại ở `job.finished` của chính job này (vòng lặp tự
+ * nhận lại), nên một lượt suy nghĩ dài không giữ khoá `inFlight` của task.
+ */
+async function askAgentAssumingLock(
   ref: TaskRef,
   orch: Orchestration,
   trigger: DecisionTrigger,
@@ -460,8 +545,10 @@ async function askAgent(
     await haltTask(ref, 'orchestrator.agent is not configured')
     return { error: 'orchestrator.agent is not configured', status: 400 }
   }
+  // Guard bận PHẢI đứng trước đoạn đếm `turnsAtPhase`: lượt bị hoãn không được
+  // đếm, lượt chạy lại của nó đếm đúng một lần.
   if (hasActiveOrchestratorJob(ref.root, ref.taskId)) {
-    return { error: 'orchestrator busy', status: 409 }
+    return { error: ORCHESTRATOR_BUSY, status: 409 }
   }
   // Lượt do người khởi xướng không đếm: nó cần một thao tác tay mỗi lần, nên
   // không tự nuôi được vòng lặp mà mốc này sinh ra để chặn.
@@ -827,16 +914,23 @@ export async function handleEvent(event: DashboardEvent): Promise<void> {
   // Job quyết định của chính orchestrator: đây là chỗ đọc kết quả một lượt hỏi.
   // Nhánh này phải đứng TRƯỚC `ACTIONABLE`, nếu không `job.finished` của chính
   // lượt agent sẽ tự kích một lượt mới — đó là cách sinh bão job.
+  //
+  // Drain việc treo (lượt hoãn / tin nhắn chờ) chạy SAU `revokeOrchestratorTokensFor`:
+  // hàm đó thu hồi MỌI token của task, chạy trước thì token vừa mint cho job mới
+  // cũng mất. Job bị `cancelJob` chỉ phát `job.cancelled` (không vào đây) — việc
+  // treo khi đó do `sweepStuckTasks` nhặt ở chu kỳ kế.
   if (isOrchestratorJob(job)) {
     if (event.type === 'job.failed') {
       const trigger = job?.metadata?.orchestratorTrigger as DecisionTrigger | undefined
       await recoverFromBadTurn(ref, trigger, 'orchestrator_job_failed')
       revokeOrchestratorTokensFor(ref)
+      await drainOrchestratorBacklog(ref)
       return
     }
     if (event.type === 'job.finished') {
       await consumeAgentDecision(ref, job as JobRecord)
       revokeOrchestratorTokensFor(ref)
+      await drainOrchestratorBacklog(ref)
     }
     return
   }
@@ -914,23 +1008,131 @@ export async function startOrchestratorTurn(
   })
 }
 
+/** Kết quả một lượt chat: job vừa submit, lỗi, hoặc đã xếp hàng chờ nút điều phối rảnh. */
+export type ChatTurnResult = TurnResult | { queued: true }
+
 /**
  * Một lượt chat của người dùng với node điều phối. Không đi qua
  * `sendTaskFeedback`: hàm đó chọn "job step xong gần nhất" làm job cha, nên
  * phản hồi rơi vào session của step đầu thay vì session của node.
+ *
+ * Nút đang bận (một lượt khác của chính nó còn sống) ⇒ xếp hàng vào
+ * `pending_orchestrator_chat`; `drainOrchestratorBacklog` gửi khi job đó kết thúc.
  */
 export async function chatWithOrchestrator(
   root: string,
   projectId: string | null,
   taskId: string,
   message: string,
-): Promise<TurnResult> {
+): Promise<ChatTurnResult> {
   const orch = await resolveOrchestration(root, taskId)
   if (!orch.active) return { error: 'orchestrator is not active for this task', status: 409 }
-  const at = await readTaskPhase(root, taskId)
-  return askAgent(refOf(root, projectId, taskId), orch, 'chat', at.phase, {
-    detail: message,
-    gatePending: at.gatePending,
+  const ref = refOf(root, projectId, taskId)
+  return withTurnLock(keyOf(root, taskId), async () => {
+    // Đọc phase TRONG khoá để lượt chat dùng cursor mới nhất.
+    const at = await readTaskPhase(root, taskId)
+    const res = await askAgentAssumingLock(ref, orch, 'chat', at.phase, {
+      detail: message,
+      gatePending: at.gatePending,
+    })
+    if (!('error' in res) || res.error !== ORCHESTRATOR_BUSY) return res
+    // Luôn xếp hàng, bỏ qua `mode: 'immediate'` của panel (G9.9).
+    const queued = await queueOrchestratorChat(root, taskId, [message])
+    return queued ? { queued: true as const } : res
+  })
+}
+
+/**
+ * Chạy lại một lượt hoãn với state hiện tại (D2). `null` ⇒ lượt đó không còn
+ * hợp lệ (vd `manual_start` mà gate đã mở) — caller rơi xuống tin nhắn chờ.
+ */
+async function replayDeferredTurn(
+  ref: TaskRef,
+  orch: Orchestration,
+  held: DeferredTurn,
+): Promise<TurnResult | null> {
+  const at = await readTaskPhase(ref.root, ref.taskId)
+  switch (held.trigger) {
+    case 'step_finished':
+    case 'pipeline_completed':
+      return askAgentAssumingLock(
+        ref,
+        orch,
+        hasPendingStep(at) ? 'step_finished' : 'pipeline_completed',
+        at.phase,
+        { stepResult: held.extra.stepResult, gatePending: at.gatePending },
+      )
+    case 'manual_start':
+      // Cùng điều kiện với handler `orchestrator.start_requested`.
+      if (!hasPendingStep(at) || at.gatePending) return null
+      return askAgentAssumingLock(ref, orch, 'manual_start', at.phase, { gatePending: at.gatePending })
+    case 'gate_approved':
+    case 'gate_rejected':
+      return askAgentAssumingLock(ref, orch, held.trigger, held.currentPhase, {
+        detail: held.extra.detail,
+        gatePending: at.gatePending,
+      })
+    case 'job_failed':
+      // `failureAsks` đã đếm ở handler `job.failed` — lượt chạy lại không đi lại handler.
+      return askAgentAssumingLock(ref, orch, 'job_failed', held.currentPhase, {
+        detail: held.extra.detail,
+        stepResult: held.extra.stepResult,
+      })
+    default:
+      return null
+  }
+}
+
+/** Nút tắt / halted: bỏ việc treo, giống `resubmitPendingFeedback` bỏ mục `gate` (G9.7). */
+async function dropOrchestratorBacklog(ref: TaskRef): Promise<void> {
+  deferredTurns.delete(keyOf(ref.root, ref.taskId))
+  await takeOrchestratorChat(ref.root, ref.taskId)
+}
+
+/**
+ * Chạy phần việc còn treo của nút điều phối khi nó rảnh: lượt hoãn trước (D6),
+ * nếu không có thì gộp tin nhắn chờ thành một lượt `chat` (D5). Mỗi lần chỉ
+ * submit tối đa MỘT job; phần còn lại chờ `job.finished` của job đó gọi lại.
+ *
+ * Export để sweep và test gọi thẳng. 🚫 Không gọi từ trong `withTurnLock`.
+ */
+export async function drainOrchestratorBacklog(ref: TaskRef): Promise<void> {
+  const key = keyOf(ref.root, ref.taskId)
+  await withTurnLock(key, async () => {
+    if (hasActiveOrchestratorJob(ref.root, ref.taskId)) return // job đó xong sẽ gọi lại
+    let orch = await resolveOrchestration(ref.root, ref.taskId)
+    if (!orch.active) return dropOrchestratorBacklog(ref)
+
+    const held = deferredTurns.get(key)
+    if (held) {
+      deferredTurns.delete(key)
+      const res = await replayDeferredTurn(ref, orch, held)
+      if (res && 'job' in res) return // D6: tin nhắn chờ đợi job này xong
+      if (res && 'error' in res && res.error === ORCHESTRATOR_BUSY) {
+        deferTurn(held)
+        return
+      }
+      // Lượt hoãn không còn hợp lệ ⇒ rơi xuống tin nhắn chờ. Lượt lỗi có thể đã
+      // halt task (vd vòng lượt) — đọc lại trước khi gửi tiếp.
+      if (res) {
+        orch = await resolveOrchestration(ref.root, ref.taskId)
+        if (!orch.active) return dropOrchestratorBacklog(ref)
+      }
+    }
+
+    const messages = await takeOrchestratorChat(ref.root, ref.taskId)
+    if (!messages.length) return
+    const at = await readTaskPhase(ref.root, ref.taskId)
+    const res = await askAgentAssumingLock(ref, orch, 'chat', at.phase, {
+      detail: messages.join('\n\n'),
+      gatePending: at.gatePending,
+    })
+    if (!('error' in res)) return
+    if (res.error === ORCHESTRATOR_BUSY) {
+      await queueOrchestratorChat(ref.root, ref.taskId, messages, { prepend: true })
+    } else {
+      console.warn(`[orchestrator] queued chat dropped for ${ref.taskId}: ${res.error}`)
+    }
   })
 }
 
@@ -1001,6 +1203,14 @@ export async function sweepStuckTasks(root: string, projectId: string): Promise<
     const orch = await resolveOrchestration(root, taskId)
     if (!orch.active) continue
     orchestratedSeen++
+    const ref: TaskRef = { root, taskId, projectId }
+    // Việc treo của nút điều phối (tin nhắn chờ bền qua restart, lượt hoãn mà
+    // `job.finished` không gọi lại được — vd job bị `cancelJob`). Hợp lệ cả khi
+    // đang chờ gate hoặc step đang chạy, nên phải đứng TRƯỚC các `continue` dưới (G9.6).
+    if (hasPendingOrchestratorChat(task) || deferredTurns.has(keyOf(root, taskId))) {
+      if (!hasActiveOrchestratorJob(root, taskId)) await drainOrchestratorBacklog(ref)
+      continue
+    }
     if (task.hitl_pending) continue // đang chờ người, không phải treo
     if (task.archived === true) continue
     const phase = String(task.current_phase ?? '')
@@ -1009,7 +1219,6 @@ export async function sweepStuckTasks(root: string, projectId: string): Promise<
     // Agent đang nghĩ: dispatch tất định lúc này là đè lên lượt của nó.
     if (hasActiveOrchestratorJob(root, taskId)) continue
 
-    const ref: TaskRef = { root, taskId, projectId }
     const last = listJobs(200).find(
       (j) =>
         jobBelongsToTask(j, root, taskId) &&
@@ -1031,9 +1240,40 @@ export async function sweepStuckTasks(root: string, projectId: string): Promise<
     }
     if (!last || last.status === 'cancelled') {
       await dispatchStep(ref, phase, 'sweep_resume')
+      continue
+    }
+
+    // Lưới an toàn D2: step do điều phối chạy đã xong nhưng không có lượt quyết
+    // định nào sau đó (lượt hoãn mất vì restart).
+    if (orch.agent && needsStepFinishedTurn(root, taskId, last, phase)) {
+      const stepId = String(last.metadata?.pipelineStepId ?? '')
+      const at = await readTaskPhase(root, taskId)
+      await askAgent(ref, orch, hasPendingStep(at) ? 'step_finished' : 'pipeline_completed', at.phase, {
+        stepResult: stepResultOf(last, stepId, 'succeeded'),
+        gatePending: at.gatePending,
+      })
     }
   }
   return orchestratedSeen
+}
+
+/**
+ * Step do chính nút điều phối chạy đã `succeeded`, cursor đã sang bước kế, mà
+ * chưa có lượt quyết định nào được mở sau khi nó xong. Step chạy tay
+ * (không `orchestratorDispatch` / `orchestratorResume`) bị loại: bật điều phối
+ * cho một task đang nghỉ không được tự mở lượt và chạy tiếp pipeline.
+ */
+function needsStepFinishedTurn(root: string, taskId: string, last: JobRecord, phase: string): boolean {
+  const meta = last.metadata ?? {}
+  if (last.status !== 'succeeded' || !isStepJob(last)) return false
+  if (meta.pipelineStepId === phase) return false // nhánh advance ở trên lo
+  if (meta.orchestratorDispatch !== true && meta.orchestratorResume !== true) return false
+  // Handler `job.finished` của step còn đang chạy — lượt của nó sắp được mở.
+  if (inFlight.has(keyOf(root, taskId))) return false
+  const finishedAt = last.finishedAt ?? ''
+  return !listJobs(200).some(
+    (j) => isOrchestratorJob(j) && jobBelongsToTask(j, root, taskId) && (j.createdAt ?? '') > finishedAt,
+  )
 }
 
 async function sweepAllProjects(): Promise<number> {
@@ -1088,6 +1328,8 @@ export function _resetOrchestratorForTest(): void {
   observations.clear()
   failureAsks.clear()
   turnsAtPhase.clear()
+  deferredTurns.clear()
+  turnChains.clear()
   if (sweepTimer) clearInterval(sweepTimer)
   sweepTimer = null
 }
