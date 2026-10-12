@@ -1,6 +1,6 @@
 import { AbstractController } from '../../backend/http/AbstractController.js'
-import { loadJob, markDirectDecisionApplied } from '../runner/business/index.js'
-import { readJobLogDelta, resolveTaskJobId } from '../logs/business/index.js'
+import { listJobs, markDirectDecisionApplied, type JobRecord } from '../runner/business/index.js'
+import { readJobLogDelta } from '../logs/business/index.js'
 import { SelfMcpServer } from '../mcp/business/index.js'
 import { validateDecision } from './business/decision.js'
 import {
@@ -14,15 +14,30 @@ import { resolveOrchestratorToken } from './business/orchestratorTokens.js'
 import type { TaskRef } from './schemas/orchestrator.js'
 
 /**
- * Job orchestrator đang chạy CỦA ĐÚNG `ref` — tự soi lại `devTeamRoot` (G3 +
- * `resolveTaskJobId` không lọc theo root, chỉ so `taskId`).
+ * Job orchestrator đang chạy CỦA ĐÚNG `ref` — lọc theo loại job, không dùng
+ * `resolveTaskJobId` (chọn job sống mới nhất bất kể loại): job step chạy song
+ * song và mới hơn không được che job điều phối (G4b).
  */
 function currentOrchestratorJobId(ref: TaskRef): string | null {
-  const jobId = resolveTaskJobId(ref.taskId)
-  if (!jobId) return null
-  const job = loadJob(jobId)
-  if (!job || job.metadata?.devTeamRoot !== ref.root || job.metadata?.orchestratorJob !== true) return null
-  return jobId
+  const live = liveJobsOfTask(ref.root, ref.taskId).filter(isOrchestratorJob)
+  return (live.find((j) => j.status === 'running') ?? live[0])?.id ?? null
+}
+
+/**
+ * Job step mà agent điều phối muốn đọc output: đang sống (ưu tiên `running` —
+ * job `queued` mới hơn chưa có log), nếu không thì vừa xong gần nhất (G4a). Job
+ * điều phối của chính nó bị loại. Nhánh fallback vẫn so `devTeamRoot` — không
+ * lộ output chéo task trùng tên giữa 2 project (G3).
+ */
+function stepJobOfTask(ref: TaskRef): JobRecord | null {
+  const live = liveJobsOfTask(ref.root, ref.taskId).filter((j) => !isOrchestratorJob(j))
+  const pick = live.find((j) => j.status === 'running') ?? live[0]
+  if (pick) return pick
+  return (
+    listJobs(200).find(
+      (j) => j.metadata?.taskId === ref.taskId && j.metadata?.devTeamRoot === ref.root && !isOrchestratorJob(j),
+    ) ?? null
+  )
 }
 
 /**
@@ -66,11 +81,9 @@ export class OrchestratorController extends AbstractController {
     if (!ref) return this.json(401, { error: 'invalid or expired orchestrator token' })
 
     const offset = Number(this.c.req.query('offset') ?? 0)
-    const jobId = resolveTaskJobId(ref.taskId)
-    const job = jobId ? loadJob(jobId) : null
-    // Job thuộc root khác (taskId trùng tên giữa 2 project) — không lộ output chéo task (G3).
-    if (!job || job.metadata?.devTeamRoot !== ref.root) return this.json(200, { text: '', eof: true })
-    const delta = await readJobLogDelta(jobId as string, { offset: Number.isFinite(offset) ? offset : 0, waitMs: 0 })
+    const job = stepJobOfTask(ref)
+    if (!job) return this.json(200, { text: '', eof: true })
+    const delta = await readJobLogDelta(job.id, { offset: Number.isFinite(offset) ? offset : 0, waitMs: 0 })
     return this.json(200, delta)
   }
 
@@ -86,9 +99,9 @@ export class OrchestratorController extends AbstractController {
       ref,
       (stepIds) => validateDecision(body.value, stepIds),
       // Đánh dấu TRƯỚC KHI thi hành: `applyDecision` (action `start`) tạo ngay
-      // một job step mới, và `resolveTaskJobId` ưu tiên job MỚI NHẤT — đánh dấu
-      // sau sẽ vô tình gắn cờ lên job step đó thay vì job orchestrator đang gọi
-      // API này (chống double-dispatch với sentinel cuối output).
+      // một job step mới. `currentOrchestratorJobId` đã lọc theo loại job nên
+      // không gắn nhầm cờ lên job step đó, nhưng đánh dấu trước vẫn là thứ tự
+      // đúng (chống double-dispatch với sentinel cuối output).
       () => {
         const currentJobId = currentOrchestratorJobId(ref)
         if (currentJobId) markDirectDecisionApplied(currentJobId)

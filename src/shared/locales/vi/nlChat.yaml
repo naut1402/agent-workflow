@@ -98,6 +98,7 @@ taskChat:
   noCompletedJob: Chưa có job nào hoàn tất cho task này để nối tiếp hội thoại.
   stepBusy: Step đang chạy — chờ chạy xong mới gửi được tin nhắn.
   queued: Tin nhắn mới sẽ được gửi khi step hiện tại hoàn tất.
+  queuedOrchestrator: Nút điều phối đang xử lý — tin nhắn sẽ được gửi khi lượt hiện tại xong.
 floating:
   open: Tạo mới bằng chat
 draft:

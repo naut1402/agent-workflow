@@ -454,9 +454,16 @@ const runningTaskKeys = new Set<string>()
 const queue: string[] = []
 let pumpScheduled = false
 
+/**
+ * Làn của một job: job của cùng task chạy tuần tự, khác task chạy song song.
+ * Job điều phối (`orchestratorJob`) có làn riêng `orch:<taskId>` — nó chạy song
+ * song với job step của chính task đó, nhưng các job điều phối của cùng task
+ * vẫn tuần tự với nhau (hai lượt cùng `resume` một session là hỏng transcript).
+ */
 function taskKey(job: JobRecord): string {
   const tid = job.metadata?.taskId
-  return typeof tid === 'string' && tid ? `task:${tid}` : `job:${job.id}`
+  if (typeof tid !== 'string' || !tid) return `job:${job.id}`
+  return job.metadata?.orchestratorJob === true ? `orch:${tid}` : `task:${tid}`
 }
 
 function pumpQueue(): void {
@@ -969,8 +976,13 @@ async function runJob(job: JobRecord): Promise<void> {
  * job is still running — once that job (or a chat-feedback job resuming the
  * same session) finishes, resubmit whatever is queued. Approval jobs are
  * excluded: quick-action scratch runs aren't a task's pipeline step chat.
+ * Job điều phối cũng bị loại (xem nhánh return sớm bên dưới).
  */
 async function resubmitPendingFeedback(job: JobRecord): Promise<void> {
+  // Job điều phối chạy làn riêng, có thể xong trong lúc step còn chạy — phản hồi
+  // đang chờ là của step, để chính job step (hoặc lượt chat-feedback) gửi lại.
+  // Tin nhắn chờ của nút điều phối có đường riêng (`drainOrchestratorBacklog`).
+  if (job.metadata?.orchestratorJob === true) return
   const taskId = typeof job.metadata?.taskId === 'string' ? job.metadata.taskId : undefined
   const devTeamRoot = typeof job.metadata?.devTeamRoot === 'string' ? job.metadata.devTeamRoot : undefined
   const projectId = typeof job.metadata?.projectId === 'string' ? job.metadata.projectId : ''

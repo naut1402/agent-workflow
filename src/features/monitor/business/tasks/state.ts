@@ -643,6 +643,65 @@ export async function takePendingFeedback(root: string, taskId: string): Promise
   })
 }
 
+/** Tin nhắn chat gửi cho nút điều phối khi nó đang bận — xem `chatWithOrchestrator`. */
+export interface PendingOrchestratorChat {
+  messages: string[]
+  /** ISO của lần nối đầu tiên. */
+  queuedAt: string
+}
+
+/** Tin nhắn hợp lệ trong hàng chờ — bỏ phần tử không phải string / rỗng (file có thể bị sửa tay). */
+function orchestratorChatMessagesOf(state: Record<string, unknown>): string[] {
+  const pending = state.pending_orchestrator_chat as Partial<PendingOrchestratorChat> | null | undefined
+  const list = Array.isArray(pending?.messages) ? pending.messages : []
+  return list.filter((m): m is string => typeof m === 'string' && m.trim() !== '')
+}
+
+/**
+ * Nối tin nhắn vào hàng chờ của nút điều phối (KHÔNG ghi đè, khác `pending_feedback`).
+ * `prepend` dùng khi trả lại tin đã lấy ra mà chưa gửi được — giữ đúng thứ tự gửi.
+ * Trả `false` (không ghi gì) khi task không có `.dev-state` — không ai gửi lại được.
+ */
+export async function queueOrchestratorChat(
+  root: string,
+  taskId: string,
+  messages: string[],
+  opts: { prepend?: boolean } = {},
+): Promise<boolean> {
+  const stateFile = joinPath(root, '.dev-state', `${taskId}.json`)
+  return withStateFileLock(stateFile, async () => {
+    const read = await readState(stateFile)
+    if (!read.ok) return false
+    const cur = read.state.pending_orchestrator_chat as Partial<PendingOrchestratorChat> | null | undefined
+    const list = orchestratorChatMessagesOf(read.state)
+    const next = opts.prepend ? [...messages, ...list] : [...list, ...messages]
+    const pending: PendingOrchestratorChat = {
+      messages: next,
+      queuedAt: typeof cur?.queuedAt === 'string' ? cur.queuedAt : new Date().toISOString(),
+    }
+    await writeStateAtomic(stateFile, { ...read.state, pending_orchestrator_chat: pending })
+    return true
+  })
+}
+
+/** Lấy hết (và xoá) hàng chờ của nút điều phối. Rỗng / không có state → `[]`. */
+export async function takeOrchestratorChat(root: string, taskId: string): Promise<string[]> {
+  const stateFile = joinPath(root, '.dev-state', `${taskId}.json`)
+  return withStateFileLock(stateFile, async () => {
+    const read = await readState(stateFile)
+    if (!read.ok) return []
+    const messages = orchestratorChatMessagesOf(read.state)
+    if (!messages.length) return []
+    await writeStateAtomic(stateFile, { ...read.state, pending_orchestrator_chat: null })
+    return messages
+  })
+}
+
+/** Đọc không khoá (cho sweep) — state có tin nhắn chờ của nút điều phối hay không. */
+export function hasPendingOrchestratorChat(state: Record<string, unknown>): boolean {
+  return orchestratorChatMessagesOf(state).length > 0
+}
+
 /**
  * Archive/unarchive a task. Separate from `applyHitlAction` on purpose: archiving
  * is not a HITL gate decision, so it doesn't validate `gate_id`/`hitl_pending` —

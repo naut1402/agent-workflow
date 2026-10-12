@@ -1046,6 +1046,17 @@ export class MonitorController extends AbstractController {
       const { chatWithOrchestrator } = await import('../orchestrator/business/index.js')
       const turn = await chatWithOrchestrator(root, this.projectId, id, parsed.data.feedback)
       if ('error' in turn) return this.json(turn.status || 400, { error: turn.error, taskId: id })
+      // Nút đang bận với lượt khác ⇒ tin nhắn vào hàng chờ của nút, gửi khi lượt đó xong.
+      if ('queued' in turn) {
+        emitAudit({
+          op: 'update',
+          entity: 'task-state',
+          identifier: id,
+          projectId: this.projectId,
+          detail: { action: 'feedback-queued', stepId: ORCHESTRATOR_STEP_ID },
+        })
+        return this.created({ queued: true })
+      }
       emitAudit({
         op: 'update',
         entity: 'task-state',

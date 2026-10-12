@@ -98,6 +98,7 @@ taskChat:
   noCompletedJob: No job has finished for this task yet, so there is no conversation to continue.
   stepBusy: The step is running — wait for it to finish before sending a message.
   queued: New messages will be sent once the current step finishes.
+  queuedOrchestrator: The orchestrator is busy — your message will be sent when the current turn finishes.
 floating:
   open: Create by chatting
 draft:

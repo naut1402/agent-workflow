@@ -340,7 +340,8 @@ export function getTaskChatState(
   const jobs = jobsOfTask(taskId)
   // Panel của node điều phối chỉ nói về node: một step đang chạy không được
   // chiếm ô `running`, cũng không được bật `queued` — đường gửi của node đi
-  // thẳng qua `chatWithOrchestrator`, không xếp hàng sau job của step.
+  // thẳng qua `chatWithOrchestrator`, không xếp hàng sau job của step. Tin nhắn
+  // gửi khi chính job điều phối còn sống thì vào `pending_orchestrator_chat`.
   const orchestratorPanel = opts.stepId === ORCHESTRATOR_STEP_ID
   const ownJobs = orchestratorPanel ? jobs.filter((j) => j.metadata?.orchestratorJob === true) : jobs
   const runningJob = ownJobs.find((j) => j.status === 'queued' || j.status === 'running')
